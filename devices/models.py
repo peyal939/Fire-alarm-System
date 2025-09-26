@@ -48,6 +48,8 @@ class Device(AuditSoftDeleteModel):
             models.Index(fields=["user"]),
             models.Index(fields=["hardware_identifier"]),
         ]
+        # Default ordering ensures stable pagination and removes DRF warning
+        ordering = ["-registered_at"]
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.hardware_identifier} ({self.device_name or 'unnamed'})"
