@@ -139,6 +139,9 @@
     </div>
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
+  // Alert threshold for smoke (values > threshold are considered fire)
+  const SMOKE_ALERT_THRESHOLD = 100
+
       let map = L.map('map').setView([23.777628, 90.405449], 12)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
@@ -150,7 +153,11 @@
 
       function updateNotificationBell() {
         const bell = document.getElementById('notificationBell')
-        const anyAlert = Object.values(allDevices).some(dev => dev.GasVal >= 600 || dev.GasStatus == 0)
+        const anyAlert = Object.values(allDevices).some(dev => {
+          const smoke = Number(dev.smoke) || 0
+          const statusLower = String(dev.status || '').toLowerCase()
+          return smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || statusLower !== 'alive'
+        })
         bell.classList.toggle('active', anyAlert)
       }
 
@@ -159,14 +166,19 @@
         sidebarList.innerHTML = ''
         const devices = Object.values(allDevices).sort((a, b) => a.deviceID.localeCompare(b.deviceID))
         devices.forEach(d => {
-          let isAlert = d.GasVal >= 600 || d.GasStatus == 0
+          const smoke = Number(d.smoke) || 0
+          const statusLower = String(d.status || '').toLowerCase()
+          const isAlive = statusLower === 'alive'
+          const isAlert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive
+          const ts = d.timestamp ? new Date(Number(d.timestamp) * 1000).toLocaleString() : '—'
           const li = document.createElement('li')
           if (isAlert) li.classList.add('alert')
           li.innerHTML = `
             <div class="device-id">${d.deviceID}</div>
             <div class="device-detail">
-              <span><b>Gas:</b> ${d.GasVal}</span><br>
-              <span><b>Temp:</b> ${d.temperature}&deg;C &nbsp; <b>Humidity:</b> ${d.humidity}%</span>
+              <span><b>Smoke:</b> ${smoke}</span><br>
+              <span><b>Status:</b> ${isAlive ? 'alive' : (statusLower || 'not-alive')}</span><br>
+              <span><b>Updated:</b> ${ts}</span>
             </div>
             <span class="device-status ${isAlert ? 'alert' : 'normal'}">
               ${isAlert ? 'ALERT' : 'Normal'}
@@ -192,32 +204,47 @@
       ws.onmessage = function (event) {
         let data = JSON.parse(event.data)
         let id = data.deviceID
-        let lat = parseFloat(data.latitude),
-            lon = parseFloat(data.longitude)
+
         // Update global device data
         allDevices[id] = data
-        // --- Alert logic ---
-        let alert = data.GasVal >= 600 || data.GasStatus == 0
+
+        // --- Alert logic (smoke>0 or status!=alive) ---
+        const smoke = Number(data.smoke) || 0
+        const statusLower = String(data.status || '').toLowerCase()
+        const isAlive = statusLower === 'alive'
+  let alert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive
         let color = alert ? 'red' : 'green'
         let blink = alert
         let icon = getIcon(color, blink)
 
-        let marker = deviceMarkers[id]
-        if (!marker) {
-          marker = L.marker([lat, lon], { icon: icon }).addTo(map)
-          marker.bindPopup('')
-          deviceMarkers[id] = marker
+        // Optional map update if latitude/longitude are provided
+        let hasLatLon = data.latitude !== undefined && data.longitude !== undefined
+        if (hasLatLon) {
+          let lat = parseFloat(data.latitude)
+          let lon = parseFloat(data.longitude)
+          if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+            let marker = deviceMarkers[id]
+            if (!marker) {
+              marker = L.marker([lat, lon], { icon: icon }).addTo(map)
+              marker.bindPopup('')
+              deviceMarkers[id] = marker
+            }
+            marker.setLatLng([lat, lon])
+            marker.setIcon(icon)
+            let info = `
+              <b>Device ID:</b> ${data.deviceID}<br>
+              <b>Smoke:</b> ${smoke}<br>
+              <b>Status:</b> ${isAlive ? 'alive' : `<b>${statusLower || 'NOT ALIVE'}</b>`}<br>
+              <b>Updated:</b> ${data.timestamp ? new Date(Number(data.timestamp) * 1000).toLocaleString() : '—'}
+            `
+            marker.getPopup().setContent(info)
+          }
         }
-        marker.setLatLng([lat, lon])
-        marker.setIcon(icon)
-        let info = `
-          <b>Device ID:</b> ${data.deviceID}<br>
-          <b>Gas Value:</b> ${data.GasVal}<br>
-          <b>Status:</b> ${data.GasStatus ? 'Normal' : '<b>ALERT!</b>'}<br>
-          <b>Temperature:</b> ${data.temperature}&deg;C<br>
-          <b>Humidity:</b> ${data.humidity}%
-        `
-        marker.getPopup().setContent(info)
+
+        // Debug log to help verify alert determination
+        if (console && console.debug) {
+          console.debug('WS update', { id, smoke, status: data.status, alert })
+        }
 
         renderSidebarDevices()
         updateNotificationBell()
