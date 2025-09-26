@@ -1,6 +1,34 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Environments
+.env
+.env.*
+.venv/
+venv/
+env/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Django
+*.sqlite3
+staticfiles/
+media/
+
+# Build
+build/
+dist/
+*.log# Python
+__pycache__/
+*.py[cod]
 *$py.class
 
 # C extensions
@@ -135,3 +163,4 @@ node_modules/
 # (AdminLTE removed)
 /template-materializecss
 /.idea
+/__pycache__

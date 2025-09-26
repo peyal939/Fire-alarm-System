@@ -8,3 +8,9 @@ services:
       - "6066:8000"
     volumes:
       - .:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+    command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
+    # Load environment variables for secrets and config
+    env_file:
+      - .env
