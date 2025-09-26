@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Fire Alarm Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+      html, body, #map { height: 100%; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; }
+
+      .navbar {
+        position: fixed; top: 0; left: 0; right: 0;
+        height: 56px; background:#257d3e; color: #fff;
+        display: flex; align-items: center; z-index: 1000;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        justify-content: space-between;
+        padding: 0 24px;
+      }
+      .navbar .logo { font-size: 1.6rem; font-weight: bold; letter-spacing: 1px; }
+      .navbar .nav-right {
+        display: flex; align-items: center; gap: 28px;
+      }
+      .notification-bell {
+        position: relative; font-size: 1.5rem; cursor: pointer;
+      }
+      .notification-bell .bell-dot {
+        position: absolute; top: 4px; right: 4px;
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #f44336; box-shadow: 0 0 4px #f44336b0;
+        border: 2px solid #fff;
+        animation: blink-dot 1s linear infinite;
+        display: none;
+      }
+      .notification-bell.active .bell-dot {
+        display: block;
+      }
+      @keyframes blink-dot {
+        0%,100% { opacity: 1;}
+        50% { opacity: 0.2;}
+      }
+      .user-profile {
+        width: 36px; height: 36px;
+        background: #e3e8ff; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.25rem; color: #4251c5; font-weight: bold;
+        border: 2px solid #4251c5;
+        cursor: pointer;
+      }
+      .sidebar {
+        position: fixed; top: 56px; left: 0; width: 290px; bottom: 0;
+        background: rgba(255,255,255,0.95); box-shadow: 2px 0 8px rgba(0,0,0,0.06);
+        padding: 18px 0; z-index: 900; overflow-y: auto; transition: transform 0.2s;
+      }
+      .sidebar h2 { font-size: 1.2rem; margin: 0 24px 18px 24px; color: #263169; font-weight: 600; }
+      .device-list { list-style: none; padding: 0 10px; margin: 0; }
+      .device-list li {
+        border-radius: 8px; margin-bottom: 14px; background: #e3e8ff;
+        box-shadow: 0 1px 4px #0001; display: flex; flex-direction: column;
+        padding: 12px 15px 10px 15px; transition: background 0.16s;
+        border-left: 6px solid #4251c5;
+        position: relative;
+      }
+      .device-list li.alert {
+        background: #ffeaea;
+        border-left: 6px solid #e53935;
+        animation: blink 1.5s linear infinite;
+      }
+      .device-list li .device-id {
+        font-weight: 600; color: #263169; margin-bottom: 3px;
+        font-size: 1.06rem;
+      }
+      .device-list li .device-status {
+        display: inline-block; font-size: 0.9em; font-weight: bold;
+        padding: 2px 12px; border-radius: 5px;
+      }
+      .device-list li .device-status.normal {
+        background: #c8e6c9; color: #256029;
+      }
+      .device-list li .device-status.alert {
+        background: #ffcdd2; color: #b71c1c;
+      }
+      .device-list li .device-detail {
+        font-size: 0.97em; color: #555; margin-top: 3px;
+        line-height: 1.3;
+      }
+      /* To not let map go under sidebar/navbar */
+      #map { position: absolute; top: 56px; left: 290px; right: 0; bottom: 0; z-index: 1; }
+      @media (max-width: 700px) {
+        .sidebar { width: 70vw; }
+        #map { left: 70vw; }
+      }
+      @media (max-width: 520px) {
+        .sidebar { display: none; }
+        #map { left: 0; }
+        .navbar .logo { font-size: 1.15rem; margin-left: 12px; }
+      }
+      .icon-green { filter: hue-rotate(90deg);}
+      .icon-blink, .leaflet-marker-icon.icon-blink { animation: blink 1s linear infinite; }
+      @keyframes blink { 0% { opacity: 1;} 50% { opacity: 0.2;} 100% { opacity: 1;} }
+
+      .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        text-align: center;
+        padding: 10px;
+        font-size: 1rem;
+        color: #6c757d;
+        z-index: 1000;
+      }
+      .footer-company {
+        color: #257d3e;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="navbar">
+    <div class="logo"><img src="/static/apSLogo.png" width="36" height="36" style="margin-right: 10px; background: white; border-radius: 50%; padding: 5px;">apS Fire Alarm</div>
+      <div class="nav-right">
+        <div class="notification-bell" id="notificationBell" title="Active Alarm(s)">
+          <span style="font-size:1.7rem;">&#128276;</span>
+          <span class="bell-dot"></span>
+        </div>
+        <div class="user-profile" title="User Profile">
+          <span>&#128100;</span>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar">
+      <h2>Devices</h2>
+      <ul class="device-list" id="sidebarDeviceList"></ul>
+    </div>
+    <div id="map"></div>
+    <div class="footer">
+      Copyright © 2025 <span class="footer-company">adorsho praniSheba Limited</span> All rights reserved
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+      let map = L.map('map').setView([23.777628, 90.405449], 12)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map)
+      let deviceMarkers = {} // deviceID: marker
+
+      // Store all device data for sidebar
+      let allDevices = {}
+
+      function updateNotificationBell() {
+        const bell = document.getElementById('notificationBell')
+        const anyAlert = Object.values(allDevices).some(dev => dev.GasVal >= 600 || dev.GasStatus == 0)
+        bell.classList.toggle('active', anyAlert)
+      }
+
+      function renderSidebarDevices() {
+        const sidebarList = document.getElementById('sidebarDeviceList')
+        sidebarList.innerHTML = ''
+        const devices = Object.values(allDevices).sort((a, b) => a.deviceID.localeCompare(b.deviceID))
+        devices.forEach(d => {
+          let isAlert = d.GasVal >= 600 || d.GasStatus == 0
+          const li = document.createElement('li')
+          if (isAlert) li.classList.add('alert')
+          li.innerHTML = `
+            <div class="device-id">${d.deviceID}</div>
+            <div class="device-detail">
+              <span><b>Gas:</b> ${d.GasVal}</span><br>
+              <span><b>Temp:</b> ${d.temperature}&deg;C &nbsp; <b>Humidity:</b> ${d.humidity}%</span>
+            </div>
+            <span class="device-status ${isAlert ? 'alert' : 'normal'}">
+              ${isAlert ? 'ALERT' : 'Normal'}
+            </span>
+          `
+          sidebarList.appendChild(li)
+        })
+      }
+
+      function getIcon(color = 'green', blink = false) {
+        let iconUrl = color === 'green' ? '/static/smoke-detector.png' : '/static/fire-alert.png'
+        let className = color === 'green' ? 'icon-green' : ''
+        if (blink) className += ' icon-blink'
+        return L.icon({
+          iconUrl: iconUrl,
+          iconSize: [38, 38],
+          className: className.trim()
+        })
+      }
+
+      // Connect to FastAPI WebSocket
+      let ws = new WebSocket(`ws://${location.host}/ws`)
+      ws.onmessage = function (event) {
+        let data = JSON.parse(event.data)
+        let id = data.deviceID
+        let lat = parseFloat(data.latitude),
+            lon = parseFloat(data.longitude)
+        // Update global device data
+        allDevices[id] = data
+        // --- Alert logic ---
+        let alert = data.GasVal >= 600 || data.GasStatus == 0
+        let color = alert ? 'red' : 'green'
+        let blink = alert
+        let icon = getIcon(color, blink)
+
+        let marker = deviceMarkers[id]
+        if (!marker) {
+          marker = L.marker([lat, lon], { icon: icon }).addTo(map)
+          marker.bindPopup('')
+          deviceMarkers[id] = marker
+        }
+        marker.setLatLng([lat, lon])
+        marker.setIcon(icon)
+        let info = `
+          <b>Device ID:</b> ${data.deviceID}<br>
+          <b>Gas Value:</b> ${data.GasVal}<br>
+          <b>Status:</b> ${data.GasStatus ? 'Normal' : '<b>ALERT!</b>'}<br>
+          <b>Temperature:</b> ${data.temperature}&deg;C<br>
+          <b>Humidity:</b> ${data.humidity}%
+        `
+        marker.getPopup().setContent(info)
+
+        renderSidebarDevices()
+        updateNotificationBell()
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: fire_alarm_app
+    ports:
+      - "6066:8000"
+    volumes:
+      - .:/app
