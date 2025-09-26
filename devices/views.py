@@ -14,7 +14,12 @@ from drf_spectacular.utils import (
     OpenApiExample,
 )
 from .models import Device, Telemetry, Alert
-from .serializers import DeviceSerializer, TelemetrySerializer, AlertSerializer
+from .serializers import (
+    DeviceSerializer,
+    TelemetrySerializer,
+    AlertSerializer,
+    DeviceRegisterSerializer,
+)
 
 
 @extend_schema(tags=["Devices"])
@@ -46,6 +51,8 @@ class DeviceViewSet(viewsets.ModelViewSet):
     @extend_schema(
         tags=["Devices"],
         summary="Register/claim a device",
+        request=DeviceRegisterSerializer,
+        responses={201: DeviceSerializer, 200: DeviceSerializer},
         examples=[
             OpenApiExample(
                 "RegisterDeviceRequest",
@@ -60,28 +67,17 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ],
     )
     def register(self, request):
-        hid = str(request.data.get("hardware_identifier", "")).strip()
-        name = str(request.data.get("device_name", "")).strip()
-        lat = request.data.get("latitude")
-        lon = request.data.get("longitude")
+        ser = DeviceRegisterSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        hid = ser.validated_data["hardware_identifier"].strip()
+        name = ser.validated_data.get("device_name", "").strip()
+        lat_dec = ser.validated_data.get("latitude")
+        lon_dec = ser.validated_data.get("longitude")
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
 
-        # Validate optional lat/lon
-        def to_decimal(val):
-            if val in (
-                None,
-                "",
-            ):
-                return None
-            try:
-                return Decimal(str(val))
-            except (InvalidOperation, ValueError):
-                return None
-
-        lat_dec = to_decimal(lat)
-        lon_dec = to_decimal(lon)
+        # Note: new device registration requires lat/lon via serializer validation
 
         # Enforce unique ownership
         existing = Device.objects.filter(

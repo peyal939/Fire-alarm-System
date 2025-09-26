@@ -27,29 +27,16 @@ def ensure_mqtt_thread():
     _thread_started = True
 
     def get_position(device: Device):
-        """Return lat/lon for UI broadcast.
+        """Return persisted lat/lon for UI broadcast, if present.
 
-        Prefer persisted coordinates on the Device; otherwise, generate
-        stable jittered coordinates per hardware identifier (not persisted).
+        No fallback jittering; devices without coordinates won't include lat/lon.
         """
-        if device.latitude is not None and device.longitude is not None:
-            return {
-                "latitude": float(device.latitude),
-                "longitude": float(device.longitude),
-            }
-        if not hasattr(ensure_mqtt_thread, "positions"):
-            ensure_mqtt_thread.positions = {}
-        positions = ensure_mqtt_thread.positions
-        key = device.hardware_identifier
-        if key not in positions:
-            lat = settings.MAP_BASE_LAT + random.uniform(
-                -settings.MAP_JITTER, settings.MAP_JITTER
-            )
-            lon = settings.MAP_BASE_LON + random.uniform(
-                -settings.MAP_JITTER, settings.MAP_JITTER
-            )
-            positions[key] = {"latitude": lat, "longitude": lon}
-        return positions[key]
+        if device.latitude is None or device.longitude is None:
+            return None
+        return {
+            "latitude": float(device.latitude),
+            "longitude": float(device.longitude),
+        }
 
     def on_message(client, userdata, msg):
         raw = msg.payload.decode(errors="ignore").strip()
@@ -105,9 +92,10 @@ def ensure_mqtt_thread():
                 "timestamp": timestamp,
                 "smoke": smoke,
                 "status": status,
-                "latitude": pos["latitude"],
-                "longitude": pos["longitude"],
             }
+            if pos is not None:
+                device_payload["latitude"] = pos["latitude"]
+                device_payload["longitude"] = pos["longitude"]
             DEVICES[device_id] = device_payload
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(

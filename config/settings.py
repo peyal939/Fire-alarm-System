@@ -34,11 +34,6 @@ MQTT_PASS = os.getenv("MQTT_PASS", "")
 # Alert rules
 SMOKE_ALERT_THRESHOLD = int(os.getenv("SMOKE_ALERT_THRESHOLD", "100"))
 
-# Map defaults
-MAP_BASE_LAT = float(os.getenv("MAP_BASE_LAT", "23.777628"))
-MAP_BASE_LON = float(os.getenv("MAP_BASE_LON", "90.405449"))
-MAP_JITTER = float(os.getenv("MAP_JITTER", "0.01"))
-
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

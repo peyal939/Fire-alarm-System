@@ -21,7 +21,12 @@ class IngestionAndAlertsTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
         r = self.client.post(
             "/devices/register/",
-            {"hardware_identifier": "DEVY", "device_name": "DevY"},
+            {
+                "hardware_identifier": "DEVY",
+                "device_name": "DevY",
+                "latitude": 23.78,
+                "longitude": 90.41,
+            },
             format="json",
         )
         self.device_id = r.data["id"]

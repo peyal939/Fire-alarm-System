@@ -28,7 +28,12 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
 
         r = self.client.post(
             "/devices/register/",
-            {"hardware_identifier": "DEVF", "device_name": "DevF"},
+            {
+                "hardware_identifier": "DEVF",
+                "device_name": "DevF",
+                "latitude": 23.78,
+                "longitude": 90.41,
+            },
             format="json",
         )
         self.device_id = r.data["id"]

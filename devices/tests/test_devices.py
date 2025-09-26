@@ -31,7 +31,12 @@ class DeviceOwnershipTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
         r = self.client.post(
             "/devices/register/",
-            {"hardware_identifier": "DEVX", "device_name": "MyDevice"},
+            {
+                "hardware_identifier": "DEVX",
+                "device_name": "MyDevice",
+                "latitude": 23.78,
+                "longitude": 90.41,
+            },
             format="json",
         )
         self.assertEqual(r.status_code, status.HTTP_201_CREATED)
