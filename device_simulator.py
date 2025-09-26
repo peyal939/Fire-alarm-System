@@ -1,7 +1,7 @@
 """Fire Alarm Device Simulator
 
 This script simulates one or multiple APS fire alarm IoT devices by publishing
-MQTT messages that match the new JSON format expected by the FastAPI app.
+MQTT messages that match the JSON format expected by the backend app.
 
 Message format (JSON string):
 {

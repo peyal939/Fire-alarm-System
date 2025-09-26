@@ -199,8 +199,9 @@
         })
       }
 
-      // Connect to FastAPI WebSocket
-      let ws = new WebSocket(`ws://${location.host}/ws`)
+  // Connect to backend WebSocket (adapt to HTTP/HTTPS)
+  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws'
+  let ws = new WebSocket(`${wsProtocol}://${location.host}/ws`)
       ws.onmessage = function (event) {
         let data = JSON.parse(event.data)
         let id = data.deviceID

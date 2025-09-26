@@ -1,4 +1,15 @@
-# Git
+# Prevent leaking local artifacts and secrets into Docker build context
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.DS_Store
+.vscode/
+.idea/
+.env.local
+.env.*.local# Git
 .git
 .gitignore
 
