@@ -31,6 +31,9 @@ MQTT_TOPIC = os.getenv("MQTT_TOPIC", "aps/fire/data")
 MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASS = os.getenv("MQTT_PASS", "")
 
+# Alert rules
+SMOKE_ALERT_THRESHOLD = int(os.getenv("SMOKE_ALERT_THRESHOLD", "100"))
+
 # Map defaults
 MAP_BASE_LAT = float(os.getenv("MAP_BASE_LAT", "23.777628"))
 MAP_BASE_LON = float(os.getenv("MAP_BASE_LON", "90.405449"))
@@ -45,8 +48,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "channels",
+    "accounts",
+    "devices",
     "api",
     "realtime",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
 ]
 
 MIDDLEWARE = [
@@ -110,3 +117,42 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Custom user model
+AUTH_USER_MODEL = "accounts.User"
+
+# DRF and JWT configuration
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+from datetime import timedelta  # noqa: E402
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "ALGORITHM": "HS256",
+}
+
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    "TITLE": os.getenv("OPENAPI_TITLE", "APS Fire Alarm API"),
+    "DESCRIPTION": os.getenv(
+        "OPENAPI_DESCRIPTION",
+        "API schema for authentication, devices, telemetry, and alerts.",
+    ),
+    "VERSION": os.getenv("OPENAPI_VERSION", "1.0.0"),
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+# Session login settings for dashboard
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"

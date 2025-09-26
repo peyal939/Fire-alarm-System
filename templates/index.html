@@ -127,6 +127,10 @@
         <div class="user-profile" title="User Profile">
           <span>&#128100;</span>
         </div>
+        <div>
+          <span style="margin-right:10px;">Hello, {% firstof request.user.email request.user.get_username %}</span>
+          <a href="/logout/" style="color:#fff; text-decoration: underline;">Logout</a>
+        </div>
       </div>
     </div>
     <div class="sidebar">

@@ -4,12 +4,17 @@ import logging
 import random
 import threading
 import time
+import datetime as dt
 
 import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from django.conf import settings
+from django.utils import timezone
+
+from devices.models import Device
+from devices import services
 from .consumers import DEVICES
 
 _thread_started = False
@@ -21,20 +26,30 @@ def ensure_mqtt_thread():
         return
     _thread_started = True
 
-    def get_position(device_id: str):
-        # Simple lazy map jitter (not persisted)
+    def get_position(device: Device):
+        """Return lat/lon for UI broadcast.
+
+        Prefer persisted coordinates on the Device; otherwise, generate
+        stable jittered coordinates per hardware identifier (not persisted).
+        """
+        if device.latitude is not None and device.longitude is not None:
+            return {
+                "latitude": float(device.latitude),
+                "longitude": float(device.longitude),
+            }
         if not hasattr(ensure_mqtt_thread, "positions"):
             ensure_mqtt_thread.positions = {}
         positions = ensure_mqtt_thread.positions
-        if device_id not in positions:
+        key = device.hardware_identifier
+        if key not in positions:
             lat = settings.MAP_BASE_LAT + random.uniform(
                 -settings.MAP_JITTER, settings.MAP_JITTER
             )
             lon = settings.MAP_BASE_LON + random.uniform(
                 -settings.MAP_JITTER, settings.MAP_JITTER
             )
-            positions[device_id] = {"latitude": lat, "longitude": lon}
-        return positions[device_id]
+            positions[key] = {"latitude": lat, "longitude": lon}
+        return positions[key]
 
     def on_message(client, userdata, msg):
         raw = msg.payload.decode(errors="ignore").strip()
@@ -59,9 +74,33 @@ def ensure_mqtt_thread():
             ):
                 raise ValueError("Invalid types in payload")
 
-            # enrich missing lat/lon (client expects possibly present)
-            pos = get_position(device_id)
-            device = {
+            # Strict ingestion: accept only registered (non-deleted) devices
+            device_obj = (
+                Device.objects.filter(
+                    hardware_identifier=device_id, deleted_at__isnull=True
+                )
+                .select_related("user")
+                .first()
+            )
+            if not device_obj:
+                logging.info(f"Ignoring telemetry from unknown device '{device_id}'")
+                return
+
+            # Persist telemetry + update device + alerts via shared service
+            try:
+                ts_dt = dt.datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+            except Exception:
+                ts_dt = timezone.now()
+            services.ingest_telemetry(
+                device_obj,
+                smoke_level=smoke,
+                device_status=status,
+                timestamp=ts_dt,
+            )
+
+            # Broadcast to websocket consumers (include coords)
+            pos = get_position(device_obj)
+            device_payload = {
                 "deviceID": device_id,
                 "timestamp": timestamp,
                 "smoke": smoke,
@@ -69,12 +108,10 @@ def ensure_mqtt_thread():
                 "latitude": pos["latitude"],
                 "longitude": pos["longitude"],
             }
-
-            DEVICES[device_id] = device
-            # Fan out via channel layer to all WS consumers
+            DEVICES[device_id] = device_payload
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
-                "devices", {"type": "device.update", "device": device}
+                "devices", {"type": "device.update", "device": device_payload}
             )
         except Exception as e:
             logging.error(f"Failed to process MQTT message: {e}; raw={raw}")
