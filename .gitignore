@@ -135,3 +135,4 @@ node_modules/
 # (AdminLTE removed)
 /template-materializecss
 /.idea
+/__pycache__
