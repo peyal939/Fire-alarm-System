@@ -25,10 +25,15 @@
                 <h1 class="text-white h3">Account Login</h1>
             </div>
 
-            <form class="mt-4" method="POST" action="https://ric.pranisheba.com.bd/login-submit">
-                <input type="hidden" name="_token" value="VEJFFkPYh1n13yjkLbWIaUhC718uXB9nGolDeBO3" /> <div class="input-group uf-input-group input-group-lg mb-3">
+            <form class="mt-4" method="POST" action="/login/">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+                {% if error %}
+                <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% endif %}
+                <div class="input-group uf-input-group input-group-lg mb-3">
                     <span class="input-group-text fa fa-user"></span>
-                    <input type="email" name="email" required class="form-control" placeholder="Email address" />
+                    <input type="email" name="email" required class="form-control" placeholder="Email address" value="{{ email|default:'' }}" />
                 </div>
 
                 <div class="input-group uf-input-group input-group-lg mb-3">
@@ -45,13 +50,13 @@
                 </div>
 
                 <div class="d-grid mb-4">
-                    <a href="/" type="button" class="btn uf-btn-primary btn-lg">
+                    <button type="submit" class="btn uf-btn-primary btn-lg">
                         Login
                         <span class="border-top"></span>
                         <span class="border-right"></span>
                         <span class="border-bottom"></span>
                         <span class="border-left"></span>
-                    </a>
+                    </button>
                 </div>
             </form>
         </div>

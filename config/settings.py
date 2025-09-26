@@ -152,3 +152,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": os.getenv("OPENAPI_VERSION", "1.0.0"),
     "SERVE_INCLUDE_SCHEMA": False,
 }
+
+# Session login settings for dashboard
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"

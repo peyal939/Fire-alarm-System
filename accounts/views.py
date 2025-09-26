@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 from .serializers import UserSerializer
 
@@ -20,12 +21,56 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
 
+@extend_schema(
+    tags=["Auth"],
+    summary="Login with email & password",
+    examples=[
+        OpenApiExample(
+            name="LoginRequest",
+            value={"email": "user@example.com", "password": "Passw0rd!"},
+            request_only=True,
+        ),
+        OpenApiExample(
+            name="LoginResponse",
+            value={
+                "refresh": "<jwt-refresh>",
+                "access": "<jwt-access>",
+            },
+            response_only=True,
+        ),
+    ],
+)
 class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@extend_schema(
+    tags=["Auth"],
+    summary="Register a new user",
+    examples=[
+        OpenApiExample(
+            "RegisterRequest",
+            value={
+                "email": "user@example.com",
+                "password": "Passw0rd!",
+                "phone_number": "+8801712345678",
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            "RegisterResponse",
+            value={
+                "id": 1,
+                "email": "user@example.com",
+                "phone_number": "+8801712345678",
+                "role": "user",
+            },
+            response_only=True,
+        ),
+    ],
+)
 def register(request):
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone_number", "").strip()
@@ -39,5 +84,6 @@ def register(request):
 
 
 @api_view(["GET"])
+@extend_schema(tags=["Auth"], summary="Get current user profile")
 def me(request):
     return Response(UserSerializer(request.user).data)

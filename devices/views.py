@@ -8,10 +8,16 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from common.permissions import IsOwnerOrSuperadmin
+from drf_spectacular.utils import (
+    extend_schema,
+    OpenApiParameter,
+    OpenApiExample,
+)
 from .models import Device, Telemetry, Alert
 from .serializers import DeviceSerializer, TelemetrySerializer, AlertSerializer
 
 
+@extend_schema(tags=["Devices"])
 class DeviceViewSet(viewsets.ModelViewSet):
     serializer_class = DeviceSerializer
     permission_classes = [IsOwnerOrSuperadmin]
@@ -37,6 +43,22 @@ class DeviceViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["post"], url_path="register")
+    @extend_schema(
+        tags=["Devices"],
+        summary="Register/claim a device",
+        examples=[
+            OpenApiExample(
+                "RegisterDeviceRequest",
+                value={
+                    "hardware_identifier": "DEV123",
+                    "device_name": "Living Room Sensor",
+                    "latitude": 23.78,
+                    "longitude": 90.41,
+                },
+                request_only=True,
+            )
+        ],
+    )
     def register(self, request):
         hid = str(request.data.get("hardware_identifier", "")).strip()
         name = str(request.data.get("device_name", "")).strip()
@@ -95,6 +117,26 @@ class DeviceViewSet(viewsets.ModelViewSet):
         return Response(DeviceSerializer(device).data, status=201)
 
     @action(detail=True, methods=["get"], url_path="telemetry")
+    @extend_schema(
+        tags=["Telemetry"],
+        summary="List telemetry for a device",
+        parameters=[
+            OpenApiParameter(
+                name="since",
+                description="ISO8601 datetime or epoch seconds (>=)",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="until",
+                description="ISO8601 datetime or epoch seconds (<=)",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    )
     def list_telemetry(self, request, pk=None):
         device: Device = self.get_object()
         qs = Telemetry.objects.filter(device=device, deleted_at__isnull=True)
@@ -133,6 +175,19 @@ class DeviceViewSet(viewsets.ModelViewSet):
         return Response(ser.data)
 
     @action(detail=True, methods=["get"], url_path="alerts")
+    @extend_schema(
+        tags=["Alerts"],
+        summary="List alerts for a device",
+        parameters=[
+            OpenApiParameter(
+                name="status",
+                description="Filter by status: open|resolved",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    )
     def list_alerts(self, request, pk=None):
         device: Device = self.get_object()
         qs = Alert.objects.filter(device=device, deleted_at__isnull=True)
@@ -148,11 +203,38 @@ class DeviceViewSet(viewsets.ModelViewSet):
         return Response(ser.data)
 
 
+@extend_schema(tags=["Telemetry"])
 class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TelemetrySerializer
     permission_classes = [IsOwnerOrSuperadmin]
     http_method_names = ["get"]
 
+    @extend_schema(
+        summary="List telemetry (global)",
+        parameters=[
+            OpenApiParameter(
+                name="device",
+                description="Device ID",
+                required=False,
+                type=int,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="since",
+                description="ISO8601 datetime or epoch seconds (>=)",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="until",
+                description="ISO8601 datetime or epoch seconds (<=)",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    )
     def get_queryset(self):
         qs = Telemetry.objects.select_related("device", "device__user").filter(
             deleted_at__isnull=True, device__deleted_at__isnull=True
@@ -198,11 +280,31 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
+@extend_schema(tags=["Alerts"])
 class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AlertSerializer
     permission_classes = [IsOwnerOrSuperadmin]
     http_method_names = ["get", "post"]
 
+    @extend_schema(
+        summary="List alerts (global)",
+        parameters=[
+            OpenApiParameter(
+                name="device",
+                description="Device ID",
+                required=False,
+                type=int,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="status",
+                description="Filter by status: open|resolved",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    )
     def get_queryset(self):
         qs = Alert.objects.select_related("device", "device__user").filter(
             deleted_at__isnull=True, device__deleted_at__isnull=True
@@ -224,6 +326,7 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     @action(detail=True, methods=["post"], url_path="resolve")
+    @extend_schema(tags=["Alerts"], summary="Resolve an alert")
     def resolve(self, request, pk=None):
         alert: Alert = self.get_object()
         if alert.status == Alert.Status.RESOLVED:

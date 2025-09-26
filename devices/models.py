@@ -90,3 +90,5 @@ class Alert(AuditSoftDeleteModel):
             models.Index(fields=["device", "status"]),
             models.Index(fields=["triggered_at"]),
         ]
+        # Ensure stable pagination ordering
+        ordering = ["-triggered_at"]
