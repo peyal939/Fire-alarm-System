@@ -22,9 +22,14 @@ class UserManager(BaseUserManager):
         return user
 
     def create_user(self, email: str, password: str | None = None, **extra_fields):
-        extra_fields.setdefault("is_staff", False)
-        extra_fields.setdefault("is_superuser", False)
-        extra_fields.setdefault("role", User.Role.USER)
+        # Harden: never allow API callers to escalate privileges on create_user
+        # Ignore any provided privileged flags or role and enforce safe defaults
+        extra_fields.pop("is_staff", None)
+        extra_fields.pop("is_superuser", None)
+        extra_fields.pop("role", None)
+        extra_fields["is_staff"] = False
+        extra_fields["is_superuser"] = False
+        extra_fields["role"] = User.Role.USER
         return self._create_user(email, password, **extra_fields)
 
     def create_superuser(self, email: str, password: str | None, **extra_fields):

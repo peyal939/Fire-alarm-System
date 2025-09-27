@@ -103,6 +103,11 @@ JWT endpoints:
 
 OpenAPI docs provide request/response examples: `/docs` (Swagger), `/redoc` (ReDoc), schema at `/schema`.
 
+### Role policy
+- The `superadmin` role is only assignable via the Django Admin or by creating a superuser.
+- API registration ignores any `role`, `is_staff`, or `is_superuser` fields and always creates a non-privileged `user`.
+- JWT tokens include a `role` claim for convenience; clients must not rely on being able to escalate privileges via API.
+
 ---
 
 ## Core APIs (quick reference)
