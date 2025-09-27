@@ -5,6 +5,10 @@ from .models import Device, Telemetry, Alert
 
 
 class DeviceSerializer(serializers.ModelSerializer):
+    owner_id = serializers.IntegerField(source="user.id", read_only=True)
+    owner_email = serializers.EmailField(source="user.email", read_only=True)
+    owner_phone = serializers.CharField(source="user.phone_number", read_only=True)
+
     class Meta:
         model = Device
         fields = (
@@ -16,6 +20,9 @@ class DeviceSerializer(serializers.ModelSerializer):
             "status",
             "registered_at",
             "last_seen",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
         )
         read_only_fields = ("id", "registered_at", "last_seen")
 
@@ -45,6 +52,14 @@ class TelemetrySerializer(serializers.ModelSerializer):
         source="device", queryset=Device.objects.all(), write_only=True
     )
     device = serializers.PrimaryKeyRelatedField(read_only=True)
+    device_hardware_identifier = serializers.CharField(
+        source="device.hardware_identifier", read_only=True
+    )
+    owner_id = serializers.IntegerField(source="device.user.id", read_only=True)
+    owner_email = serializers.EmailField(source="device.user.email", read_only=True)
+    owner_phone = serializers.CharField(
+        source="device.user.phone_number", read_only=True
+    )
 
     class Meta:
         model = Telemetry
@@ -52,23 +67,40 @@ class TelemetrySerializer(serializers.ModelSerializer):
             "id",
             "device_id",
             "device",
+            "device_hardware_identifier",
             "smoke_level",
             "device_status",
             "timestamp",
             "received_at",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
         )
         read_only_fields = ("id", "received_at")
 
 
 class AlertSerializer(serializers.ModelSerializer):
+    device_hardware_identifier = serializers.CharField(
+        source="device.hardware_identifier", read_only=True
+    )
+    owner_id = serializers.IntegerField(source="device.user.id", read_only=True)
+    owner_email = serializers.EmailField(source="device.user.email", read_only=True)
+    owner_phone = serializers.CharField(
+        source="device.user.phone_number", read_only=True
+    )
+
     class Meta:
         model = Alert
         fields = (
             "id",
             "device",
+            "device_hardware_identifier",
             "alert_type",
             "status",
             "triggered_at",
             "resolved_at",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
         )
         read_only_fields = ("id", "triggered_at", "resolved_at")
