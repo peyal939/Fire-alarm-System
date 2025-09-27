@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from drf_spectacular.utils import extend_schema, OpenApiExample
 
-from .serializers import UserSerializer
+from .serializers import UserSerializer, RegisterSerializer
 
 User = get_user_model()
 
@@ -44,11 +44,11 @@ class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
 @extend_schema(
     tags=["Auth"],
     summary="Register a new user",
+    request=RegisterSerializer,
+    responses={201: UserSerializer, 409: None, 400: None},
     examples=[
         OpenApiExample(
             "RegisterRequest",
@@ -71,6 +71,8 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         ),
     ],
 )
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def register(request):
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone_number", "").strip()
@@ -84,6 +86,10 @@ def register(request):
 
 
 @api_view(["GET"])
-@extend_schema(tags=["Auth"], summary="Get current user profile")
+@extend_schema(
+    tags=["Auth"],
+    summary="Get current user profile",
+    responses={200: UserSerializer, 401: None},
+)
 def me(request):
     return Response(UserSerializer(request.user).data)
