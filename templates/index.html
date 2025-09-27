@@ -39,9 +39,9 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
   const SMOKE_ALERT_THRESHOLD = 50;
-  // Device is ONLINE only if last status is 'alive' AND we received a message within 5 seconds
-  // Keep this aligned with backend setting DEVICE_ONLINE_FRESHNESS_SECONDS (default 5)
-  const ONLINE_FRESHNESS_MS = 5000;
+  // Device is ONLINE if we received a message within freshness window
+  // Keep aligned with backend DEVICE_ONLINE_FRESHNESS_SECONDS (default 180s)
+  const ONLINE_FRESHNESS_MS = 180 * 1000;
   const DHAKA_TZ = 'Asia/Dhaka';
   // Unify time display with the MQTT-provided format: "DD Mon YYYY, hh:mm:ss am/pm" in Dhaka
   const dhaka12Fmt = new Intl.DateTimeFormat('en-GB', {
@@ -80,13 +80,8 @@
   let lastSeenAt = {}; // ms timestamp when a message was received for device
 
     function isOnline(deviceId) {
-      const d = allDevices[deviceId];
-      if (!d) return false;
-      const statusLower = String(d.status || '').toLowerCase();
-      const alive = statusLower === 'alive';
       const seen = lastSeenAt[deviceId] || 0;
-      const fresh = (Date.now() - seen) <= ONLINE_FRESHNESS_MS;
-      return alive && fresh;
+      return (Date.now() - seen) <= ONLINE_FRESHNESS_MS;
     }
 
     function updateNotificationBell() {
@@ -109,7 +104,7 @@
         const smoke = Number(d.smoke) || 0;
         const statusLower = String(d.status || '').toLowerCase();
         const online = isOnline(d.deviceID);
-  const isAlarm = online && (smoke > SMOKE_ALERT_THRESHOLD); // alarm only when online AND smoke > threshold
+  const isAlarm = smoke > SMOKE_ALERT_THRESHOLD; // alarm only when smoke > threshold
         const tsRaw = d.received_at_iso || d.timestamp_iso;
         const ts = tsRaw ? (typeof tsRaw === 'string' && tsRaw.includes('T') ? formatDhaka(tsRaw) : tsRaw) : formatDhaka(d.timestamp);
         const li = document.createElement('li');
@@ -150,7 +145,7 @@
       const smoke = Number(data.smoke) || 0;
       const statusLower = String(data.status || '').toLowerCase();
   const online = isOnline(id);
-  const isAlarm = online && (smoke > SMOKE_ALERT_THRESHOLD); // alarm only when online AND smoke > threshold
+  const isAlarm = smoke > SMOKE_ALERT_THRESHOLD; // alarm only when smoke > threshold
   let icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
 
       let hasLatLon = data.latitude !== undefined && data.longitude !== undefined;
@@ -183,7 +178,7 @@
       if (Number.isNaN(lat) || Number.isNaN(lon)) return;
   const smoke = Number(d.smoke) || 0;
   const online = isOnline(id);
-  const isAlarm = online && (smoke > SMOKE_ALERT_THRESHOLD);
+  const isAlarm = smoke > SMOKE_ALERT_THRESHOLD;
   const icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
       let marker = deviceMarkers[id];
       if (!marker) {
