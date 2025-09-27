@@ -35,7 +35,7 @@
 {% block scripts %}
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const SMOKE_ALERT_THRESHOLD = 100;
+  const SMOKE_ALERT_THRESHOLD = 50;
     const DHAKA_TZ = 'Asia/Dhaka';
     const dhakaFormatter = new Intl.DateTimeFormat(undefined, { timeZone: DHAKA_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
     function formatDhakaTS(epochSeconds) { if (!epochSeconds && epochSeconds !== 0) return '—'; const n = Number(epochSeconds); if (!Number.isFinite(n)) return '—'; const d = new Date(n * 1000); return dhakaFormatter.format(d); }

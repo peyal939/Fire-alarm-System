@@ -69,7 +69,7 @@ MQTT_USER=
 MQTT_PASS=
 
 # Alerts
-SMOKE_ALERT_THRESHOLD=100
+SMOKE_ALERT_THRESHOLD=50
 ```
 
 3) Initialize DB
@@ -153,10 +153,10 @@ Example payload (JSON):
 }
 ```
 
-Status is derived from telemetry; alerts open when smoke exceeds `SMOKE_ALERT_THRESHOLD` or when status implies alarm/not-alive (basic debounce supported).
+Status is derived from telemetry; alerts open when smoke exceeds `SMOKE_ALERT_THRESHOLD` (now 50) or when status implies alarm/not-alive (basic debounce supported).
 
 Persistence policy:
-- Telemetry rows are persisted only when `smoke` is greater than `SMOKE_ALERT_THRESHOLD` (default 100).
+- Telemetry rows are persisted only when `smoke` is greater than `SMOKE_ALERT_THRESHOLD` (now 50).
 - Low/no smoke readings still update device `status` and `last_seen`, and may resolve alerts, but are not stored in the telemetry table.
 
 Timezone:

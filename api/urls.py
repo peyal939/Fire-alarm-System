@@ -9,6 +9,7 @@ from drf_spectacular.views import (
 urlpatterns = [
     path("healthz", views.healthz),
     path("readyz", views.readyz),
+    path("metrics/summary", views.metrics_summary),
     path("auth/", include("accounts.urls")),
     path("", include("devices.urls")),
     # OpenAPI schema and docs

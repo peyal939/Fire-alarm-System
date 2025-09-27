@@ -23,6 +23,7 @@
 
 {% block scripts %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script>
     const deviceIdInput = document.getElementById('deviceIdInput');
     const sinceInput = document.getElementById('sinceInput');
@@ -64,7 +65,11 @@
 
     function renderChart(items) {
       if (chart) { chart.destroy(); chart = null; }
-      if (!items.length) { empty.style.display = ''; return; }
+      if (!items.length) {
+        empty.textContent = 'No telemetry found. Telemetry is persisted only when smoke > 50.';
+        empty.style.display = '';
+        return;
+      }
       empty.style.display = 'none';
       // Sort ascending by timestamp for chart
       items.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));

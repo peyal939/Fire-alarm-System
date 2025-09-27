@@ -125,24 +125,18 @@
 		return items;
 	}
 
-	async function loadKPIs() {
-		// Devices
-		const devicesResp = await apiGet('/devices/');
-		const deviceItems = Array.isArray(devicesResp) ? devicesResp : (devicesResp.results || []);
-		const totalDevices = getCount(devicesResp, deviceItems.length);
-		kpiDevices.textContent = String(totalDevices);
-
-		// Online/Offline from first page items (approximate if pagination); adjust if needed
-		const online = deviceItems.filter(d => String(d.status || '').toLowerCase() === 'alive').length;
-		const offline = deviceItems.length >= totalDevices ? (totalDevices - online) : '…';
-		kpiOnlineOffline.textContent = `${online} / ${offline}`;
-
-		// Open Alerts
-		const alertsResp = await apiGet('/alerts/?status=open');
-		const alertsItems = Array.isArray(alertsResp) ? alertsResp : (alertsResp.results || []);
-		const openCount = getCount(alertsResp, alertsItems.length);
-		kpiOpenAlerts.textContent = String(openCount);
-	}
+		async function loadKPIs() {
+			try {
+				const m = await apiGet('/metrics/summary');
+				kpiDevices.textContent = String(m.total_devices ?? '—');
+				kpiOpenAlerts.textContent = String(m.open_alerts ?? '—');
+				const online = m.online ?? '—';
+				const offline = m.offline ?? '—';
+				kpiOnlineOffline.textContent = `${online} / ${offline}`;
+			} catch (e) {
+				console.error('Failed to load metrics', e);
+			}
+		}
 
 	async function loadLatestAlerts() {
 		// First page only (latest by default ordering)

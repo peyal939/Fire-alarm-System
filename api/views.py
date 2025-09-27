@@ -2,6 +2,10 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
+from django.utils import timezone
+from datetime import timedelta
+
+from devices.models import Device, Alert
 
 
 @extend_schema(
@@ -36,3 +40,52 @@ def healthz(request):
 @api_view(["GET"])
 def readyz(request):
     return Response({"status": "ready"})
+
+
+@extend_schema(
+    tags=["Metrics"],
+    summary="Dashboard metrics summary",
+    responses={
+        200: OpenApiResponse(
+            response=OpenApiTypes.OBJECT,
+            description="Counts for dashboard KPIs",
+            examples=[
+                OpenApiExample(
+                    "metrics",
+                    value={
+                        "total_devices": 12,
+                        "open_alerts": 3,
+                        "online": 9,
+                        "offline": 3,
+                    },
+                    response_only=True,
+                )
+            ],
+        )
+    },
+)
+@api_view(["GET"])
+def metrics_summary(request):
+    # Online if device has reported recently AND last known status is 'alive'.
+    # We keep a 10-minute freshness window to avoid showing stale devices as online.
+    window = timedelta(minutes=10)
+    now = timezone.now()
+    total_devices = Device.objects.filter(deleted_at__isnull=True).count()
+    open_alerts = Alert.objects.filter(
+        status=Alert.Status.OPEN, device__deleted_at__isnull=True
+    ).count()
+    online = Device.objects.filter(
+        deleted_at__isnull=True,
+        last_seen__isnull=False,
+        last_seen__gte=now - window,
+        status__iexact="alive",
+    ).count()
+    offline = max(total_devices - online, 0)
+    return Response(
+        {
+            "total_devices": total_devices,
+            "open_alerts": open_alerts,
+            "online": online,
+            "offline": offline,
+        }
+    )
