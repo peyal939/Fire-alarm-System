@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "channels",
     "accounts",
     "devices",
+    "products",
     "api",
     "realtime",
     "drf_spectacular",
