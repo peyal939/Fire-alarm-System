@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.http import require_http_methods
+from common.decorators import superadmin_required
 
 
 @login_required(login_url="/login")
@@ -41,3 +42,36 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("/login")
+
+
+# -------- Phase 1: Page stubs (session UI) --------
+
+
+@login_required(login_url="/login")
+def dashboard_page(request):
+    return render(request, "dashboard_page.html")
+
+
+@login_required(login_url="/login")
+def devices_page(request):
+    return render(request, "devices_page.html")
+
+
+@login_required(login_url="/login")
+def telemetry_page(request):
+    return render(request, "telemetry_page.html")
+
+
+@login_required(login_url="/login")
+def alerts_page(request):
+    return render(request, "alerts_page.html")
+
+
+@login_required(login_url="/login")
+def products_page(request):
+    return render(request, "products_page.html")
+
+
+@superadmin_required
+def admin_panel(request):
+    return render(request, "admin_panel.html")

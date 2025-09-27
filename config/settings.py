@@ -32,7 +32,11 @@ MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASS = os.getenv("MQTT_PASS", "")
 
 # Alert rules
-SMOKE_ALERT_THRESHOLD = int(os.getenv("SMOKE_ALERT_THRESHOLD", "100"))
+SMOKE_ALERT_THRESHOLD = int(os.getenv("SMOKE_ALERT_THRESHOLD", "50"))
+# Device online freshness window (seconds). If a device hasn't sent a message
+# within this window, it's considered offline. Requirement: 2-5 seconds.
+# Default to 5 seconds but allow override via env.
+DEVICE_ONLINE_FRESHNESS_SECONDS = int(os.getenv("DEVICE_ONLINE_FRESHNESS_SECONDS", "5"))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -140,6 +144,7 @@ AUTH_USER_MODEL = "accounts.User"
 # DRF and JWT configuration
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework.authentication.SessionAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),

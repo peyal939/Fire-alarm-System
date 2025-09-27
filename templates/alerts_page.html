@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Alerts · apS Fire Alarm{% endblock %}
+{% block content %}
+<div class="py-3">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h1 class="h4 mb-0">Alerts</h1>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <select id="statusFilter" class="form-select" style="max-width: 180px;">
+        <option value="">All Status</option>
+        <option value="open">Open</option>
+        <option value="resolved">Resolved</option>
+      </select>
+      <input id="deviceFilter" class="form-control" placeholder="Device ID (optional)" style="max-width: 200px;" />
+      <button id="refreshAlertsBtn" class="btn btn-outline-secondary">Refresh</button>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped align-middle" id="alertsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Device</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Triggered</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div id="alertsEmpty" class="text-muted" style="display:none">No alerts found.</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    const tbody = document.querySelector('#alertsTable tbody');
+    const empty = document.getElementById('alertsEmpty');
+    const statusFilter = document.getElementById('statusFilter');
+    const deviceFilter = document.getElementById('deviceFilter');
+    const refreshBtn = document.getElementById('refreshAlertsBtn');
+
+    async function fetchAlerts() {
+      let url = '/alerts/';
+      const params = [];
+      if (statusFilter.value) params.push(`status=${encodeURIComponent(statusFilter.value)}`);
+      const dev = (deviceFilter.value || '').trim();
+      if (dev) params.push(`device=${encodeURIComponent(dev)}`);
+      if (params.length) url += `?${params.join('&')}`;
+
+      let items = [];
+      for (let i = 0; i < 10; i++) {
+        const data = await apiGet(url);
+        if (Array.isArray(data)) { items = data; break; }
+        items = items.concat(Array.isArray(data.results) ? data.results : []);
+        if (!data.next) break;
+        url = data.next;
+      }
+      renderAlerts(items);
+    }
+
+    function renderAlerts(items) {
+      tbody.innerHTML = '';
+      items.forEach(a => {
+        const tr = document.createElement('tr');
+        const triggered = a.triggered_at ? new Date(a.triggered_at).toLocaleString() : '—';
+        tr.innerHTML = `
+          <td>${a.id}</td>
+          <td>${a.device || ''}</td>
+          <td><code>${a.alert_type || ''}</code></td>
+          <td>${a.status || ''}</td>
+          <td>${triggered}</td>
+          <td>
+            ${a.status === 'open' ? `<button class="btn btn-sm btn-outline-success" data-action="resolve" data-id="${a.id}">Resolve</button>` : ''}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      empty.style.display = items.length ? 'none' : '';
+    }
+
+    tbody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action="resolve"]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      try {
+        btn.disabled = true;
+        await apiPost(`/alerts/${id}/resolve/`, {});
+        await fetchAlerts();
+      } catch(err) {
+        console.error(err);
+        alert('Failed to resolve alert.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    statusFilter.addEventListener('change', fetchAlerts);
+    deviceFilter.addEventListener('change', fetchAlerts);
+    refreshBtn.addEventListener('click', fetchAlerts);
+
+    fetchAlerts();
+  </script>
+{% endblock %}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -15,9 +16,10 @@ from .serializers import PackageSerializer, OrderSerializer, OrderCreateSerializ
 class PackageViewSet(viewsets.ModelViewSet):
     serializer_class = PackageSerializer
     queryset = Package.objects.filter(deleted_at__isnull=True)
-    permission_classes = [IsOwnerOrSuperadmin]
+    permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get", "post", "patch", "delete"]
     pagination_class = None  # remove page param from schema/results
+    lookup_value_regex = r"\d+"
 
     def destroy(self, request, *args, **kwargs):
         instance: Package = self.get_object()
@@ -33,18 +35,24 @@ class PackageViewSet(viewsets.ModelViewSet):
 @extend_schema(tags=["Orders"])
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
-    permission_classes = [IsOwnerOrSuperadmin]
+    permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get", "post", "patch", "delete"]
     pagination_class = None  # remove page param from schema/results
+    queryset = Order.objects.select_related("user", "package").filter(
+        deleted_at__isnull=True, package__deleted_at__isnull=True
+    )
+    lookup_value_regex = r"\d+"
 
     def get_queryset(self):
         user = self.request.user
         # If anonymous, return empty queryset to avoid AnonymousUser filtering crash
         if not user or not user.is_authenticated:
             return Order.objects.none()
-        qs = Order.objects.select_related("user", "package").filter(
-            deleted_at__isnull=True, package__deleted_at__isnull=True
-        ).order_by("-ordered_at")
+        qs = (
+            Order.objects.select_related("user", "package")
+            .filter(deleted_at__isnull=True, package__deleted_at__isnull=True)
+            .order_by("-ordered_at")
+        )
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
             qs = qs.filter(user=user)
         # filters
@@ -114,6 +122,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         if updated.package_id != old_package_id or updated.quantity != old_quantity:
             from decimal import Decimal
+
             updated.total_amount = updated.package.price_per_device * Decimal(
                 updated.quantity
             )
