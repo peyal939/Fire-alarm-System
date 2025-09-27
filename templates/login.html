@@ -3,9 +3,12 @@
 {% block head_extra %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 {% endblock %}
+{% block navbar %}{% endblock %}
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-12 col-md-6 col-lg-4">
+<div class="d-flex align-items-center" style="min-height: calc(100vh - 120px);">
+    <div class="container">
+      <div class="row justify-content-center mt-5">
+        <div class="col-12 col-md-6 col-lg-4">
         <div class="card shadow-sm">
             <div class="card-body">
                 <div class="text-center mb-3">
@@ -39,6 +42,8 @@
                 </form>
             </div>
         </div>
-    </div>
-    </div>
+                </div>
+            </div>
+        </div>
+</div>
 {% endblock %}

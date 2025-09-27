@@ -10,6 +10,7 @@
     {% block head_extra %}{% endblock %}
   </head>
   <body>
+    {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-success">
       <div class="container-fluid">
         <a class="navbar-brand" href="/">apS Fire Alarm</a>
@@ -36,6 +37,7 @@
         </div>
       </div>
     </nav>
+    {% endblock %}
     <main class="container py-4">
       {% block content %}{% endblock %}
     </main>
