@@ -44,24 +44,26 @@ def ingest_telemetry(
     smoke_level: int,
     device_status: str,
     timestamp: dt.datetime,
-) -> Telemetry:
-    """Persist telemetry, update device status/last_seen, and evaluate alerts.
+) -> Optional[Telemetry]:
+    """Update device status/last_seen and evaluate alerts.
 
-    Returns the created Telemetry record.
+    Persist a Telemetry row only when smoke_level exceeds the configured threshold.
+    Returns the Telemetry instance if created, else None.
     """
-    telemetry = Telemetry.objects.create(
-        device=device,
-        smoke_level=smoke_level,
-        device_status=device_status,
-        timestamp=timestamp,
-    )
+    threshold = getattr(settings, "SMOKE_ALERT_THRESHOLD", 100)
+    telemetry: Optional[Telemetry] = None
+    if smoke_level > int(threshold):
+        telemetry = Telemetry.objects.create(
+            device=device,
+            smoke_level=smoke_level,
+            device_status=device_status,
+            timestamp=timestamp,
+        )
 
     # Update device status/last_seen
     device.status = device_status
     device.last_seen = timezone.now()
     device.save(update_fields=["status", "last_seen"])
-
-    threshold = getattr(settings, "SMOKE_ALERT_THRESHOLD", 100)
 
     # Rule 1: high smoke
     if smoke_level >= int(threshold):

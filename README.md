@@ -155,6 +155,10 @@ Example payload (JSON):
 
 Status is derived from telemetry; alerts open when smoke exceeds `SMOKE_ALERT_THRESHOLD` or when status implies alarm/not-alive (basic debounce supported).
 
+Persistence policy:
+- Telemetry rows are persisted only when `smoke` is greater than `SMOKE_ALERT_THRESHOLD` (default 100).
+- Low/no smoke readings still update device `status` and `last_seen`, and may resolve alerts, but are not stored in the telemetry table.
+
 ### Device simulator
 
 ```powershell

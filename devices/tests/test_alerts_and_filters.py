@@ -79,14 +79,14 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         self.assertIn(alert_id, res_ids)
 
     def test_telemetry_filters_since_until(self):
-        # Create two telemetry points
+        # Create two telemetry points (persisted only when smoke > threshold)
         ts1 = timezone.now()
         services.ingest_telemetry(
-            self.device, smoke_level=10, device_status="alive", timestamp=ts1
+            self.device, smoke_level=120, device_status="alive", timestamp=ts1
         )
         ts2 = timezone.now()
         services.ingest_telemetry(
-            self.device, smoke_level=20, device_status="alive", timestamp=ts2
+            self.device, smoke_level=130, device_status="alive", timestamp=ts2
         )
 
         # Global telemetry for this device
