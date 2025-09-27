@@ -1,6 +1,209 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · apS{% endblock %}
+{% block title %}Dashboard · apS Fire Alarm{% endblock %}
 {% block content %}
-<h1 class="h3">Dashboard</h1>
-<p class="text-muted">Overview widgets and map will come here in Phase 2.</p>
+<div class="py-3">
+	<div class="d-flex align-items-center justify-content-between mb-3">
+		<h1 class="h4 mb-0">Dashboard</h1>
+		<div>
+			<a href="/app/devices/" class="btn btn-outline-secondary btn-sm">Devices</a>
+			<a href="/app/alerts/" class="btn btn-outline-secondary btn-sm">Alerts</a>
+			<a href="/app/telemetry/" class="btn btn-outline-secondary btn-sm">Telemetry</a>
+		</div>
+	</div>
+
+	<div class="row g-3 mb-3">
+		<div class="col-md-4">
+			<div class="card border-0 shadow-sm">
+				<div class="card-body">
+					<div class="text-muted">Total Devices</div>
+					<div class="display-6" id="kpiDevices">—</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="card border-0 shadow-sm">
+				<div class="card-body">
+					<div class="text-muted">Open Alerts</div>
+					<div class="display-6 text-danger" id="kpiOpenAlerts">—</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="card border-0 shadow-sm">
+				<div class="card-body">
+					<div class="text-muted">Online / Offline</div>
+					<div class="display-6" id="kpiOnlineOffline">—</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="row g-3">
+		<div class="col-lg-6">
+			<div class="card border-0 shadow-sm h-100">
+				<div class="card-header bg-white d-flex align-items-center justify-content-between">
+					<strong>Latest Alerts</strong>
+					<a href="/app/alerts/" class="small">View all</a>
+				</div>
+				<div class="card-body p-0">
+					<div class="table-responsive">
+						<table class="table table-hover mb-0" id="latestAlertsTable">
+							<thead>
+								<tr>
+									<th>ID</th>
+									<th>Device</th>
+									<th>Type</th>
+									<th>Status</th>
+									<th>Time</th>
+									<th></th>
+								</tr>
+							</thead>
+							<tbody></tbody>
+						</table>
+					</div>
+					<div id="alertsEmpty" class="p-3 text-muted" style="display:none">No recent alerts.</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-lg-6">
+			<div class="card border-0 shadow-sm h-100">
+				<div class="card-header bg-white d-flex align-items-center justify-content-between">
+					<strong>Recent Devices</strong>
+					<a href="/app/devices/" class="small">View all</a>
+				</div>
+				<div class="card-body p-0">
+					<div class="table-responsive">
+						<table class="table table-hover mb-0" id="recentDevicesTable">
+							<thead>
+								<tr>
+									<th>ID</th>
+									<th>Hardware ID</th>
+									<th>Name</th>
+									<th>Status</th>
+									<th>Registered</th>
+								</tr>
+							</thead>
+							<tbody></tbody>
+						</table>
+					</div>
+					<div id="devicesEmpty" class="p-3 text-muted" style="display:none">No devices yet.</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+	const kpiDevices = document.getElementById('kpiDevices');
+	const kpiOpenAlerts = document.getElementById('kpiOpenAlerts');
+	const kpiOnlineOffline = document.getElementById('kpiOnlineOffline');
+
+	const alertsTbody = document.querySelector('#latestAlertsTable tbody');
+	const alertsEmpty = document.getElementById('alertsEmpty');
+	const devicesTbody = document.querySelector('#recentDevicesTable tbody');
+	const devicesEmpty = document.getElementById('devicesEmpty');
+
+	function getCount(data, fallbackLength) {
+		if (data && typeof data === 'object' && Number.isFinite(data.count)) return data.count;
+		return fallbackLength ?? 0;
+	}
+
+	async function fetchAllPages(url, capPages = 1) {
+		// capPages=1 by default for dashboard performance; increase if needed
+		let items = [];
+		let page = 0;
+		while (page < capPages && url) {
+			const data = await apiGet(url);
+			if (Array.isArray(data)) { items = data; break; }
+			const list = Array.isArray(data.results) ? data.results : [];
+			items = items.concat(list);
+			url = data.next || null;
+			page += 1;
+		}
+		return items;
+	}
+
+	async function loadKPIs() {
+		// Devices
+		const devicesResp = await apiGet('/devices/');
+		const deviceItems = Array.isArray(devicesResp) ? devicesResp : (devicesResp.results || []);
+		const totalDevices = getCount(devicesResp, deviceItems.length);
+		kpiDevices.textContent = String(totalDevices);
+
+		// Online/Offline from first page items (approximate if pagination); adjust if needed
+		const online = deviceItems.filter(d => String(d.status || '').toLowerCase() === 'alive').length;
+		const offline = deviceItems.length >= totalDevices ? (totalDevices - online) : '…';
+		kpiOnlineOffline.textContent = `${online} / ${offline}`;
+
+		// Open Alerts
+		const alertsResp = await apiGet('/alerts/?status=open');
+		const alertsItems = Array.isArray(alertsResp) ? alertsResp : (alertsResp.results || []);
+		const openCount = getCount(alertsResp, alertsItems.length);
+		kpiOpenAlerts.textContent = String(openCount);
+	}
+
+	async function loadLatestAlerts() {
+		// First page only (latest by default ordering)
+		let items = await fetchAllPages('/alerts/?status=open', 1);
+		const take = items.slice(0, 8);
+		alertsTbody.innerHTML = '';
+		take.forEach(a => {
+			const tr = document.createElement('tr');
+			const t = a.triggered_at ? new Date(a.triggered_at).toLocaleString() : '—';
+			tr.innerHTML = `
+				<td>${a.id}</td>
+				<td>${a.device || ''}</td>
+				<td><code>${a.alert_type || ''}</code></td>
+				<td class="text-danger">${a.status || ''}</td>
+				<td>${t}</td>
+				<td><button class="btn btn-sm btn-outline-success" data-action="resolve" data-id="${a.id}">Resolve</button></td>
+			`;
+			alertsTbody.appendChild(tr);
+		});
+		alertsEmpty.style.display = take.length ? 'none' : '';
+	}
+
+	alertsTbody.addEventListener('click', async (e) => {
+		const btn = e.target.closest('button[data-action="resolve"]');
+		if (!btn) return;
+		const id = btn.getAttribute('data-id');
+		try {
+			btn.disabled = true;
+			await apiPost(`/alerts/${id}/resolve/`, {});
+			await loadKPIs();
+			await loadLatestAlerts();
+		} catch (err) {
+			console.error(err);
+			alert('Failed to resolve alert.');
+		} finally {
+			btn.disabled = false;
+		}
+	});
+
+	async function loadRecentDevices() {
+		let items = await fetchAllPages('/devices/', 1);
+		const take = items.slice(0, 8);
+		devicesTbody.innerHTML = '';
+		take.forEach(d => {
+			const tr = document.createElement('tr');
+			const reg = d.registered_at ? new Date(d.registered_at).toLocaleString() : '—';
+			tr.innerHTML = `
+				<td>${d.id}</td>
+				<td><code>${d.hardware_identifier || ''}</code></td>
+				<td>${d.device_name || ''}</td>
+				<td>${d.status || ''}</td>
+				<td>${reg}</td>
+			`;
+			devicesTbody.appendChild(tr);
+		});
+		devicesEmpty.style.display = take.length ? 'none' : '';
+	}
+
+	async function init() {
+		await Promise.all([loadKPIs(), loadLatestAlerts(), loadRecentDevices()]);
+	}
+	init();
+</script>
 {% endblock %}

@@ -2,9 +2,97 @@
 {% block title %}Telemetry · apS Fire Alarm{% endblock %}
 {% block content %}
 <div class="py-3">
-  <h1 class="h4 mb-3">Telemetry</h1>
-  <p class="text-muted">Coming soon: filters by device/time, charts.</p>
-  <div class="alert alert-info">Phase 1 stub page.</div>
-  <div id="telemetry-root"></div>
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h1 class="h4 mb-0">Telemetry</h1>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <input id="deviceIdInput" class="form-control" placeholder="Device ID (optional)" style="max-width: 200px;" />
+      <input id="sinceInput" type="datetime-local" class="form-control" style="max-width: 240px;" />
+      <input id="untilInput" type="datetime-local" class="form-control" style="max-width: 240px;" />
+      <button id="refreshTelemetryBtn" class="btn btn-outline-secondary">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <canvas id="telemetryChart" height="120"></canvas>
+    </div>
+  </div>
+  <div id="telemetryEmpty" class="text-muted mt-2" style="display:none">No telemetry found.</div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const deviceIdInput = document.getElementById('deviceIdInput');
+    const sinceInput = document.getElementById('sinceInput');
+    const untilInput = document.getElementById('untilInput');
+    const refreshBtn = document.getElementById('refreshTelemetryBtn');
+    const empty = document.getElementById('telemetryEmpty');
+    let chart;
+
+    function toIsoLocal(dtLocal) {
+      if (!dtLocal) return '';
+      // dtLocal format "YYYY-MM-DDTHH:mm"; treat as local time and convert to ISO string
+      const d = new Date(dtLocal);
+      // Keep local timezone (DRF accepts naive ISO and makes it aware per server TZ)
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    async function fetchTelemetry() {
+      let url = '/telemetry/';
+      const params = [];
+      const dev = (deviceIdInput.value || '').trim();
+      if (dev) params.push(`device=${encodeURIComponent(dev)}`);
+      const since = toIsoLocal(sinceInput.value);
+      const until = toIsoLocal(untilInput.value);
+      if (since) params.push(`since=${encodeURIComponent(since)}`);
+      if (until) params.push(`until=${encodeURIComponent(until)}`);
+      if (params.length) url += `?${params.join('&')}`;
+
+      let items = [];
+      for (let i = 0; i < 10; i++) {
+        const data = await apiGet(url);
+        if (Array.isArray(data)) { items = data; break; }
+        items = items.concat(Array.isArray(data.results) ? data.results : []);
+        if (!data.next) break;
+        url = data.next;
+      }
+      renderChart(items);
+    }
+
+    function renderChart(items) {
+      if (chart) { chart.destroy(); chart = null; }
+      if (!items.length) { empty.style.display = ''; return; }
+      empty.style.display = 'none';
+      // Sort ascending by timestamp for chart
+      items.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const labels = items.map(i => new Date(i.timestamp));
+      const smoke = items.map(i => i.smoke_level);
+      const ctx = document.getElementById('telemetryChart');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{ label: 'Smoke Level', data: smoke, borderColor: '#e53935', backgroundColor: 'rgba(229,57,53,0.12)', fill: true, tension: 0.25 }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: { type: 'time', time: { unit: 'minute' } },
+            y: { beginAtZero: true }
+          },
+          plugins: { legend: { display: true } }
+        }
+      });
+    }
+
+    refreshBtn.addEventListener('click', fetchTelemetry);
+    deviceIdInput.addEventListener('change', fetchTelemetry);
+    sinceInput.addEventListener('change', fetchTelemetry);
+    untilInput.addEventListener('change', fetchTelemetry);
+
+    fetchTelemetry();
+  </script>
 {% endblock %}
