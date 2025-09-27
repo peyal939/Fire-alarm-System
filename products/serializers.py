@@ -15,6 +15,7 @@ class PackageSerializer(serializers.ModelSerializer):
             "min_quantity",
             "max_quantity",
             "price_per_device",
+            "mrt",
         )
         read_only_fields = ("id",)
 

@@ -32,6 +32,12 @@ class Package(AuditSoftDeleteModel):
     min_quantity = models.PositiveIntegerField(default=1)
     max_quantity = models.PositiveIntegerField()
     price_per_device = models.DecimalField(max_digits=10, decimal_places=2)
+    mrt = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Monthly recurring fee (MRF) for this package",
+    )
 
     class Meta:
         ordering = ["name"]

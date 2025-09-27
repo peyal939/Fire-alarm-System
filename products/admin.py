@@ -4,7 +4,7 @@ from .models import Package, Order
 
 @admin.register(Package)
 class PackageAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "min_quantity", "max_quantity", "price_per_device")
+    list_display = ("id", "name", "min_quantity", "max_quantity", "price_per_device", "mrt")
     search_fields = ("name",)
 
 
