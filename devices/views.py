@@ -143,17 +143,19 @@ class DeviceViewSet(viewsets.ModelViewSet):
         from django.utils.dateparse import parse_datetime
         from django.utils import timezone
 
+        tz = timezone.get_current_timezone()
+
         def to_dt(value):
             if not value:
                 return None
             try:
                 if value.isdigit():
-                    return timezone.datetime.fromtimestamp(int(value), tz=timezone.utc)
+                    return timezone.datetime.fromtimestamp(int(value), tz=tz)
             except Exception:
                 pass
             dt = parse_datetime(value)
             if dt and timezone.is_naive(dt):
-                dt = timezone.make_aware(dt, timezone.utc)
+                dt = timezone.make_aware(dt, tz)
             return dt
 
         since_dt = to_dt(since)
@@ -252,18 +254,20 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
         from django.utils.dateparse import parse_datetime
         from django.utils import timezone
 
+        tz = timezone.get_current_timezone()
+
         def to_dt(value):
             if not value:
                 return None
             try:
                 # epoch seconds
                 if value.isdigit():
-                    return timezone.datetime.fromtimestamp(int(value), tz=timezone.utc)
+                    return timezone.datetime.fromtimestamp(int(value), tz=tz)
             except Exception:
                 pass
             dt = parse_datetime(value)
             if dt and timezone.is_naive(dt):
-                dt = timezone.make_aware(dt, timezone.utc)
+                dt = timezone.make_aware(dt, tz)
             return dt
 
         since_dt = to_dt(since)

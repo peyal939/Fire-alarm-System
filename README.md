@@ -159,6 +159,11 @@ Persistence policy:
 - Telemetry rows are persisted only when `smoke` is greater than `SMOKE_ALERT_THRESHOLD` (default 100).
 - Low/no smoke readings still update device `status` and `last_seen`, and may resolve alerts, but are not stored in the telemetry table.
 
+Timezone:
+- The application uses Asia/Dhaka (GMT+6) for all timestamps.
+- Epoch seconds in query params and incoming MQTT telemetry are interpreted in Dhaka time.
+- API responses include timezone offsets (e.g., `+0600`).
+
 ### Device simulator
 
 ```powershell

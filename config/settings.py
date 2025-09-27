@@ -82,6 +82,10 @@ TEMPLATES = [
 ASGI_APPLICATION = "config.asgi.application"
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Timezone: always use Dhaka (GMT+6)
+TIME_ZONE = "Asia/Dhaka"
+USE_TZ = True
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -125,6 +129,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Include timezone offset (+06:00) in rendered datetimes
+    "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%S%z",
 }
 
 from datetime import timedelta  # noqa: E402

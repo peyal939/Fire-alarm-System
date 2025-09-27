@@ -75,7 +75,8 @@ def ensure_mqtt_thread():
 
             # Persist telemetry + update device + alerts via shared service
             try:
-                ts_dt = dt.datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+                tz = timezone.get_current_timezone()
+                ts_dt = dt.datetime.fromtimestamp(int(timestamp), tz=tz)
             except Exception:
                 ts_dt = timezone.now()
             services.ingest_telemetry(
