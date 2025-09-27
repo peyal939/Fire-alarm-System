@@ -4,7 +4,6 @@ from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 
 
-@api_view(["GET"])
 @extend_schema(
     tags=["System"],
     summary="Liveness probe",
@@ -16,11 +15,11 @@ from drf_spectacular.types import OpenApiTypes
         )
     },
 )
+@api_view(["GET"])
 def healthz(request):
     return Response({"status": "ok"})
 
 
-@api_view(["GET"])
 @extend_schema(
     tags=["System"],
     summary="Readiness probe",
@@ -34,5 +33,6 @@ def healthz(request):
         )
     },
 )
+@api_view(["GET"])
 def readyz(request):
     return Response({"status": "ready"})

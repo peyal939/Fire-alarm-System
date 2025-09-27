@@ -85,11 +85,11 @@ def register(request):
     return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
-@api_view(["GET"])
 @extend_schema(
     tags=["Auth"],
     summary="Get current user profile",
     responses={200: UserSerializer, 401: None},
 )
+@api_view(["GET"])
 def me(request):
     return Response(UserSerializer(request.user).data)

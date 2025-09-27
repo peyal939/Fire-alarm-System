@@ -1,274 +1,123 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Fire Alarm Map</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <style>
-      html, body, #map { height: 100%; margin: 0; padding: 0; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; }
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Dashboard · apS Fire Alarm{% endblock %}
+{% block head_extra %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .sidebar { position: fixed; top: 56px; left: 0; width: 290px; bottom: 0; background: rgba(255,255,255,0.95); box-shadow: 2px 0 8px rgba(0,0,0,0.06); padding: 18px 0; z-index: 900; overflow-y: auto; transition: transform 0.2s; }
+    .sidebar h2 { font-size: 1.2rem; margin: 0 24px 18px 24px; color: #263169; font-weight: 600; }
+    .device-list { list-style: none; padding: 0 10px; margin: 0; }
+    .device-list li { border-radius: 8px; margin-bottom: 14px; background: #e3e8ff; box-shadow: 0 1px 4px #0001; display: flex; flex-direction: column; padding: 12px 15px 10px 15px; transition: background 0.16s; border-left: 6px solid #4251c5; position: relative; }
+    .device-list li.alert { background: #ffeaea; border-left: 6px solid #e53935; animation: blink 1.5s linear infinite; }
+    .device-list li .device-id { font-weight: 600; color: #263169; margin-bottom: 3px; font-size: 1.06rem; }
+    .device-list li .device-status { display: inline-block; font-size: 0.9em; font-weight: bold; padding: 2px 12px; border-radius: 5px; }
+    .device-list li .device-status.normal { background: #c8e6c9; color: #256029; }
+    .device-list li .device-status.alert { background: #ffcdd2; color: #b71c1c; }
+    .device-list li .device-detail { font-size: 0.97em; color: #555; margin-top: 3px; line-height: 1.3; }
+    #map { position: absolute; top: 56px; left: 290px; right: 0; bottom: 0; z-index: 1; }
+    @keyframes blink { 0% { opacity: 1;} 50% { opacity: 0.2;} 100% { opacity: 1;} }
+    .icon-green { filter: hue-rotate(90deg);}
+    .icon-blink, .leaflet-marker-icon.icon-blink { animation: blink 1s linear infinite; }
+    @media (max-width: 700px) { .sidebar { width: 70vw; } #map { left: 70vw; } }
+    @media (max-width: 520px) { .sidebar { display: none; } #map { left: 0; } }
+  </style>
+{% endblock %}
 
-      .navbar {
-        position: fixed; top: 0; left: 0; right: 0;
-        height: 56px; background:#257d3e; color: #fff;
-        display: flex; align-items: center; z-index: 1000;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        justify-content: space-between;
-        padding: 0 24px;
-      }
-      .navbar .logo { font-size: 1.6rem; font-weight: bold; letter-spacing: 1px; }
-      .navbar .nav-right {
-        display: flex; align-items: center; gap: 28px;
-      }
-      .notification-bell {
-        position: relative; font-size: 1.5rem; cursor: pointer;
-      }
-      .notification-bell .bell-dot {
-        position: absolute; top: 4px; right: 4px;
-        width: 12px; height: 12px; border-radius: 50%;
-        background: #f44336; box-shadow: 0 0 4px #f44336b0;
-        border: 2px solid #fff;
-        animation: blink-dot 1s linear infinite;
-        display: none;
-      }
-      .notification-bell.active .bell-dot {
-        display: block;
-      }
-      @keyframes blink-dot {
-        0%,100% { opacity: 1;}
-        50% { opacity: 0.2;}
-      }
-      .user-profile {
-        width: 36px; height: 36px;
-        background: #e3e8ff; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.25rem; color: #4251c5; font-weight: bold;
-        border: 2px solid #4251c5;
-        cursor: pointer;
-      }
-      .sidebar {
-        position: fixed; top: 56px; left: 0; width: 290px; bottom: 0;
-        background: rgba(255,255,255,0.95); box-shadow: 2px 0 8px rgba(0,0,0,0.06);
-        padding: 18px 0; z-index: 900; overflow-y: auto; transition: transform 0.2s;
-      }
-      .sidebar h2 { font-size: 1.2rem; margin: 0 24px 18px 24px; color: #263169; font-weight: 600; }
-      .device-list { list-style: none; padding: 0 10px; margin: 0; }
-      .device-list li {
-        border-radius: 8px; margin-bottom: 14px; background: #e3e8ff;
-        box-shadow: 0 1px 4px #0001; display: flex; flex-direction: column;
-        padding: 12px 15px 10px 15px; transition: background 0.16s;
-        border-left: 6px solid #4251c5;
-        position: relative;
-      }
-      .device-list li.alert {
-        background: #ffeaea;
-        border-left: 6px solid #e53935;
-        animation: blink 1.5s linear infinite;
-      }
-      .device-list li .device-id {
-        font-weight: 600; color: #263169; margin-bottom: 3px;
-        font-size: 1.06rem;
-      }
-      .device-list li .device-status {
-        display: inline-block; font-size: 0.9em; font-weight: bold;
-        padding: 2px 12px; border-radius: 5px;
-      }
-      .device-list li .device-status.normal {
-        background: #c8e6c9; color: #256029;
-      }
-      .device-list li .device-status.alert {
-        background: #ffcdd2; color: #b71c1c;
-      }
-      .device-list li .device-detail {
-        font-size: 0.97em; color: #555; margin-top: 3px;
-        line-height: 1.3;
-      }
-      /* To not let map go under sidebar/navbar */
-      #map { position: absolute; top: 56px; left: 290px; right: 0; bottom: 0; z-index: 1; }
-      @media (max-width: 700px) {
-        .sidebar { width: 70vw; }
-        #map { left: 70vw; }
-      }
-      @media (max-width: 520px) {
-        .sidebar { display: none; }
-        #map { left: 0; }
-        .navbar .logo { font-size: 1.15rem; margin-left: 12px; }
-      }
-      .icon-green { filter: hue-rotate(90deg);}
-      .icon-blink, .leaflet-marker-icon.icon-blink { animation: blink 1s linear infinite; }
-      @keyframes blink { 0% { opacity: 1;} 50% { opacity: 0.2;} 100% { opacity: 1;} }
+{% block content %}
+  <div class="sidebar">
+    <h2>Devices</h2>
+    <ul class="device-list" id="sidebarDeviceList"></ul>
+  </div>
+  <div id="map"></div>
+{% endblock %}
 
-      .footer {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background-color: #f8f9fa;
-        text-align: center;
-        padding: 10px;
-        font-size: 1rem;
-        color: #6c757d;
-        z-index: 1000;
-      }
-      .footer-company {
-        color: #257d3e;
-        font-weight: bold;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="navbar">
-    <div class="logo"><img src="/static/apSLogo.png" width="36" height="36" style="margin-right: 10px; background: white; border-radius: 50%; padding: 5px;">apS Fire Alarm</div>
-      <div class="nav-right">
-        <div class="notification-bell" id="notificationBell" title="Active Alarm(s)">
-          <span style="font-size:1.7rem;">&#128276;</span>
-          <span class="bell-dot"></span>
-        </div>
-        <div class="user-profile" title="User Profile">
-          <span>&#128100;</span>
-        </div>
-        <div>
-          <span style="margin-right:10px;">Hello, {% firstof request.user.email request.user.get_username %}</span>
-          <a href="/logout/" style="color:#fff; text-decoration: underline;">Logout</a>
-        </div>
-      </div>
-    </div>
-    <div class="sidebar">
-      <h2>Devices</h2>
-      <ul class="device-list" id="sidebarDeviceList"></ul>
-    </div>
-    <div id="map"></div>
-    <div class="footer">
-      Copyright © 2025 <span class="footer-company">adorsho praniSheba Limited</span> All rights reserved
-    </div>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script>
-  // Alert threshold for smoke (values > threshold are considered fire)
-  const SMOKE_ALERT_THRESHOLD = 100
+{% block scripts %}
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const SMOKE_ALERT_THRESHOLD = 100;
+    const DHAKA_TZ = 'Asia/Dhaka';
+    const dhakaFormatter = new Intl.DateTimeFormat(undefined, { timeZone: DHAKA_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    function formatDhakaTS(epochSeconds) { if (!epochSeconds && epochSeconds !== 0) return '—'; const n = Number(epochSeconds); if (!Number.isFinite(n)) return '—'; const d = new Date(n * 1000); return dhakaFormatter.format(d); }
 
-      // Always show times in Dhaka (GMT+6), independent of user's local timezone
-      const DHAKA_TZ = 'Asia/Dhaka'
-      const dhakaFormatter = new Intl.DateTimeFormat(undefined, {
-        timeZone: DHAKA_TZ,
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-      })
-      function formatDhakaTS(epochSeconds) {
-        if (!epochSeconds && epochSeconds !== 0) return '—'
-        const n = Number(epochSeconds)
-        if (!Number.isFinite(n)) return '—'
-        const d = new Date(n * 1000)
-        return dhakaFormatter.format(d)
-      }
+    let map = L.map('map').setView([23.777628, 90.405449], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+    let deviceMarkers = {};
+    let allDevices = {};
 
-      let map = L.map('map').setView([23.777628, 90.405449], 12)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-      }).addTo(map)
-      let deviceMarkers = {} // deviceID: marker
+    function updateNotificationBell() {
+      const bell = document.getElementById('notificationBell');
+      if (!bell) return;
+      const anyAlert = Object.values(allDevices).some(dev => {
+        const smoke = Number(dev.smoke) || 0;
+        const statusLower = String(dev.status || '').toLowerCase();
+        return smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || statusLower !== 'alive';
+      });
+      bell.classList.toggle('active', anyAlert);
+    }
 
-      // Store all device data for sidebar
-      let allDevices = {}
+    function renderSidebarDevices() {
+      const sidebarList = document.getElementById('sidebarDeviceList');
+      sidebarList.innerHTML = '';
+      const devices = Object.values(allDevices).sort((a, b) => a.deviceID.localeCompare(b.deviceID));
+      devices.forEach(d => {
+        const smoke = Number(d.smoke) || 0;
+        const statusLower = String(d.status || '').toLowerCase();
+        const isAlive = statusLower === 'alive';
+        const isAlert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive;
+        const ts = d.received_at_iso || d.timestamp_iso || formatDhakaTS(d.timestamp);
+        const li = document.createElement('li');
+        if (isAlert) li.classList.add('alert');
+        li.innerHTML = `
+          <div class="device-id">${d.deviceID}</div>
+          <div class="device-detail">
+            <span><b>Smoke:</b> ${smoke}</span><br>
+            <span><b>Status:</b> ${isAlive ? 'alive' : (statusLower || 'not-alive')}</span><br>
+            <span><b>Updated:</b> ${ts}</span>
+          </div>
+          <span class="device-status ${isAlert ? 'alert' : 'normal'}">${isAlert ? 'ALERT' : 'Normal'}</span>
+        `;
+        sidebarList.appendChild(li);
+      });
+    }
 
-      function updateNotificationBell() {
-        const bell = document.getElementById('notificationBell')
-        const anyAlert = Object.values(allDevices).some(dev => {
-          const smoke = Number(dev.smoke) || 0
-          const statusLower = String(dev.status || '').toLowerCase()
-          return smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || statusLower !== 'alive'
-        })
-        bell.classList.toggle('active', anyAlert)
-      }
+    function getIcon(color = 'green', blink = false) {
+      let iconUrl = color === 'green' ? '/static/smoke-detector.png' : '/static/fire-alert.png';
+      let className = color === 'green' ? 'icon-green' : '';
+      if (blink) className += ' icon-blink';
+      return L.icon({ iconUrl, iconSize: [38, 38], className: className.trim() });
+    }
 
-      function renderSidebarDevices() {
-        const sidebarList = document.getElementById('sidebarDeviceList')
-        sidebarList.innerHTML = ''
-        const devices = Object.values(allDevices).sort((a, b) => a.deviceID.localeCompare(b.deviceID))
-        devices.forEach(d => {
-          const smoke = Number(d.smoke) || 0
-          const statusLower = String(d.status || '').toLowerCase()
-          const isAlive = statusLower === 'alive'
-          const isAlert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive
-          const ts = d.received_at_iso || d.timestamp_iso || formatDhakaTS(d.timestamp)
-          const li = document.createElement('li')
-          if (isAlert) li.classList.add('alert')
-          li.innerHTML = `
-            <div class="device-id">${d.deviceID}</div>
-            <div class="device-detail">
-              <span><b>Smoke:</b> ${smoke}</span><br>
-              <span><b>Status:</b> ${isAlive ? 'alive' : (statusLower || 'not-alive')}</span><br>
-              <span><b>Updated:</b> ${ts}</span>
-            </div>
-            <span class="device-status ${isAlert ? 'alert' : 'normal'}">
-              ${isAlert ? 'ALERT' : 'Normal'}
-            </span>
-          `
-          sidebarList.appendChild(li)
-        })
-      }
+    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    let ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
+    ws.onmessage = function (event) {
+      let data = JSON.parse(event.data);
+      let id = data.deviceID;
+      allDevices[id] = data;
+      const smoke = Number(data.smoke) || 0;
+      const statusLower = String(data.status || '').toLowerCase();
+      const isAlive = statusLower === 'alive';
+      let alert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive;
+      let icon = getIcon(alert ? 'red' : 'green', alert);
 
-      function getIcon(color = 'green', blink = false) {
-        let iconUrl = color === 'green' ? '/static/smoke-detector.png' : '/static/fire-alert.png'
-        let className = color === 'green' ? 'icon-green' : ''
-        if (blink) className += ' icon-blink'
-        return L.icon({
-          iconUrl: iconUrl,
-          iconSize: [38, 38],
-          className: className.trim()
-        })
-      }
-
-  // Connect to backend WebSocket (adapt to HTTP/HTTPS)
-  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws'
-  let ws = new WebSocket(`${wsProtocol}://${location.host}/ws`)
-      ws.onmessage = function (event) {
-        let data = JSON.parse(event.data)
-        let id = data.deviceID
-
-        // Update global device data
-        allDevices[id] = data
-
-        // --- Alert logic (smoke>0 or status!=alive) ---
-        const smoke = Number(data.smoke) || 0
-        const statusLower = String(data.status || '').toLowerCase()
-        const isAlive = statusLower === 'alive'
-  let alert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive
-        let color = alert ? 'red' : 'green'
-        let blink = alert
-        let icon = getIcon(color, blink)
-
-        // Optional map update if latitude/longitude are provided
-        let hasLatLon = data.latitude !== undefined && data.longitude !== undefined
-        if (hasLatLon) {
-          let lat = parseFloat(data.latitude)
-          let lon = parseFloat(data.longitude)
-          if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-            let marker = deviceMarkers[id]
-            if (!marker) {
-              marker = L.marker([lat, lon], { icon: icon }).addTo(map)
-              marker.bindPopup('')
-              deviceMarkers[id] = marker
-            }
-            marker.setLatLng([lat, lon])
-            marker.setIcon(icon)
-            let info = `
-              <b>Device ID:</b> ${data.deviceID}<br>
-              <b>Smoke:</b> ${smoke}<br>
-              <b>Status:</b> ${isAlive ? 'alive' : `<b>${statusLower || 'NOT ALIVE'}</b>`}<br>
-              <b>Updated:</b> ${data.received_at_iso || data.timestamp_iso || formatDhakaTS(data.timestamp)}
-            `
-            marker.getPopup().setContent(info)
-          }
+      let hasLatLon = data.latitude !== undefined && data.longitude !== undefined;
+      if (hasLatLon) {
+        let lat = parseFloat(data.latitude); let lon = parseFloat(data.longitude);
+        if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+          let marker = deviceMarkers[id];
+          if (!marker) { marker = L.marker([lat, lon], { icon }).addTo(map); marker.bindPopup(''); deviceMarkers[id] = marker; }
+          marker.setLatLng([lat, lon]); marker.setIcon(icon);
+          let info = `
+            <b>Device ID:</b> ${data.deviceID}<br>
+            <b>Smoke:</b> ${smoke}<br>
+            <b>Status:</b> ${isAlive ? 'alive' : `<b>${statusLower || 'NOT ALIVE'}</b>`}<br>
+            <b>Updated:</b> ${data.received_at_iso || data.timestamp_iso || formatDhakaTS(data.timestamp)}
+          `;
+          marker.getPopup().setContent(info);
         }
-
-        // Debug log to help verify alert determination
-        if (console && console.debug) {
-          console.debug('WS update', { id, smoke, status: data.status, alert })
-        }
-
-        renderSidebarDevices()
-        updateNotificationBell()
       }
-    </script>
-  </body>
-</html>
+      renderSidebarDevices();
+      updateNotificationBell();
+    };
+  </script>
+{% endblock %}
