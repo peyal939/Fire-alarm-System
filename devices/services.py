@@ -7,6 +7,8 @@ from django.utils import timezone
 from django.conf import settings
 
 from .models import Device, Telemetry, Alert
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 
 def ingest_by_hardware_identifier(
@@ -52,7 +54,7 @@ def ingest_telemetry(
     """
     threshold = getattr(settings, "SMOKE_ALERT_THRESHOLD", 100)
     telemetry: Optional[Telemetry] = None
-    # Normalize status for logic checks while preserving original in storage
+    # Normalize status for logic checks and storage
     status_raw = device_status or ""
     status_norm = str(status_raw).strip()
     status_lower = status_norm.lower()
@@ -60,12 +62,12 @@ def ingest_telemetry(
         telemetry = Telemetry.objects.create(
             device=device,
             smoke_level=smoke_level,
-            device_status=status_norm,
+            device_status=status_lower,
             timestamp=timestamp,
         )
 
-    # Update device status/last_seen
-    device.status = status_norm
+    # Update device status/last_seen (online/offline is derived by UI/API using last_seen freshness + status=='alive')
+    device.status = status_lower
     device.last_seen = timezone.now()
     device.save(update_fields=["status", "last_seen"])
 
@@ -84,6 +86,23 @@ def ingest_telemetry(
         )
         if qs.exists():
             qs.update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+            # Notify websocket clients that alert(s) have been resolved for this device
+            try:
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    "devices",
+                    {
+                        "type": "device.update",
+                        "device": {
+                            "deviceID": device.hardware_identifier,
+                            "alert_resolved": True,
+                            "alert_type": "smoke_high",
+                        },
+                    },
+                )
+            except Exception:
+                # Non-fatal: best-effort notify
+                pass
 
     # Rule 2: device status not alive
     if status_lower != "alive":

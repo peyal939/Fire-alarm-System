@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.conf import settings
+from django.utils import timezone
 from decimal import Decimal
 
 from .models import Device, Telemetry, Alert
@@ -8,6 +10,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     owner_id = serializers.IntegerField(source="user.id", read_only=True)
     owner_email = serializers.EmailField(source="user.email", read_only=True)
     owner_phone = serializers.CharField(source="user.phone_number", read_only=True)
+    online = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
@@ -20,11 +23,23 @@ class DeviceSerializer(serializers.ModelSerializer):
             "status",
             "registered_at",
             "last_seen",
+            "online",
             "owner_id",
             "owner_email",
             "owner_phone",
         )
         read_only_fields = ("id", "registered_at", "last_seen")
+
+    def get_online(self, obj: Device):
+        try:
+            window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5))
+        except Exception:
+            window = 5
+        if not obj.last_seen:
+            return False
+        is_alive = str(obj.status or "").strip().lower() == "alive"
+        fresh = obj.last_seen >= timezone.now() - timezone.timedelta(seconds=window)
+        return bool(is_alive and fresh)
 
 
 class DeviceRegisterSerializer(serializers.Serializer):

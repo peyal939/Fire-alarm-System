@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 from django.utils import timezone
 from datetime import timedelta
+from django.conf import settings
 
 from devices.models import Device, Alert
 
@@ -67,8 +68,9 @@ def readyz(request):
 @api_view(["GET"])
 def metrics_summary(request):
     # Online if device has reported recently AND last known status is 'alive'.
-    # We keep a 10-minute freshness window to avoid showing stale devices as online.
-    window = timedelta(minutes=10)
+    # Freshness window is short (seconds) to meet requirement: no data in 2-5s => offline.
+    freshness_seconds = getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5)
+    window = timedelta(seconds=int(freshness_seconds))
     now = timezone.now()
     total_devices = Device.objects.filter(deleted_at__isnull=True).count()
     open_alerts = Alert.objects.filter(

@@ -14,11 +14,14 @@
     .device-list li .device-status { display: inline-block; font-size: 0.9em; font-weight: bold; padding: 2px 12px; border-radius: 5px; }
     .device-list li .device-status.normal { background: #c8e6c9; color: #256029; }
     .device-list li .device-status.alert { background: #ffcdd2; color: #b71c1c; }
+  .device-list li.offline { background: #fff3cd; border-left: 6px solid #f0ad4e; }
+  .device-list li .device-status.offline { background: #ffe8a1; color: #7a5c00; }
     .device-list li .device-detail { font-size: 0.97em; color: #555; margin-top: 3px; line-height: 1.3; }
     #map { position: absolute; top: 56px; left: 290px; right: 0; bottom: 0; z-index: 1; }
     @keyframes blink { 0% { opacity: 1;} 50% { opacity: 0.2;} 100% { opacity: 1;} }
     .icon-green { filter: hue-rotate(90deg);}
     .icon-blink, .leaflet-marker-icon.icon-blink { animation: blink 1s linear infinite; }
+  .icon-offline { filter: grayscale(100%) brightness(0.85); opacity: 0.8; }
     @media (max-width: 700px) { .sidebar { width: 70vw; } #map { left: 70vw; } }
     @media (max-width: 520px) { .sidebar { display: none; } #map { left: 0; } }
   </style>
@@ -36,22 +39,64 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
   const SMOKE_ALERT_THRESHOLD = 50;
-    const DHAKA_TZ = 'Asia/Dhaka';
-    const dhakaFormatter = new Intl.DateTimeFormat(undefined, { timeZone: DHAKA_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    function formatDhakaTS(epochSeconds) { if (!epochSeconds && epochSeconds !== 0) return '—'; const n = Number(epochSeconds); if (!Number.isFinite(n)) return '—'; const d = new Date(n * 1000); return dhakaFormatter.format(d); }
+  // Device is ONLINE only if last status is 'alive' AND we received a message within 5 seconds
+  // Keep this aligned with backend setting DEVICE_ONLINE_FRESHNESS_SECONDS (default 5)
+  const ONLINE_FRESHNESS_MS = 5000;
+  const DHAKA_TZ = 'Asia/Dhaka';
+  // Unify time display with the MQTT-provided format: "DD Mon YYYY, hh:mm:ss am/pm" in Dhaka
+  const dhaka12Fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: DHAKA_TZ,
+    year: 'numeric', month: 'short', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  });
+  function toDhakaString(dateObj) {
+    try { const s = dhaka12Fmt.format(dateObj); return s.replace('AM', 'am').replace('PM', 'pm'); } catch { return '—'; }
+  }
+  function normalizeIsoToDate(iso) {
+    if (!iso) return null;
+    try {
+      // Handle forms like 2025-09-27T12:34:56+0600 by inserting colon in TZ if missing
+      if (typeof iso === 'string' && /[+-]\d{4}$/.test(iso)) iso = iso.slice(0, -2) + ':' + iso.slice(-2);
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return null;
+      return d;
+    } catch { return null; }
+  }
+  function formatDhaka(value) {
+    if (value == null) return '—';
+    if (typeof value === 'number') {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '—';
+      return toDhakaString(new Date(n * 1000));
+    }
+    const d = normalizeIsoToDate(value);
+    return d ? toDhakaString(d) : '—';
+  }
 
-    let map = L.map('map').setView([23.777628, 90.405449], 12);
+  let map = L.map('map').setView([23.777628, 90.405449], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
-    let deviceMarkers = {};
-    let allDevices = {};
+  let deviceMarkers = {};
+  let allDevices = {};
+  let lastSeenAt = {}; // ms timestamp when a message was received for device
+
+    function isOnline(deviceId) {
+      const d = allDevices[deviceId];
+      if (!d) return false;
+      const statusLower = String(d.status || '').toLowerCase();
+      const alive = statusLower === 'alive';
+      const seen = lastSeenAt[deviceId] || 0;
+      const fresh = (Date.now() - seen) <= ONLINE_FRESHNESS_MS;
+      return alive && fresh;
+    }
 
     function updateNotificationBell() {
       const bell = document.getElementById('notificationBell');
       if (!bell) return;
-      const anyAlert = Object.values(allDevices).some(dev => {
+      // Bell should ring only when smoke is above threshold
+      const anyAlert = Object.keys(allDevices).some(id => {
+        const dev = allDevices[id];
         const smoke = Number(dev.smoke) || 0;
-        const statusLower = String(dev.status || '').toLowerCase();
-        return smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || statusLower !== 'alive';
+        return isOnline(id) && smoke > SMOKE_ALERT_THRESHOLD;
       });
       bell.classList.toggle('active', anyAlert);
     }
@@ -63,28 +108,35 @@
       devices.forEach(d => {
         const smoke = Number(d.smoke) || 0;
         const statusLower = String(d.status || '').toLowerCase();
-        const isAlive = statusLower === 'alive';
-        const isAlert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive;
-        const ts = d.received_at_iso || d.timestamp_iso || formatDhakaTS(d.timestamp);
+        const online = isOnline(d.deviceID);
+  const isAlarm = online && (smoke > SMOKE_ALERT_THRESHOLD); // alarm only when online AND smoke > threshold
+        const tsRaw = d.received_at_iso || d.timestamp_iso;
+        const ts = tsRaw ? (typeof tsRaw === 'string' && tsRaw.includes('T') ? formatDhaka(tsRaw) : tsRaw) : formatDhaka(d.timestamp);
         const li = document.createElement('li');
-        if (isAlert) li.classList.add('alert');
+  if (!online) { li.classList.add('offline'); } else if (isAlarm) { li.classList.add('alert'); }
+  const badgeClass = !online ? 'offline' : (isAlarm ? 'alert' : 'normal');
+  const badgeText = !online ? 'Offline' : (isAlarm ? 'ALERT' : 'Normal');
         li.innerHTML = `
           <div class="device-id">${d.deviceID}</div>
           <div class="device-detail">
             <span><b>Smoke:</b> ${smoke}</span><br>
-            <span><b>Status:</b> ${isAlive ? 'alive' : (statusLower || 'not-alive')}</span><br>
+            <span><b>Status:</b> ${online ? 'online' : 'offline'}</span><br>
             <span><b>Updated:</b> ${ts}</span>
           </div>
-          <span class="device-status ${isAlert ? 'alert' : 'normal'}">${isAlert ? 'ALERT' : 'Normal'}</span>
+          <span class="device-status ${badgeClass}">${badgeText}</span>
         `;
         sidebarList.appendChild(li);
       });
     }
 
-    function getIcon(color = 'green', blink = false) {
-      let iconUrl = color === 'green' ? '/static/smoke-detector.png' : '/static/fire-alert.png';
-      let className = color === 'green' ? 'icon-green' : '';
-      if (blink) className += ' icon-blink';
+    function getIcon(kind = 'normal', blink = false) {
+      // kind: 'normal' (green), 'alarm' (red), 'offline' (grey)
+      let iconUrl = '/static/smoke-detector.png';
+      let className = '';
+      if (kind === 'normal') className = 'icon-green';
+      if (kind === 'offline') className = 'icon-offline';
+      if (kind === 'alarm') iconUrl = '/static/fire-alert.png';
+      if (blink && kind === 'alarm') className += ' icon-blink';
       return L.icon({ iconUrl, iconSize: [38, 38], className: className.trim() });
     }
 
@@ -94,11 +146,12 @@
       let data = JSON.parse(event.data);
       let id = data.deviceID;
       allDevices[id] = data;
+      lastSeenAt[id] = Date.now();
       const smoke = Number(data.smoke) || 0;
       const statusLower = String(data.status || '').toLowerCase();
-      const isAlive = statusLower === 'alive';
-      let alert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive;
-      let icon = getIcon(alert ? 'red' : 'green', alert);
+  const online = isOnline(id);
+  const isAlarm = online && (smoke > SMOKE_ALERT_THRESHOLD); // alarm only when online AND smoke > threshold
+  let icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
 
       let hasLatLon = data.latitude !== undefined && data.longitude !== undefined;
       if (hasLatLon) {
@@ -110,8 +163,8 @@
           let info = `
             <b>Device ID:</b> ${data.deviceID}<br>
             <b>Smoke:</b> ${smoke}<br>
-            <b>Status:</b> ${isAlive ? 'alive' : `<b>${statusLower || 'NOT ALIVE'}</b>`}<br>
-            <b>Updated:</b> ${data.received_at_iso || data.timestamp_iso || formatDhakaTS(data.timestamp)}
+            <b>Status:</b> ${online ? 'online' : `<b>offline</b>`}<br>
+            <b>Updated:</b> ${data.received_at_iso || data.timestamp_iso || formatDhaka(data.timestamp)}
           `;
           marker.getPopup().setContent(info);
         }
@@ -119,5 +172,90 @@
       renderSidebarDevices();
       updateNotificationBell();
     };
+
+    function ensureMarkerFor(id) {
+      const d = allDevices[id];
+      if (!d) return;
+      const hasLatLon = d.latitude !== undefined && d.longitude !== undefined;
+      if (!hasLatLon) return;
+      const lat = parseFloat(d.latitude);
+      const lon = parseFloat(d.longitude);
+      if (Number.isNaN(lat) || Number.isNaN(lon)) return;
+  const smoke = Number(d.smoke) || 0;
+  const online = isOnline(id);
+  const isAlarm = online && (smoke > SMOKE_ALERT_THRESHOLD);
+  const icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
+      let marker = deviceMarkers[id];
+      if (!marker) {
+        marker = L.marker([lat, lon], { icon }).addTo(map);
+        marker.bindPopup('');
+        deviceMarkers[id] = marker;
+      }
+      marker.setLatLng([lat, lon]);
+      marker.setIcon(icon);
+      const tsRaw = d.received_at_iso || d.timestamp_iso;
+      const ts = tsRaw ? (typeof tsRaw === 'string' && tsRaw.includes('T') ? formatDhaka(tsRaw) : tsRaw) : formatDhaka(d.timestamp);
+      const info = `
+        <b>Device ID:</b> ${d.deviceID}<br>
+        <b>Smoke:</b> ${smoke}<br>
+        <b>Status:</b> ${online ? 'online' : `<b>offline</b>`}<br>
+        <b>Updated:</b> ${ts}
+      `;
+      marker.getPopup().setContent(info);
+    }
+
+    async function fetchAndSeedDevices() {
+      try {
+        let url = '/devices/';
+        const items = [];
+        for (let i = 0; i < 10; i++) {
+          const data = await apiGet(url);
+          if (Array.isArray(data)) {
+            items.push(...data);
+            break;
+          }
+          const pageItems = Array.isArray(data.results) ? data.results : [];
+          items.push(...pageItems);
+          if (!data.next) break;
+          url = data.next;
+        }
+        // Seed allDevices and lastSeenAt; default to offline until proven otherwise
+        items.forEach(dev => {
+          const id = String(dev.hardware_identifier || '').trim();
+          if (!id) return;
+          const ts = dev.last_seen ? new Date(dev.last_seen).getTime() : 0;
+          lastSeenAt[id] = ts || 0;
+          allDevices[id] = {
+            deviceID: id,
+            smoke: 0,
+            status: dev.status || '',
+            timestamp: ts ? Math.floor(ts / 1000) : null,
+            // Store as raw string; we will format at render time to keep consistency
+            timestamp_iso: dev.last_seen || null,
+            received_at_iso: dev.last_seen || null,
+            latitude: dev.latitude,
+            longitude: dev.longitude,
+          };
+          ensureMarkerFor(id);
+        });
+        renderSidebarDevices();
+        updateNotificationBell();
+      } catch (e) {
+        console.error('Failed to fetch devices for initial state', e);
+      }
+    }
+
+    // Seed from API on load so all registered devices show as offline by default
+    fetchAndSeedDevices();
+
+    // Periodically refresh UI to reflect offline status when devices go stale
+    setInterval(() => {
+      // Update marker icons and popups based on current online/offline
+      Object.keys(allDevices).forEach(id => {
+        ensureMarkerFor(id);
+      });
+      renderSidebarDevices();
+      updateNotificationBell();
+    }, 1000);
   </script>
 {% endblock %}
