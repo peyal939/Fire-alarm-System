@@ -146,6 +146,21 @@
   // Alert threshold for smoke (values > threshold are considered fire)
   const SMOKE_ALERT_THRESHOLD = 100
 
+      // Always show times in Dhaka (GMT+6), independent of user's local timezone
+      const DHAKA_TZ = 'Asia/Dhaka'
+      const dhakaFormatter = new Intl.DateTimeFormat(undefined, {
+        timeZone: DHAKA_TZ,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      })
+      function formatDhakaTS(epochSeconds) {
+        if (!epochSeconds && epochSeconds !== 0) return '—'
+        const n = Number(epochSeconds)
+        if (!Number.isFinite(n)) return '—'
+        const d = new Date(n * 1000)
+        return dhakaFormatter.format(d)
+      }
+
       let map = L.map('map').setView([23.777628, 90.405449], 12)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
@@ -174,7 +189,7 @@
           const statusLower = String(d.status || '').toLowerCase()
           const isAlive = statusLower === 'alive'
           const isAlert = smoke > SMOKE_ALERT_THRESHOLD || ['alert','fire','alarm'].includes(statusLower) || !isAlive
-          const ts = d.timestamp ? new Date(Number(d.timestamp) * 1000).toLocaleString() : '—'
+          const ts = d.received_at_iso || d.timestamp_iso || formatDhakaTS(d.timestamp)
           const li = document.createElement('li')
           if (isAlert) li.classList.add('alert')
           li.innerHTML = `
@@ -240,7 +255,7 @@
               <b>Device ID:</b> ${data.deviceID}<br>
               <b>Smoke:</b> ${smoke}<br>
               <b>Status:</b> ${isAlive ? 'alive' : `<b>${statusLower || 'NOT ALIVE'}</b>`}<br>
-              <b>Updated:</b> ${data.timestamp ? new Date(Number(data.timestamp) * 1000).toLocaleString() : '—'}
+              <b>Updated:</b> ${data.received_at_iso || data.timestamp_iso || formatDhakaTS(data.timestamp)}
             `
             marker.getPopup().setContent(info)
           }

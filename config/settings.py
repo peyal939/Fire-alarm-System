@@ -86,6 +86,22 @@ WSGI_APPLICATION = "config.wsgi.application"
 TIME_ZONE = "Asia/Dhaka"
 USE_TZ = True
 
+# When tunneling (e.g., ngrok), Django may receive X-Forwarded-Proto from a proxy.
+# This ensures request.is_secure() works correctly behind HTTPS tunnels.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+# CSRF trusted origins: required when using HTTPS origins like ngrok
+_csrf_origins_env = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins_env.split(",") if o.strip()]
+# Helpful defaults for common dev tunnels when DEBUG
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        "https://*.ngrok-free.app",
+        "https://*.ngrok.app",
+        "https://*.trycloudflare.com",
+    ]
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",

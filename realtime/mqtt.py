@@ -88,9 +88,27 @@ def ensure_mqtt_thread():
 
             # Broadcast to websocket consumers (include coords)
             pos = get_position(device_obj)
+            # Prepare Dhaka-local ISO-like timestamp string for UI
+            try:
+                tz = timezone.get_current_timezone()
+                ts_dt_local = ts_dt.astimezone(tz)
+                rec_local = timezone.now().astimezone(tz)
+
+                # Build human-friendly 12h format with am/pm in Dhaka, no GMT/offset suffix
+                def fmt12(dtobj):
+                    s = dtobj.strftime("%d %b %Y, %I:%M:%S %p")
+                    return s.replace("AM", "am").replace("PM", "pm")
+
+                timestamp_iso = fmt12(ts_dt_local)
+                received_at_iso = fmt12(rec_local)
+            except Exception:
+                timestamp_iso = None
+                received_at_iso = None
             device_payload = {
                 "deviceID": device_id,
                 "timestamp": timestamp,
+                "timestamp_iso": timestamp_iso,
+                "received_at_iso": received_at_iso,
                 "smoke": smoke,
                 "status": status,
             }
