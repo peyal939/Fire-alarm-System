@@ -67,8 +67,8 @@ def readyz(request):
 )
 @api_view(["GET"])
 def metrics_summary(request):
-    # Online if device has reported recently AND last known status is 'alive'.
-    # Freshness window is short (seconds) to meet requirement: no data in 2-5s => offline.
+    # Online if device has reported recently, regardless of reported status.
+    # Freshness window is short (seconds): if no data in 2-5s => offline.
     freshness_seconds = getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5)
     window = timedelta(seconds=int(freshness_seconds))
     now = timezone.now()
@@ -80,7 +80,6 @@ def metrics_summary(request):
         deleted_at__isnull=True,
         last_seen__isnull=False,
         last_seen__gte=now - window,
-        status__iexact="alive",
     ).count()
     offline = max(total_devices - online, 0)
     return Response(

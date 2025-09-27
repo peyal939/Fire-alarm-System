@@ -70,6 +70,9 @@ MQTT_PASS=
 
 # Alerts
 SMOKE_ALERT_THRESHOLD=50
+
+# Online/offline freshness (seconds). Default is 180 (3 minutes)
+DEVICE_ONLINE_FRESHNESS_SECONDS=180
 ```
 
 3) Initialize DB
@@ -153,11 +156,14 @@ Example payload (JSON):
 }
 ```
 
-Status is derived from telemetry; alerts open when smoke exceeds `SMOKE_ALERT_THRESHOLD` (now 50) or when status implies alarm/not-alive (basic debounce supported).
+Status is derived from telemetry; alerts open when smoke exceeds `SMOKE_ALERT_THRESHOLD` (now 50).
 
 Persistence policy:
 - Telemetry rows are persisted only when `smoke` is greater than `SMOKE_ALERT_THRESHOLD` (now 50).
 - Low/no smoke readings still update device `status` and `last_seen`, and may resolve alerts, but are not stored in the telemetry table.
+
+Online/offline
+- A device is considered online if a message has been received within `DEVICE_ONLINE_FRESHNESS_SECONDS` (default 180s = 3 minutes). Otherwise, it's offline.
 
 Timezone:
 - The application uses Asia/Dhaka (GMT+6) for all timestamps.
