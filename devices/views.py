@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 from rest_framework import status, viewsets, filters
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -25,12 +26,20 @@ from .serializers import (
 @extend_schema(tags=["Devices"])
 class DeviceViewSet(viewsets.ModelViewSet):
     serializer_class = DeviceSerializer
-    permission_classes = [IsOwnerOrSuperadmin]
+    # Require authentication first to avoid AnonymousUser reaching queryset resolution
+    permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get", "patch", "delete", "post"]
+    # Provide a base queryset so schema generators can infer model/lookup types
+    queryset = Device.objects.select_related("user").filter(deleted_at__isnull=True)
+    # Constrain lookup to digits and document path param as integer
+    lookup_value_regex = r"\d+"
 
     def get_queryset(self):
         base = Device.objects.select_related("user").filter(deleted_at__isnull=True)
         user = self.request.user
+        # Safety guard: if somehow unauthenticated slips through, return empty set
+        if not getattr(user, "is_authenticated", False):
+            return Device.objects.none()
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
         return base.filter(user=user)
@@ -118,6 +127,13 @@ class DeviceViewSet(viewsets.ModelViewSet):
         summary="List telemetry for a device",
         parameters=[
             OpenApiParameter(
+                name="id",
+                description="Device ID (integer)",
+                required=True,
+                type=int,
+                location=OpenApiParameter.PATH,
+            ),
+            OpenApiParameter(
                 name="since",
                 description="ISO8601 datetime or epoch seconds (>=)",
                 required=False,
@@ -178,6 +194,13 @@ class DeviceViewSet(viewsets.ModelViewSet):
         summary="List alerts for a device",
         parameters=[
             OpenApiParameter(
+                name="id",
+                description="Device ID (integer)",
+                required=True,
+                type=int,
+                location=OpenApiParameter.PATH,
+            ),
+            OpenApiParameter(
                 name="status",
                 description="Filter by status: open|resolved",
                 required=False,
@@ -204,8 +227,11 @@ class DeviceViewSet(viewsets.ModelViewSet):
 @extend_schema(tags=["Telemetry"])
 class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TelemetrySerializer
-    permission_classes = [IsOwnerOrSuperadmin]
+    permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get"]
+    queryset = Telemetry.objects.select_related("device", "device__user").filter(
+        deleted_at__isnull=True, device__deleted_at__isnull=True
+    )
 
     @extend_schema(
         summary="List telemetry (global)",
@@ -238,6 +264,8 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
             deleted_at__isnull=True, device__deleted_at__isnull=True
         )
         user = self.request.user
+        if not getattr(user, "is_authenticated", False):
+            return Telemetry.objects.none()
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
             qs = qs.filter(device__user=user)
 
@@ -283,8 +311,11 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
 @extend_schema(tags=["Alerts"])
 class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AlertSerializer
-    permission_classes = [IsOwnerOrSuperadmin]
+    permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get", "post"]
+    queryset = Alert.objects.select_related("device", "device__user").filter(
+        deleted_at__isnull=True, device__deleted_at__isnull=True
+    )
 
     @extend_schema(
         summary="List alerts (global)",
@@ -310,6 +341,8 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
             deleted_at__isnull=True, device__deleted_at__isnull=True
         )
         user = self.request.user
+        if not getattr(user, "is_authenticated", False):
+            return Alert.objects.none()
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
             qs = qs.filter(device__user=user)
 
