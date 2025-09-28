@@ -47,18 +47,36 @@ class DeviceSerializer(serializers.ModelSerializer):
 
 
 class DeviceRegisterSerializer(serializers.Serializer):
-    hardware_identifier = serializers.CharField(max_length=64)
-    device_name = serializers.CharField(
-        max_length=255, required=False, allow_blank=True
+    hardware_identifier = serializers.CharField(
+        max_length=64, help_text="Unique hardware identifier of the device"
     )
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    device_name = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, help_text="Optional name"
+    )
+    latitude = serializers.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        help_text="Latitude in decimal degrees (-90..90)",
+    )
+    longitude = serializers.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        help_text="Longitude in decimal degrees (-180..180)",
+    )
     device_role = serializers.ChoiceField(
         choices=Device.DeviceRole.choices,
         required=False,
         default=Device.DeviceRole.MASTER,
+        help_text="Role of the device: master (default) or slave",
     )
-    master_id = serializers.IntegerField(required=False, allow_null=True)
+    master_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Required when device_role=slave. Must reference an existing master device (ID) "
+            "that belongs to you (unless superadmin)."
+        ),
+    )
 
     def validate(self, attrs):
         lat = attrs.get("latitude")

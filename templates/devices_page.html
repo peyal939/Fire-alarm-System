@@ -5,7 +5,7 @@
   <style>
     .devices-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .devices-toolbar .form-control { max-width: 260px; }
-    #mapPicker { height: 280px; }
+    #mapPickerMaster, #mapPickerSlave { height: 280px; }
   </style>
 {% endblock %}
 {% block content %}
@@ -15,7 +15,8 @@
     <div class="devices-toolbar">
       <input id="searchInput" type="search" class="form-control" placeholder="Search by ID or name" />
       <button id="refreshBtn" class="btn btn-outline-secondary">Refresh</button>
-      <button id="registerBtn" class="btn btn-success">Register Device</button>
+      <button id="registerMasterBtn" class="btn btn-success">Register Master</button>
+      <button id="registerSlaveBtn" class="btn btn-outline-success">Register Slave</button>
     </div>
   </div>
 
@@ -38,24 +39,25 @@
   <div class="text-muted" id="devicesEmpty" style="display:none">No devices found.</div>
 </div>
 
-<!-- Register Device Modal -->
-<div class="modal fade" id="registerModal" tabindex="-1" aria-hidden="true">
+<!-- Register Master Modal -->
+<div class="modal fade" id="registerMasterModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Register Device</h5>
+        <h5 class="modal-title">Register Master Device</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <form id="registerForm">
+        <div class="alert alert-danger d-none" id="errMaster"></div>
+        <form id="registerMasterForm">
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
-              <input name="hardware_identifier" class="form-control" required />
+              <input name="hardware_identifier" class="form-control" required maxlength="64" />
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
-              <input name="device_name" class="form-control" />
+              <input name="device_name" class="form-control" maxlength="255" />
             </div>
             <div class="col-md-4">
               <label class="form-label">Latitude</label>
@@ -66,18 +68,71 @@
               <input name="longitude" class="form-control" placeholder="e.g. 90.4054" required />
             </div>
             <div class="col-md-4 d-flex align-items-end">
-              <button type="button" id="pickOnMapBtn" class="btn btn-outline-primary w-100">Pick on Map</button>
+              <button type="button" id="pickOnMapMasterBtn" class="btn btn-outline-primary w-100">Pick on Map</button>
             </div>
           </div>
-          <div class="mt-3" id="mapPickerWrap" style="display:none">
-            <div id="mapPicker" class="rounded border"></div>
+          <div class="mt-3" id="mapPickerMasterWrap" style="display:none">
+            <div id="mapPickerMaster" class="rounded border"></div>
             <div class="form-text">Click on the map to set coordinates. Click again to move the marker.</div>
           </div>
         </form>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" id="submitRegisterBtn" class="btn btn-success">Register</button>
+        <button type="button" id="submitRegisterMasterBtn" class="btn btn-success">Register Master</button>
+      </div>
+    </div>
+  </div>
+ </div>
+
+<!-- Register Slave Modal -->
+<div class="modal fade" id="registerSlaveModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Register Slave Device</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="errSlave"></div>
+        <form id="registerSlaveForm">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Hardware Identifier</label>
+              <input name="hardware_identifier" class="form-control" required maxlength="64" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Device Name (optional)</label>
+              <input name="device_name" class="form-control" maxlength="255" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Latitude</label>
+              <input name="latitude" class="form-control" placeholder="e.g. 23.7776" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Longitude</label>
+              <input name="longitude" class="form-control" placeholder="e.g. 90.4054" required />
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="button" id="pickOnMapSlaveBtn" class="btn btn-outline-primary w-100">Pick on Map</button>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Master</label>
+            <select name="master_id" id="masterSelect" class="form-select" required>
+              <option value="">Loading masters…</option>
+            </select>
+            <div class="form-text">Admins see all masters. Users only see their own masters.</div>
+          </div>
+          <div class="mt-3" id="mapPickerSlaveWrap" style="display:none">
+            <div id="mapPickerSlave" class="rounded border"></div>
+            <div class="form-text">Click on the map to set coordinates. Click again to move the marker.</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" id="submitRegisterSlaveBtn" class="btn btn-success">Register Slave</button>
       </div>
     </div>
   </div>
@@ -91,16 +146,25 @@
     const emptyState = document.getElementById('devicesEmpty');
     const searchInput = document.getElementById('searchInput');
     const refreshBtn = document.getElementById('refreshBtn');
-    const registerBtn = document.getElementById('registerBtn');
+    const registerMasterBtn = document.getElementById('registerMasterBtn');
+    const registerSlaveBtn = document.getElementById('registerSlaveBtn');
 
-    const registerModalEl = document.getElementById('registerModal');
-    const registerModal = new bootstrap.Modal(registerModalEl);
-    const registerForm = document.getElementById('registerForm');
-    const submitRegisterBtn = document.getElementById('submitRegisterBtn');
-    const pickOnMapBtn = document.getElementById('pickOnMapBtn');
-    const mapPickerWrap = document.getElementById('mapPickerWrap');
-    let mapInstance = null;
-    let mapMarker = null;
+    const masterModalEl = document.getElementById('registerMasterModal');
+    const slaveModalEl = document.getElementById('registerSlaveModal');
+    const masterModal = new bootstrap.Modal(masterModalEl);
+    const slaveModal = new bootstrap.Modal(slaveModalEl);
+
+    const registerMasterForm = document.getElementById('registerMasterForm');
+    const registerSlaveForm = document.getElementById('registerSlaveForm');
+    const submitRegisterMasterBtn = document.getElementById('submitRegisterMasterBtn');
+    const submitRegisterSlaveBtn = document.getElementById('submitRegisterSlaveBtn');
+
+    const pickOnMapMasterBtn = document.getElementById('pickOnMapMasterBtn');
+    const pickOnMapSlaveBtn = document.getElementById('pickOnMapSlaveBtn');
+    const mapPickerMasterWrap = document.getElementById('mapPickerMasterWrap');
+    const mapPickerSlaveWrap = document.getElementById('mapPickerSlaveWrap');
+    let mapMaster = null, mapSlave = null;
+    let markerMaster = null, markerSlave = null;
 
     let allDevices = [];
 
@@ -148,28 +212,52 @@
       emptyState.style.display = filtered.length ? 'none' : '';
     }
 
-    function ensureMap() {
-      if (mapInstance) return mapInstance;
-      mapInstance = L.map('mapPicker').setView([23.777628, 90.405449], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapInstance);
-      mapInstance.on('click', (e) => {
+    function ensureMapMaster() {
+      if (mapMaster) return mapMaster;
+      mapMaster = L.map('mapPickerMaster').setView([23.777628, 90.405449], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapMaster);
+      mapMaster.on('click', (e) => {
         const { lat, lng } = e.latlng;
-        if (!mapMarker) {
-          mapMarker = L.marker([lat, lng], { draggable: true }).addTo(mapInstance);
-          mapMarker.on('dragend', syncMarkerToInputs);
+        if (!markerMaster) {
+          markerMaster = L.marker([lat, lng], { draggable: true }).addTo(mapMaster);
+          markerMaster.on('dragend', syncMasterMarkerToInputs);
         } else {
-          mapMarker.setLatLng([lat, lng]);
+          markerMaster.setLatLng([lat, lng]);
         }
-        syncMarkerToInputs();
+        syncMasterMarkerToInputs();
       });
-      return mapInstance;
+      return mapMaster;
     }
 
-    function syncMarkerToInputs() {
-      if (!mapMarker) return;
-      const pos = mapMarker.getLatLng();
-      registerForm.latitude.value = pos.lat.toFixed(6);
-      registerForm.longitude.value = pos.lng.toFixed(6);
+    function syncMasterMarkerToInputs() {
+      if (!markerMaster) return;
+      const pos = markerMaster.getLatLng();
+      registerMasterForm.latitude.value = pos.lat.toFixed(6);
+      registerMasterForm.longitude.value = pos.lng.toFixed(6);
+    }
+
+    function ensureMapSlave() {
+      if (mapSlave) return mapSlave;
+      mapSlave = L.map('mapPickerSlave').setView([23.777628, 90.405449], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapSlave);
+      mapSlave.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        if (!markerSlave) {
+          markerSlave = L.marker([lat, lng], { draggable: true }).addTo(mapSlave);
+          markerSlave.on('dragend', syncSlaveMarkerToInputs);
+        } else {
+          markerSlave.setLatLng([lat, lng]);
+        }
+        syncSlaveMarkerToInputs();
+      });
+      return mapSlave;
+    }
+
+    function syncSlaveMarkerToInputs() {
+      if (!markerSlave) return;
+      const pos = markerSlave.getLatLng();
+      registerSlaveForm.latitude.value = pos.lat.toFixed(6);
+      registerSlaveForm.longitude.value = pos.lng.toFixed(6);
     }
 
     function parseNumber(v) {
@@ -177,43 +265,99 @@
       return Number.isFinite(n) ? n : null;
     }
 
-    async function onSubmitRegister() {
-      const hid = (registerForm.hardware_identifier.value || '').trim();
-      const name = (registerForm.device_name.value || '').trim();
-      const lat = parseNumber(registerForm.latitude.value);
-      const lon = parseNumber(registerForm.longitude.value);
+    async function populateMastersSelect() {
+      const sel = document.getElementById('masterSelect');
+      sel.innerHTML = '<option value="">Loading masters…</option>';
+      try {
+        const data = await apiGet('/devices/tree/');
+        const masters = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        if (!masters.length) {
+          sel.innerHTML = '<option value="">No masters found. Please register a master first.</option>';
+          return;
+        }
+        sel.innerHTML = '<option value="">Select master…</option>' + masters
+          .map(m => {
+            const label = (m.hardware_identifier || '') + (m.device_name ? (' — ' + m.device_name) : '');
+            return `<option value="${m.id}">${label}</option>`;
+          })
+          .join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">Failed to load masters</option>';
+      }
+    }
+
+    async function onSubmitRegisterMaster() {
+      const hid = (registerMasterForm.hardware_identifier.value || '').trim();
+      const name = (registerMasterForm.device_name.value || '').trim();
+      const lat = parseNumber(registerMasterForm.latitude.value);
+      const lon = parseNumber(registerMasterForm.longitude.value);
       if (!hid) { alert('Hardware identifier is required'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
       try {
-        submitRegisterBtn.disabled = true;
-        const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon };
-        const data = await apiPost('/devices/register/', payload);
-        registerModal.hide();
-        registerForm.reset();
-        mapPickerWrap.style.display = 'none';
-        // Refresh
+        submitRegisterMasterBtn.disabled = true;
+        const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon, device_role: 'master' };
+        await apiPost('/devices/register/', payload);
+        masterModal.hide();
+        registerMasterForm.reset();
+        mapPickerMasterWrap.style.display = 'none';
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert('Failed to register device. Please check inputs or try again.');
+        alert('Failed to register master device.');
       } finally {
-        submitRegisterBtn.disabled = false;
+        submitRegisterMasterBtn.disabled = false;
+      }
+    }
+
+    async function onSubmitRegisterSlave() {
+      const hid = (registerSlaveForm.hardware_identifier.value || '').trim();
+      const name = (registerSlaveForm.device_name.value || '').trim();
+      const lat = parseNumber(registerSlaveForm.latitude.value);
+      const lon = parseNumber(registerSlaveForm.longitude.value);
+      const masterId = parseInt(registerSlaveForm.master_id.value) || null;
+      if (!hid) { alert('Hardware identifier is required'); return; }
+      if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
+      if (!masterId) { alert('Please select a master.'); return; }
+      try {
+        submitRegisterSlaveBtn.disabled = true;
+        const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon, device_role: 'slave', master_id: masterId };
+        await apiPost('/devices/register/', payload);
+        slaveModal.hide();
+        registerSlaveForm.reset();
+        mapPickerSlaveWrap.style.display = 'none';
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to register slave device. Ensure master ownership and inputs.');
+      } finally {
+        submitRegisterSlaveBtn.disabled = false;
       }
     }
 
     // Events
     searchInput.addEventListener('input', () => renderDevices());
     refreshBtn.addEventListener('click', () => fetchAllDevices());
-    registerBtn.addEventListener('click', () => {
-      registerForm.reset();
-      mapPickerWrap.style.display = 'none';
-      registerModal.show();
+    registerMasterBtn.addEventListener('click', () => {
+      registerMasterForm.reset();
+      mapPickerMasterWrap.style.display = 'none';
+      masterModal.show();
     });
-    pickOnMapBtn.addEventListener('click', () => {
-      mapPickerWrap.style.display = '';
-      setTimeout(() => { ensureMap(); mapInstance.invalidateSize(); }, 200);
+    registerSlaveBtn.addEventListener('click', async () => {
+      registerSlaveForm.reset();
+      mapPickerSlaveWrap.style.display = 'none';
+      await populateMastersSelect();
+      slaveModal.show();
     });
-    submitRegisterBtn.addEventListener('click', onSubmitRegister);
+    pickOnMapMasterBtn.addEventListener('click', () => {
+      mapPickerMasterWrap.style.display = '';
+      setTimeout(() => { ensureMapMaster(); mapMaster.invalidateSize(); }, 200);
+    });
+    pickOnMapSlaveBtn.addEventListener('click', () => {
+      mapPickerSlaveWrap.style.display = '';
+      setTimeout(() => { ensureMapSlave(); mapSlave.invalidateSize(); }, 200);
+    });
+    submitRegisterMasterBtn.addEventListener('click', onSubmitRegisterMaster);
+    submitRegisterSlaveBtn.addEventListener('click', onSubmitRegisterSlave);
 
     // Initial load
     fetchAllDevices();

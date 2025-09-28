@@ -25,7 +25,7 @@ Django + DRF + Channels monolith for a fire detector IoT platform. It handles us
 - `accounts/` – custom user model + JWT endpoints
 - `devices/` – models, serializers, views for devices/telemetry/alerts
 - `realtime/` – dashboard views, MQTT client, Channels consumers
-- `templates/` – `index.html` (dashboard), `login.html` (session login)
+- `templates/` – `index.html` (dashboard), `devices_page.html` (devices & registration), `login.html` (session login)
 - `static/` – icons/assets
 - `device_simulator.py` – simple MQTT publisher for local testing
 
@@ -116,12 +116,13 @@ OpenAPI docs provide request/response examples: `/docs` (Swagger), `/redoc` (ReD
 ## Core APIs (quick reference)
 
 Devices:
-- `GET /devices/` – list devices (owned by user)
-- `POST /devices/register/` – claim/register a device to the current user
+- `GET /devices/` – list devices (owned by user; superadmin sees all)
+- `POST /devices/register/` – claim/register a device to the current user (supports master/slave)
 - `GET /devices/{id}/` – retrieve
 - `DELETE /devices/{id}/` – soft delete
 - `GET /devices/{id}/telemetry/?since=&until=` – device telemetry
 - `GET /devices/{id}/alerts/?status=` – device alerts
+- `GET /devices/tree/` – list masters with nested slaves (owned by user; superadmin sees all)
 
 Telemetry (global, read-only):
 - `GET /telemetry/?device=&since=&until=`
@@ -135,6 +136,66 @@ Notes:
 - `status` supports `open` or `resolved`.
 - Device register endpoint requires a trailing slash: `/devices/register/`.
 
+### Master/Slave model
+
+Devices have a role: `master` or `slave`. A slave must be preregistered under a master before its telemetry is accepted. Ownership rules are enforced: non-admin users can only attach slaves to their own masters (superadmins may attach to any).
+
+Register a master:
+
+```http
+POST /devices/register/
+Content-Type: application/json
+
+{
+	"hardware_identifier": "MASTER-001",
+	"device_name": "Main Panel",
+	"latitude": 23.777628,
+	"longitude": 90.405449,
+	"device_role": "master"  // optional; defaults to master
+}
+```
+
+Register a slave (must select an existing master):
+
+```http
+POST /devices/register/
+Content-Type: application/json
+
+{
+	"hardware_identifier": "SLAVE-101",
+	"device_name": "Floor 1 Sensor",
+	"latitude": 23.777700,
+	"longitude": 90.405500,
+	"device_role": "slave",
+	"master_id": 123  // the ID of a master device
+}
+```
+
+Validation rules (summary):
+- Slaves require `master_id` and that master must be a `master` device.
+- Non-admin users may only attach to masters they own. Superadmins may attach to any master.
+- Masters must not provide `master_id`.
+- Latitude must be between -90..90; longitude between -180..180.
+
+Tree endpoint:
+
+```http
+GET /devices/tree/
+
+[
+	{
+		"id": 123,
+		"hardware_identifier": "MASTER-001",
+		"device_role": "master",
+		"slaves": [
+			{ "id": 456, "hardware_identifier": "SLAVE-101", "device_role": "slave", "master_id": 123, ... },
+			{ "id": 789, "hardware_identifier": "SLAVE-102", "device_role": "slave", "master_id": 123, ... }
+		],
+		...
+	}
+]
+```
+
 ---
 
 ## MQTT ingestion
@@ -143,7 +204,12 @@ Notes:
 - The MQTT client runs in-process and forwards accepted telemetry to the API layer and WebSocket broadcaster.
 - Only registered devices are accepted; unknown devices are ignored.
 
-Example payload (JSON):
+Composite ingestion rules:
+- The master device (by `masterID` or `deviceID`) must be registered; otherwise the whole payload is ignored.
+- Each slave must be preregistered as a `slave` and must be linked to that master; otherwise that slave entry is ignored.
+- Legacy single-device payloads are still accepted unchanged.
+
+Example payloads (JSON):
 
 ```json
 {
@@ -153,6 +219,21 @@ Example payload (JSON):
 	"timestamp": 1725148800,
 	"latitude": 23.78,
 	"longitude": 90.41
+}
+```
+
+Composite payload from a master with slaves:
+
+```json
+{
+	"masterID": "MASTER-001",
+	"status": "alive",
+	"timestamp": 1725148800,
+	"smoke": 10,
+	"slaves": [
+		{ "deviceID": "SLAVE-101", "status": "alive", "smoke": 65, "timestamp": 1725148801 },
+		{ "deviceID": "SLAVE-102", "status": "alive", "smoke": 5 }
+	]
 }
 ```
 
@@ -197,6 +278,8 @@ Adjust the script or environment variables to point at your MQTT broker.
 ```
 
 The dashboard shows a blinking red icon and a bell indicator when any device appears in alert state.
+
+Note: The Devices page (`/app/devices`) provides master/slave registration UI, including a master dropdown for slaves. Admins can attach slaves to any master; users can only attach to their own masters.
 
 ---
 

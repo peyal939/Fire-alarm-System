@@ -13,6 +13,8 @@ from drf_spectacular.utils import (
     extend_schema,
     OpenApiParameter,
     OpenApiExample,
+    OpenApiResponse,
+    OpenApiTypes,
 )
 from .models import Device, Telemetry, Alert
 from .serializers import (
@@ -57,25 +59,64 @@ class DeviceViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["deleted_at", "deleted_by"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False, methods=["post"], url_path="register")
     @extend_schema(
         tags=["Devices"],
         summary="Register/claim a device",
+        description=(
+            "Register a device as either a master (default) or a slave.\n\n"
+            "How to register a slave device:\n"
+            "- Set `device_role` to `slave`.\n"
+            "- Provide `master_id` referencing an existing master device that you own (non-admin users).\n"
+            "- The selected master must have role `master`; you cannot attach to another slave.\n\n"
+            "Additional rules:\n"
+            "- `master_id` is required when `device_role` is `slave`, and must NOT be provided when `device_role` is `master`.\n"
+            "- Latitude and longitude are required on first registration.\n"
+            "- If the hardware identifier is already registered by another user, the endpoint returns 409 Conflict.\n"
+            "- If the device is already registered by you (or you are superadmin), the same call updates name/coordinates and returns 200.\n"
+        ),
         request=DeviceRegisterSerializer,
-        responses={201: DeviceSerializer, 200: DeviceSerializer},
+        responses={
+            201: DeviceSerializer,
+            200: DeviceSerializer,
+            409: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Conflict when attempting to register a device owned by another user.",
+                examples=[
+                    OpenApiExample(
+                        "DeviceAlreadyRegistered",
+                        value={"detail": "Device already registered by another user"},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
         examples=[
             OpenApiExample(
-                "RegisterDeviceRequest",
+                "RegisterMasterRequest",
                 value={
-                    "hardware_identifier": "DEV123",
-                    "device_name": "Living Room Sensor",
-                    "latitude": 23.78,
-                    "longitude": 90.41,
+                    "hardware_identifier": "MASTER-001",
+                    "device_name": "Main Panel",
+                    "latitude": 23.777628,
+                    "longitude": 90.405449,
+                    "device_role": "master",
                 },
                 request_only=True,
-            )
+            ),
+            OpenApiExample(
+                "RegisterSlaveRequest",
+                value={
+                    "hardware_identifier": "SLAVE-101",
+                    "device_name": "Floor 1 Sensor",
+                    "latitude": 23.777700,
+                    "longitude": 90.405500,
+                    "device_role": "slave",
+                    "master_id": 123,
+                },
+                request_only=True,
+            ),
         ],
     )
+    @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         ser = DeviceRegisterSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
@@ -128,12 +169,44 @@ class DeviceViewSet(viewsets.ModelViewSet):
         device.save()
         return Response(DeviceSerializer(device).data, status=201)
 
-    @action(detail=False, methods=["get"], url_path="tree")
     @extend_schema(
         tags=["Devices"],
         summary="List devices as a tree (masters with nested slaves)",
-        responses={200: DeviceTreeSerializer(many=True)},
+        responses={
+            200: OpenApiResponse(
+                response=DeviceTreeSerializer(many=True),
+                examples=[
+                    OpenApiExample(
+                        "DevicesTreeResponse",
+                        value=[
+                            {
+                                "id": 123,
+                                "hardware_identifier": "MASTER-001",
+                                "device_name": "Main Panel",
+                                "device_role": "master",
+                                "slaves": [
+                                    {
+                                        "id": 456,
+                                        "hardware_identifier": "SLAVE-101",
+                                        "device_role": "slave",
+                                        "master_id": 123,
+                                    },
+                                    {
+                                        "id": 789,
+                                        "hardware_identifier": "SLAVE-102",
+                                        "device_role": "slave",
+                                        "master_id": 123,
+                                    },
+                                ],
+                            }
+                        ],
+                        response_only=True,
+                    )
+                ],
+            )
+        },
     )
+    @action(detail=False, methods=["get"], url_path="tree")
     def tree(self, request):
         qs = (
             self.get_queryset()
@@ -144,7 +217,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ser = DeviceTreeSerializer(masters, many=True)
         return Response(ser.data)
 
-    @action(detail=True, methods=["get"], url_path="telemetry")
     @extend_schema(
         tags=["Telemetry"],
         summary="List telemetry for a device",
@@ -172,6 +244,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             ),
         ],
     )
+    @action(detail=True, methods=["get"], url_path="telemetry")
     def list_telemetry(self, request, pk=None):
         device: Device = self.get_object()
         qs = Telemetry.objects.filter(device=device, deleted_at__isnull=True)
@@ -211,7 +284,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ser = TelemetrySerializer(qs, many=True)
         return Response(ser.data)
 
-    @action(detail=True, methods=["get"], url_path="alerts")
     @extend_schema(
         tags=["Alerts"],
         summary="List alerts for a device",
@@ -232,6 +304,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             ),
         ],
     )
+    @action(detail=True, methods=["get"], url_path="alerts")
     def list_alerts(self, request, pk=None):
         device: Device = self.get_object()
         qs = Alert.objects.filter(device=device, deleted_at__isnull=True)
