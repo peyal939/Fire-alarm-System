@@ -8,6 +8,9 @@ class Migration(migrations.Migration):
         ("devices", "0003_alter_alert_options"),
     ]
 
+    # MySQL may not allow DDL inside a transaction; run this migration non-atomically
+    atomic = False
+
     def add_columns_if_missing(apps, schema_editor):
         Device = apps.get_model("devices", "Device")
         table = Device._meta.db_table
@@ -47,7 +50,9 @@ class Migration(migrations.Migration):
             schema_editor.add_field(Device, field)
 
     operations = [
-        migrations.RunPython(add_columns_if_missing, migrations.RunPython.noop),
+        migrations.RunPython(
+            add_columns_if_missing, migrations.RunPython.noop, atomic=False
+        ),
         # The columns already exist in DB (added manually or via prior edits),
         # so we add them to the migration STATE only to let constraints reference them.
         migrations.SeparateDatabaseAndState(
