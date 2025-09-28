@@ -1,4 +1,4 @@
-from django.db import migrations, models
+from django.db import migrations, models, connection
 import django.db.models.deletion
 
 
@@ -8,7 +8,46 @@ class Migration(migrations.Migration):
         ("devices", "0003_alter_alert_options"),
     ]
 
+    def add_columns_if_missing(apps, schema_editor):
+        Device = apps.get_model("devices", "Device")
+        table = Device._meta.db_table
+
+        # Helper to check column existence using Django introspection (portable)
+        def column_exists(col: str) -> bool:
+            introspection = schema_editor.connection.introspection
+            with connection.cursor() as cursor:
+                try:
+                    description = introspection.get_table_description(cursor, table)
+                    cols = [getattr(c, "name", None) or c[0] for c in description]
+                    return col in cols
+                except Exception:
+                    return False
+
+        # Add device_role if missing
+        if not column_exists("device_role"):
+            field = models.CharField(
+                max_length=10,
+                choices=[("master", "Master"), ("slave", "Slave")],
+                default="master",
+                db_index=True,
+            )
+            field.set_attributes_from_name("device_role")
+            schema_editor.add_field(Device, field)
+
+        # Add master_id if missing
+        if not column_exists("master_id"):
+            field = models.ForeignKey(
+                to="devices.Device",
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="slaves",
+                null=True,
+                blank=True,
+            )
+            field.set_attributes_from_name("master")
+            schema_editor.add_field(Device, field)
+
     operations = [
+        migrations.RunPython(add_columns_if_missing, migrations.RunPython.noop),
         # The columns already exist in DB (added manually or via prior edits),
         # so we add them to the migration STATE only to let constraints reference them.
         migrations.SeparateDatabaseAndState(
