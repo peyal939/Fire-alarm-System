@@ -119,9 +119,21 @@ class Device(AuditSoftDeleteModel):
                 )
             # Enforce same owner
             if self.master and self.master.user_id != self.user_id:
-                raise ValidationError(
-                    {"user": "Slave must belong to the same user as its master."}
-                )
+                # Allow superadmins (or superusers) who are creating/updating the record
+                # to attach a slave to a master owned by another user. We check
+                # `created_by` because model.clean() doesn't receive request context;
+                # the view should set created_by=request.user when creating programmatically.
+                creator = getattr(self, "created_by", None)
+                if not (
+                    creator
+                    and (
+                        getattr(creator, "role", None) == "superadmin"
+                        or getattr(creator, "is_superuser", False)
+                    )
+                ):
+                    raise ValidationError(
+                        {"user": "Slave must belong to the same user as its master."}
+                    )
         else:
             raise ValidationError({"device_role": "Invalid device role."})
 

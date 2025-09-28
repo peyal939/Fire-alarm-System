@@ -13,6 +13,15 @@ class DeviceSerializer(serializers.ModelSerializer):
     online = serializers.SerializerMethodField()
     device_role = serializers.CharField(read_only=True)
     master_id = serializers.IntegerField(source="master.id", read_only=True)
+    master_hardware_identifier = serializers.CharField(
+        source="master.hardware_identifier", read_only=True
+    )
+    master_device_name = serializers.CharField(
+        source="master.device_name", read_only=True
+    )
+    master_last_seen = serializers.DateTimeField(
+        source="master.last_seen", read_only=True
+    )
 
     class Meta:
         model = Device
@@ -20,14 +29,17 @@ class DeviceSerializer(serializers.ModelSerializer):
             "id",
             "hardware_identifier",
             "device_name",
+            "device_role",
+            "master_id",
+            "master_hardware_identifier",
+            "master_device_name",
+            "master_last_seen",
             "latitude",
             "longitude",
             "status",
             "registered_at",
             "last_seen",
             "online",
-            "device_role",
-            "master_id",
             "owner_id",
             "owner_email",
             "owner_phone",
@@ -111,6 +123,7 @@ class DeviceRegisterSerializer(serializers.Serializer):
             if user and not (
                 getattr(user, "role", None) == "superadmin"
                 or getattr(user, "is_superuser", False)
+                or getattr(user, "is_staff", False)
             ):
                 if master.user_id != getattr(user, "id", None):
                     raise serializers.ValidationError(

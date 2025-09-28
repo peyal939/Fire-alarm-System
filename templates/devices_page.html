@@ -13,6 +13,11 @@
   <div class="d-flex align-items-center justify-content-between mb-2">
     <h1 class="h4 mb-0">Devices</h1>
     <div class="devices-toolbar">
+      <select id="roleFilter" class="form-select">
+        <option value="all">All roles</option>
+        <option value="master">Masters</option>
+        <option value="slave">Slaves</option>
+      </select>
       <input id="searchInput" type="search" class="form-control" placeholder="Search by ID or name" />
       <button id="refreshBtn" class="btn btn-outline-secondary">Refresh</button>
       <button id="registerMasterBtn" class="btn btn-success">Register Master</button>
@@ -27,9 +32,12 @@
           <th>ID</th>
           <th>Hardware ID</th>
           <th>Name</th>
+          <th>Role</th>
+          <th>Master</th>
           <th>Status</th>
           <th>Last Seen</th>
           <th>Location</th>
+          <th>Owner (email)</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -144,7 +152,8 @@
   <script>
     const tableBody = document.querySelector('#devicesTable tbody');
     const emptyState = document.getElementById('devicesEmpty');
-    const searchInput = document.getElementById('searchInput');
+  const searchInput = document.getElementById('searchInput');
+  const roleFilter = document.getElementById('roleFilter');
     const refreshBtn = document.getElementById('refreshBtn');
     const registerMasterBtn = document.getElementById('registerMasterBtn');
     const registerSlaveBtn = document.getElementById('registerSlaveBtn');
@@ -189,27 +198,41 @@
 
     function renderDevices() {
       const q = (searchInput.value || '').trim().toLowerCase();
+      const roleSel = (roleFilter.value || 'all').toLowerCase();
       const filtered = !q ? allDevices : allDevices.filter(d => {
         const name = (d.device_name || '').toLowerCase();
         const hid = (d.hardware_identifier || '').toLowerCase();
-        return name.includes(q) || hid.includes(q);
+        const role = (d.device_role || '').toLowerCase();
+        const owner = (d.owner_email || '').toLowerCase();
+        return name.includes(q) || hid.includes(q) || role.includes(q) || owner.includes(q);
       });
+      const roleFiltered = roleSel === 'all' ? filtered : filtered.filter(d => (d.device_role || '').toLowerCase() === roleSel);
       tableBody.innerHTML = '';
-      filtered.forEach(d => {
+      roleFiltered.forEach(d => {
         const tr = document.createElement('tr');
         const loc = (d.latitude != null && d.longitude != null) ? `${d.latitude}, ${d.longitude}` : '—';
         const lastSeen = d.last_seen ? new Date(d.last_seen).toLocaleString() : '—';
+        const role = d.device_role || '';
+        const roleBadge = (role.toLowerCase() === 'master')
+          ? '<span class="badge rounded-pill bg-primary">MASTER</span>'
+          : (role ? '<span class="badge rounded-pill bg-secondary">SLAVE</span>' : '');
+        const masterLabel = role === 'slave'
+          ? `${d.master_hardware_identifier || ''}${d.master_device_name ? ' — ' + d.master_device_name : ''}`
+          : '—';
         tr.innerHTML = `
           <td>${d.id}</td>
           <td><code>${d.hardware_identifier || ''}</code></td>
           <td>${d.device_name || ''}</td>
+          <td>${roleBadge}</td>
+          <td>${masterLabel}</td>
           <td>${d.status || ''}</td>
           <td>${lastSeen}</td>
           <td>${loc}</td>
+          <td>${d.owner_email || ''}</td>
         `;
         tableBody.appendChild(tr);
       });
-      emptyState.style.display = filtered.length ? 'none' : '';
+      emptyState.style.display = roleFiltered.length ? 'none' : '';
     }
 
     function ensureMapMaster() {
@@ -335,7 +358,8 @@
     }
 
     // Events
-    searchInput.addEventListener('input', () => renderDevices());
+  searchInput.addEventListener('input', () => renderDevices());
+  roleFilter.addEventListener('change', () => renderDevices());
     refreshBtn.addEventListener('click', () => fetchAllDevices());
     registerMasterBtn.addEventListener('click', () => {
       registerMasterForm.reset();

@@ -66,7 +66,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             "Register a device as either a master (default) or a slave.\n\n"
             "How to register a slave device:\n"
             "- Set `device_role` to `slave`.\n"
-            "- Provide `master_id` referencing an existing master device that you own (non-admin users).\n"
+            "- Provide `master_id` referencing an existing master device that you own (non-admin users). Admins/staff/superadmins can attach a slave to any master regardless of owner.\n"
             "- The selected master must have role `master`; you cannot attach to another slave.\n\n"
             "Additional rules:\n"
             "- `master_id` is required when `device_role` is `slave`, and must NOT be provided when `device_role` is `master`.\n"

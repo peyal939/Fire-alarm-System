@@ -399,7 +399,7 @@ paths:
 
         How to register a slave device:
         - Set `device_role` to `slave`.
-        - Provide `master_id` referencing an existing master device that you own (non-admin users).
+        - Provide `master_id` referencing an existing master device that you own (non-admin users). Admins/staff/superadmins can attach a slave to any master regardless of owner.
         - The selected master must have role `master`; you cannot attach to another slave.
 
         Additional rules:
@@ -1045,6 +1045,22 @@ components:
         device_name:
           type: string
           maxLength: 255
+        device_role:
+          type: string
+          readOnly: true
+        master_id:
+          type: integer
+          readOnly: true
+        master_hardware_identifier:
+          type: string
+          readOnly: true
+        master_device_name:
+          type: string
+          readOnly: true
+        master_last_seen:
+          type: string
+          format: date-time
+          readOnly: true
         latitude:
           type: string
           format: decimal
@@ -1070,12 +1086,6 @@ components:
         online:
           type: string
           readOnly: true
-        device_role:
-          type: string
-          readOnly: true
-        master_id:
-          type: integer
-          readOnly: true
         owner_id:
           type: integer
           readOnly: true
@@ -1091,7 +1101,10 @@ components:
       - hardware_identifier
       - id
       - last_seen
+      - master_device_name
+      - master_hardware_identifier
       - master_id
+      - master_last_seen
       - online
       - owner_email
       - owner_id
@@ -1427,6 +1440,22 @@ components:
         device_name:
           type: string
           maxLength: 255
+        device_role:
+          type: string
+          readOnly: true
+        master_id:
+          type: integer
+          readOnly: true
+        master_hardware_identifier:
+          type: string
+          readOnly: true
+        master_device_name:
+          type: string
+          readOnly: true
+        master_last_seen:
+          type: string
+          format: date-time
+          readOnly: true
         latitude:
           type: string
           format: decimal
@@ -1451,12 +1480,6 @@ components:
           nullable: true
         online:
           type: string
-          readOnly: true
-        device_role:
-          type: string
-          readOnly: true
-        master_id:
-          type: integer
           readOnly: true
         owner_id:
           type: integer
