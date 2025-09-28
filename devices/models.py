@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q, F
 from django.utils import timezone
 
 
@@ -33,6 +35,24 @@ class Device(AuditSoftDeleteModel):
     )
     hardware_identifier = models.CharField(max_length=64, unique=True)
     device_name = models.CharField(max_length=255, blank=True)
+
+    class DeviceRole(models.TextChoices):
+        MASTER = "master", "Master"
+        SLAVE = "slave", "Slave"
+
+    device_role = models.CharField(
+        max_length=10,
+        choices=DeviceRole.choices,
+        default=DeviceRole.MASTER,
+        db_index=True,
+    )
+    master = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        related_name="slaves",
+        on_delete=models.PROTECT,
+    )
     latitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
@@ -47,12 +67,68 @@ class Device(AuditSoftDeleteModel):
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["hardware_identifier"]),
+            models.Index(fields=["device_role"]),
+            models.Index(fields=["master"]),
         ]
         # Default ordering ensures stable pagination and removes DRF warning
         ordering = ["-registered_at"]
+        constraints = [
+            # If role is master, master FK must be NULL
+            models.CheckConstraint(
+                name="device_master_null_if_role_master",
+                check=Q(device_role="master", master__isnull=True)
+                | ~Q(device_role="master"),
+            ),
+            # If role is slave, master FK must be NOT NULL
+            models.CheckConstraint(
+                name="device_master_not_null_if_role_slave",
+                check=Q(device_role="slave", master__isnull=False)
+                | ~Q(device_role="slave"),
+            ),
+            # Note: self-reference prevention is enforced in clean(),
+            # since some MySQL versions disallow CHECKs on auto-increment columns.
+        ]
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.hardware_identifier} ({self.device_name or 'unnamed'})"
+
+    def clean(self):  # pragma: no cover - validated by tests/admin
+        # Normalize role
+        role = self.device_role or Device.DeviceRole.MASTER
+        # Self-reference check (only when pk known)
+        if self.pk and self.master_id and self.master_id == self.pk:
+            raise ValidationError({"master": "Device cannot be its own master."})
+        # Role + master rules
+        if role == Device.DeviceRole.MASTER:
+            if self.master_id is not None:
+                raise ValidationError(
+                    {"master": "Master devices cannot have a master."}
+                )
+        elif role == Device.DeviceRole.SLAVE:
+            if not self.master_id:
+                raise ValidationError(
+                    {"master": "Slave devices must reference a master."}
+                )
+            if (
+                self.master
+                and getattr(self.master, "device_role", None)
+                != Device.DeviceRole.MASTER
+            ):
+                raise ValidationError(
+                    {"master": "Selected master must be a master device."}
+                )
+            # Enforce same owner
+            if self.master and self.master.user_id != self.user_id:
+                raise ValidationError(
+                    {"user": "Slave must belong to the same user as its master."}
+                )
+        else:
+            raise ValidationError({"device_role": "Invalid device role."})
+
+    def save(self, *args, **kwargs):
+        # Ensure validations apply across all save paths (including programmatic saves)
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class Telemetry(AuditSoftDeleteModel):

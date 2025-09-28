@@ -3,19 +3,31 @@ from django.contrib import admin
 from .models import Device, Telemetry, Alert
 
 
+class SlaveInline(admin.TabularInline):
+    model = Device
+    fk_name = "master"
+    fields = ("hardware_identifier", "device_name", "status", "last_seen")
+    readonly_fields = ("hardware_identifier", "status", "last_seen")
+    extra = 0
+    can_delete = False
+
+
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
     list_display = (
         "hardware_identifier",
         "device_name",
+        "device_role",
+        "master",
         "user",
         "status",
         "last_seen",
         "registered_at",
     )
-    list_filter = ("status",)
+    list_filter = ("device_role", "status")
     search_fields = ("hardware_identifier", "device_name", "user__email")
-    autocomplete_fields = ("user",)
+    autocomplete_fields = ("user", "master")
+    inlines = [SlaveInline]
 
 
 @admin.register(Telemetry)
