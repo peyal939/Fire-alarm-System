@@ -20,6 +20,7 @@ from .serializers import (
     TelemetrySerializer,
     AlertSerializer,
     DeviceRegisterSerializer,
+    DeviceTreeSerializer,
 )
 
 
@@ -76,12 +77,14 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ],
     )
     def register(self, request):
-        ser = DeviceRegisterSerializer(data=request.data)
+        ser = DeviceRegisterSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
         hid = ser.validated_data["hardware_identifier"].strip()
         name = ser.validated_data.get("device_name", "").strip()
         lat_dec = ser.validated_data.get("latitude")
         lon_dec = ser.validated_data.get("longitude")
+        role = ser.validated_data.get("device_role") or Device.DeviceRole.MASTER
+        master = ser.validated_data.get("master")  # set in serializer when role==slave
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
@@ -111,15 +114,35 @@ class DeviceViewSet(viewsets.ModelViewSet):
             return Response(DeviceSerializer(existing).data, status=200)
 
         # Create new and assign to current user
-        device = Device.objects.create(
+        device = Device(
             user=request.user,
             hardware_identifier=hid,
             device_name=name,
             latitude=lat_dec,
             longitude=lon_dec,
             created_by=request.user,
+            device_role=role,
         )
+        if role == Device.DeviceRole.SLAVE:
+            device.master = master
+        device.save()
         return Response(DeviceSerializer(device).data, status=201)
+
+    @action(detail=False, methods=["get"], url_path="tree")
+    @extend_schema(
+        tags=["Devices"],
+        summary="List devices as a tree (masters with nested slaves)",
+        responses={200: DeviceTreeSerializer(many=True)},
+    )
+    def tree(self, request):
+        qs = (
+            self.get_queryset()
+            .select_related("master", "user")
+            .prefetch_related("slaves")
+        )
+        masters = qs.filter(device_role=Device.DeviceRole.MASTER)
+        ser = DeviceTreeSerializer(masters, many=True)
+        return Response(ser.data)
 
     @action(detail=True, methods=["get"], url_path="telemetry")
     @extend_schema(
