@@ -226,28 +226,69 @@
       return L.icon({ iconUrl, iconSize: [38, 38], className: className.trim() });
     }
 
+  // Resilient WebSocket with heartbeat + reconnect (handles prod proxy/LB idle timeouts)
   const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    let ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
-    ws.onmessage = function (event) {
-      let data = JSON.parse(event.data);
-      let id = data.deviceID;
-  // Preserve known metadata (role/master/owner) while updating live fields
-  allDevices[id] = { ...(allDevices[id] || {}), ...data };
-      lastSeenAt[id] = Date.now();
-      const smoke = Number(data.smoke) || 0;
-      const statusLower = String(data.status || '').toLowerCase();
-  const online = isOnline(id);
-  const isAlarm = online && ((data.mesh_alert === true) || (smoke > SMOKE_ALERT_THRESHOLD));
-  let icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
+  let ws = null;
+  let wsPingTimer = null;
+  let wsReconnectTimer = null;
+  let wsReconnectAttempt = 0;
 
-      let hasLatLon = data.latitude !== undefined && data.longitude !== undefined;
+  function scheduleReconnect() {
+    if (wsReconnectTimer) return; // already scheduled
+    const base = 1000; // 1s
+    const max = 30000; // 30s
+    const delay = Math.min(max, base * Math.pow(2, wsReconnectAttempt)) + Math.floor(Math.random() * 500);
+    wsReconnectAttempt += 1;
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectTimer = null;
+      connectWS();
+    }, delay);
+  }
+
+  function clearPing() {
+    if (wsPingTimer) { clearInterval(wsPingTimer); wsPingTimer = null; }
+  }
+
+  function connectWS() {
+    try { if (ws && ws.readyState === WebSocket.OPEN) return; } catch {}
+    try { if (ws) { try { ws.close(); } catch {} } } catch {}
+    ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
+
+    ws.onopen = function () {
+      wsReconnectAttempt = 0;
+      clearPing();
+      // Heartbeat every 25s keeps intermediaries from timing out idle WS
+      wsPingTimer = setInterval(() => {
+        try { if (ws && ws.readyState === WebSocket.OPEN) { ws.send('{"type":"ping"}'); } } catch {}
+      }, 25000);
+      // On (re)connect, refresh snapshot to cover any missed broadcasts during downtime
+      fetchAndSeedDevices();
+    };
+
+    ws.onmessage = function (event) {
+      let data = {};
+      try { data = JSON.parse(event.data); } catch { return; }
+      // Ignore heartbeat echos if any
+      if (data && data.type === 'pong') return;
+      const id = data.deviceID;
+      if (!id) return;
+      // Preserve known metadata (role/master/owner) while updating live fields
+      allDevices[id] = { ...(allDevices[id] || {}), ...data };
+      lastSeenAt[id] = Date.now();
+
+      const smoke = Number(data.smoke) || 0;
+      const online = isOnline(id);
+      const isAlarm = online && ((data.mesh_alert === true) || (smoke > SMOKE_ALERT_THRESHOLD));
+      const icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
+
+      const hasLatLon = data.latitude !== undefined && data.longitude !== undefined;
       if (hasLatLon) {
-        let lat = parseFloat(data.latitude); let lon = parseFloat(data.longitude);
+        const lat = parseFloat(data.latitude); const lon = parseFloat(data.longitude);
         if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
           let marker = deviceMarkers[id];
           if (!marker) { marker = L.marker([lat, lon], { icon }).addTo(map); marker.bindPopup(''); deviceMarkers[id] = marker; }
           marker.setLatLng([lat, lon]); marker.setIcon(icon);
-          let info = `
+          const info = `
             <b>Device ID:</b> ${data.deviceID}<br>
             <b>Smoke:</b> ${smoke}<br>
             <b>Status:</b> ${online ? 'online' : `<b>offline</b>`}<br>
@@ -259,6 +300,20 @@
       renderSidebarDevices();
       updateNotificationBell();
     };
+
+    ws.onclose = function () {
+      clearPing();
+      scheduleReconnect();
+    };
+
+    ws.onerror = function () {
+      try { ws && ws.close(); } catch {}
+      // onclose will handle reconnect
+    };
+  }
+
+  // Start the WS connection
+  connectWS();
 
     function ensureMarkerFor(id) {
       const d = allDevices[id];
