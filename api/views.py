@@ -72,12 +72,21 @@ def metrics_summary(request):
     freshness_seconds = getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5)
     window = timedelta(seconds=int(freshness_seconds))
     now = timezone.now()
-    total_devices = Device.objects.filter(deleted_at__isnull=True).count()
-    open_alerts = Alert.objects.filter(
-        status=Alert.Status.OPEN, device__deleted_at__isnull=True
-    ).count()
-    online = Device.objects.filter(
-        deleted_at__isnull=True,
+    user = getattr(request, "user", None)
+    base_devices = Device.objects.filter(deleted_at__isnull=True)
+    base_alerts = Alert.objects.filter(device__deleted_at__isnull=True)
+
+    # Non-admins only get counts for their own devices
+    if not (
+        getattr(user, "is_superuser", False)
+        or getattr(user, "role", None) == "superadmin"
+    ):
+        base_devices = base_devices.filter(user=user)
+        base_alerts = base_alerts.filter(device__user=user)
+
+    total_devices = base_devices.count()
+    open_alerts = base_alerts.filter(status=Alert.Status.OPEN).count()
+    online = base_devices.filter(
         last_seen__isnull=False,
         last_seen__gte=now - window,
     ).count()

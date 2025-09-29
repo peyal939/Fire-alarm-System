@@ -4,6 +4,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from .models import Device, Telemetry, Alert
+from django.db import models
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -11,6 +12,18 @@ class DeviceSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="user.email", read_only=True)
     owner_phone = serializers.CharField(source="user.phone_number", read_only=True)
     online = serializers.SerializerMethodField()
+    device_role = serializers.CharField(read_only=True)
+    master_id = serializers.IntegerField(source="master.id", read_only=True)
+    master_hardware_identifier = serializers.CharField(
+        source="master.hardware_identifier", read_only=True
+    )
+    master_device_name = serializers.CharField(
+        source="master.device_name", read_only=True
+    )
+    master_last_seen = serializers.DateTimeField(
+        source="master.last_seen", read_only=True
+    )
+    mesh_alert = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Device
@@ -18,6 +31,12 @@ class DeviceSerializer(serializers.ModelSerializer):
             "id",
             "hardware_identifier",
             "device_name",
+            "device_role",
+            "master_id",
+            "master_hardware_identifier",
+            "master_device_name",
+            "master_last_seen",
+            "mesh_alert",
             "latitude",
             "longitude",
             "status",
@@ -37,18 +56,66 @@ class DeviceSerializer(serializers.ModelSerializer):
             window = 5
         if not obj.last_seen:
             return False
-        is_alive = str(obj.status or "").strip().lower() == "alive"
         fresh = obj.last_seen >= timezone.now() - timezone.timedelta(seconds=window)
-        return bool(is_alive and fresh)
+        # Online is determined solely by freshness window
+        return bool(fresh)
+
+    def get_mesh_alert(self, obj: Device) -> bool:
+        """True if any device in this device's mesh has an open smoke_high alert.
+
+        Mesh is defined as: the master + all its slaves. For masters, master=self; for slaves, master=obj.master.
+        """
+        try:
+            master = obj if obj.device_role == Device.DeviceRole.MASTER else obj.master
+            if master is None:
+                return False
+            member_ids = list(
+                Device.objects.filter(deleted_at__isnull=True)
+                .filter(models.Q(id=master.id) | models.Q(master_id=master.id))
+                .values_list("id", flat=True)
+            )
+            if not member_ids:
+                return False
+            return Alert.objects.filter(
+                device_id__in=member_ids,
+                alert_type="smoke_high",
+                status=Alert.Status.OPEN,
+            ).exists()
+        except Exception:
+            return False
 
 
 class DeviceRegisterSerializer(serializers.Serializer):
-    hardware_identifier = serializers.CharField(max_length=64)
-    device_name = serializers.CharField(
-        max_length=255, required=False, allow_blank=True
+    hardware_identifier = serializers.CharField(
+        max_length=64, help_text="Unique hardware identifier of the device"
     )
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    device_name = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, help_text="Optional name"
+    )
+    latitude = serializers.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        help_text="Latitude in decimal degrees (-90..90)",
+    )
+    longitude = serializers.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        help_text="Longitude in decimal degrees (-180..180)",
+    )
+    device_role = serializers.ChoiceField(
+        choices=Device.DeviceRole.choices,
+        required=False,
+        default=Device.DeviceRole.MASTER,
+        help_text="Role of the device: master (default) or slave",
+    )
+    master_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Required when device_role=slave. Must reference an existing master device (ID) "
+            "that belongs to you (unless superadmin)."
+        ),
+    )
 
     def validate(self, attrs):
         lat = attrs.get("latitude")
@@ -59,7 +126,95 @@ class DeviceRegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError("latitude must be between -90 and 90")
         if not (Decimal("-180") <= lon <= Decimal("180")):
             raise serializers.ValidationError("longitude must be between -180 and 180")
+        role = attrs.get("device_role") or Device.DeviceRole.MASTER
+        master_id = attrs.get("master_id")
+        # Cross-field validation for master/slave
+        if str(role) == Device.DeviceRole.SLAVE:
+            if not master_id:
+                raise serializers.ValidationError(
+                    "master_id is required when device_role is 'slave'"
+                )
+            # Validate master exists and belongs to current user and is a master
+            request = self.context.get("request") if hasattr(self, "context") else None
+            user = getattr(request, "user", None)
+            try:
+                master = (
+                    Device.objects.filter(id=int(master_id), deleted_at__isnull=True)
+                    .select_related("user")
+                    .first()
+                )
+            except Exception:
+                master = None
+            if not master:
+                raise serializers.ValidationError("master device not found")
+            if user and not (
+                getattr(user, "role", None) == "superadmin"
+                or getattr(user, "is_superuser", False)
+                or getattr(user, "is_staff", False)
+            ):
+                if master.user_id != getattr(user, "id", None):
+                    raise serializers.ValidationError(
+                        "master must belong to the same user"
+                    )
+            if master.device_role != Device.DeviceRole.MASTER:
+                raise serializers.ValidationError(
+                    "selected master is not a master device"
+                )
+            # Replace master_id with instance for downstream create logic convenience
+            attrs["master"] = master
+        else:
+            # role == master => must not provide master_id
+            if master_id:
+                raise serializers.ValidationError(
+                    "master_id must not be provided when device_role is 'master'"
+                )
         return attrs
+
+
+class DeviceNodeSerializer(serializers.ModelSerializer):
+    owner_id = serializers.IntegerField(source="user.id", read_only=True)
+    owner_email = serializers.EmailField(source="user.email", read_only=True)
+    owner_phone = serializers.CharField(source="user.phone_number", read_only=True)
+    online = serializers.SerializerMethodField()
+    device_role = serializers.CharField(read_only=True)
+    master_id = serializers.IntegerField(source="master.id", read_only=True)
+
+    class Meta:
+        model = Device
+        fields = (
+            "id",
+            "hardware_identifier",
+            "device_name",
+            "latitude",
+            "longitude",
+            "status",
+            "registered_at",
+            "last_seen",
+            "online",
+            "device_role",
+            "master_id",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
+        )
+        read_only_fields = ("id", "registered_at", "last_seen")
+
+    def get_online(self, obj: Device):
+        try:
+            window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5))
+        except Exception:
+            window = 5
+        if not obj.last_seen:
+            return False
+        fresh = obj.last_seen >= timezone.now() - timezone.timedelta(seconds=window)
+        return bool(fresh)
+
+
+class DeviceTreeSerializer(DeviceNodeSerializer):
+    slaves = DeviceNodeSerializer(many=True, read_only=True)
+
+    class Meta(DeviceNodeSerializer.Meta):
+        fields = DeviceNodeSerializer.Meta.fields + ("slaves",)
 
 
 class TelemetrySerializer(serializers.ModelSerializer):

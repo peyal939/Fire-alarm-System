@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 from rest_framework import status, viewsets, filters
+from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,6 +14,8 @@ from drf_spectacular.utils import (
     extend_schema,
     OpenApiParameter,
     OpenApiExample,
+    OpenApiResponse,
+    OpenApiTypes,
 )
 from .models import Device, Telemetry, Alert
 from .serializers import (
@@ -20,6 +23,7 @@ from .serializers import (
     TelemetrySerializer,
     AlertSerializer,
     DeviceRegisterSerializer,
+    DeviceTreeSerializer,
 )
 
 
@@ -56,32 +60,73 @@ class DeviceViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["deleted_at", "deleted_by"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False, methods=["post"], url_path="register")
     @extend_schema(
         tags=["Devices"],
         summary="Register/claim a device",
+        description=(
+            "Register a device as either a master (default) or a slave.\n\n"
+            "How to register a slave device:\n"
+            "- Set `device_role` to `slave`.\n"
+            "- Provide `master_id` referencing an existing master device that you own (non-admin users). Admins/staff/superadmins can attach a slave to any master regardless of owner.\n"
+            "- The selected master must have role `master`; you cannot attach to another slave.\n\n"
+            "Additional rules:\n"
+            "- `master_id` is required when `device_role` is `slave`, and must NOT be provided when `device_role` is `master`.\n"
+            "- Latitude and longitude are required on first registration.\n"
+            "- If the hardware identifier is already registered by another user, the endpoint returns 409 Conflict.\n"
+            "- If the device is already registered by you (or you are superadmin), the same call updates name/coordinates and returns 200.\n"
+        ),
         request=DeviceRegisterSerializer,
-        responses={201: DeviceSerializer, 200: DeviceSerializer},
+        responses={
+            201: DeviceSerializer,
+            200: DeviceSerializer,
+            409: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Conflict when attempting to register a device owned by another user.",
+                examples=[
+                    OpenApiExample(
+                        "DeviceAlreadyRegistered",
+                        value={"detail": "Device already registered by another user"},
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
         examples=[
             OpenApiExample(
-                "RegisterDeviceRequest",
+                "RegisterMasterRequest",
                 value={
-                    "hardware_identifier": "DEV123",
-                    "device_name": "Living Room Sensor",
-                    "latitude": 23.78,
-                    "longitude": 90.41,
+                    "hardware_identifier": "MASTER-001",
+                    "device_name": "Main Panel",
+                    "latitude": 23.777628,
+                    "longitude": 90.405449,
+                    "device_role": "master",
                 },
                 request_only=True,
-            )
+            ),
+            OpenApiExample(
+                "RegisterSlaveRequest",
+                value={
+                    "hardware_identifier": "SLAVE-101",
+                    "device_name": "Floor 1 Sensor",
+                    "latitude": 23.777700,
+                    "longitude": 90.405500,
+                    "device_role": "slave",
+                    "master_id": 123,
+                },
+                request_only=True,
+            ),
         ],
     )
+    @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
-        ser = DeviceRegisterSerializer(data=request.data)
+        ser = DeviceRegisterSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
         hid = ser.validated_data["hardware_identifier"].strip()
         name = ser.validated_data.get("device_name", "").strip()
         lat_dec = ser.validated_data.get("latitude")
         lon_dec = ser.validated_data.get("longitude")
+        role = ser.validated_data.get("device_role") or Device.DeviceRole.MASTER
+        master = ser.validated_data.get("master")  # set in serializer when role==slave
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
@@ -111,17 +156,173 @@ class DeviceViewSet(viewsets.ModelViewSet):
             return Response(DeviceSerializer(existing).data, status=200)
 
         # Create new and assign to current user
-        device = Device.objects.create(
+        device = Device(
             user=request.user,
             hardware_identifier=hid,
             device_name=name,
             latitude=lat_dec,
             longitude=lon_dec,
             created_by=request.user,
+            device_role=role,
         )
+        if role == Device.DeviceRole.SLAVE:
+            device.master = master
+        device.save()
         return Response(DeviceSerializer(device).data, status=201)
 
-    @action(detail=True, methods=["get"], url_path="telemetry")
+    @extend_schema(
+        tags=["Devices"],
+        summary="List devices as a tree (masters with nested slaves)",
+        responses={
+            200: OpenApiResponse(
+                response=DeviceTreeSerializer(many=True),
+                examples=[
+                    OpenApiExample(
+                        "DevicesTreeResponse",
+                        value=[
+                            {
+                                "id": 123,
+                                "hardware_identifier": "MASTER-001",
+                                "device_name": "Main Panel",
+                                "device_role": "master",
+                                "slaves": [
+                                    {
+                                        "id": 456,
+                                        "hardware_identifier": "SLAVE-101",
+                                        "device_role": "slave",
+                                        "master_id": 123,
+                                    },
+                                    {
+                                        "id": 789,
+                                        "hardware_identifier": "SLAVE-102",
+                                        "device_role": "slave",
+                                        "master_id": 123,
+                                    },
+                                ],
+                            }
+                        ],
+                        response_only=True,
+                    )
+                ],
+            )
+        },
+    )
+    @action(detail=False, methods=["get"], url_path="tree")
+    def tree(self, request):
+        qs = (
+            self.get_queryset()
+            .select_related("master", "user")
+            .prefetch_related("slaves")
+        )
+        masters = qs.filter(device_role=Device.DeviceRole.MASTER)
+        ser = DeviceTreeSerializer(masters, many=True)
+        return Response(ser.data)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="Composite snapshot (master + slaves)",
+        description=(
+            "Return a composite payload for a master and its slaves using keys compatible with the IoT format.\n\n"
+            "- If the 'master' query parameter (hardware identifier) is provided, returns a single composite object.\n"
+            "- If omitted, returns a list of composite objects for all masters in the caller's scope.\n\n"
+            "Fields:\n"
+            "- masterDeviceID: string (hardware identifier of master)\n"
+            "- timestamp: epoch seconds derived from last_seen (or null)\n"
+            "- smoke: last known smoke level (latest telemetry within freshness window, else 0)\n"
+            "- status: device.status (defaults to 'alive' if empty)\n"
+            "- slaves: array of { deviceID, timestamp, smoke, status } for each registered slave under the master."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="master",
+                description="Master hardware identifier. If omitted, returns all masters",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            )
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(detail=False, methods=["get"], url_path="composite")
+    def composite(self, request):
+        """Return composite master/slave snapshot(s) matching the IoT payload schema."""
+        qs = (
+            self.get_queryset()
+            .select_related("user")
+            .prefetch_related("slaves")
+            .filter(device_role=Device.DeviceRole.MASTER)
+        )
+
+        master_hid = request.query_params.get("master", "").strip()
+        if master_hid:
+            qs = qs.filter(hardware_identifier=master_hid)
+            master = qs.first()
+            if not master:
+                return Response({"detail": "master not found"}, status=404)
+            return Response(self._composite_for_master(master))
+
+        # No specific master provided: return all masters in scope
+        data = [self._composite_for_master(m) for m in qs]
+        return Response(data)
+
+    def _composite_for_master(self, master: Device) -> dict:
+        """Build a composite object for a master matching the IoT keys."""
+        # Helper to compute last smoke within freshness window
+        from django.utils import timezone
+
+        def last_smoke(dev: Device) -> int:
+            # Use latest telemetry only if within freshness window; else 0
+            window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 180))
+            t = (
+                Telemetry.objects.filter(device=dev, deleted_at__isnull=True)
+                .order_by("-timestamp")
+                .first()
+            )
+            if not t:
+                return 0
+            if t.timestamp and t.timestamp >= timezone.now() - timezone.timedelta(
+                seconds=window
+            ):
+                try:
+                    return int(t.smoke_level)
+                except Exception:
+                    return 0
+            return 0
+
+        def to_epoch(dtobj) -> int | None:
+            if not dtobj:
+                return None
+            try:
+                return int(dtobj.timestamp())
+            except Exception:
+                return None
+
+        m_payload = {
+            "masterDeviceID": master.hardware_identifier,
+            "timestamp": to_epoch(master.last_seen),
+            "smoke": last_smoke(master),
+            "status": (master.status or "alive"),
+            "slaves": [],
+        }
+
+        # Load slaves belonging to this master (respecting soft-delete)
+        slaves_qs = (
+            Device.objects.filter(master_id=master.id, deleted_at__isnull=True)
+            .select_related("user", "master")
+            .order_by("id")
+        )
+        for s in slaves_qs:
+            m_payload["slaves"].append(
+                {
+                    "deviceID": s.hardware_identifier,
+                    "timestamp": to_epoch(s.last_seen),
+                    "smoke": last_smoke(s),
+                    "status": (s.status or "alive"),
+                }
+            )
+
+        return m_payload
+
     @extend_schema(
         tags=["Telemetry"],
         summary="List telemetry for a device",
@@ -149,6 +350,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             ),
         ],
     )
+    @action(detail=True, methods=["get"], url_path="telemetry")
     def list_telemetry(self, request, pk=None):
         device: Device = self.get_object()
         qs = Telemetry.objects.filter(device=device, deleted_at__isnull=True)
@@ -188,7 +390,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ser = TelemetrySerializer(qs, many=True)
         return Response(ser.data)
 
-    @action(detail=True, methods=["get"], url_path="alerts")
     @extend_schema(
         tags=["Alerts"],
         summary="List alerts for a device",
@@ -209,6 +410,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             ),
         ],
     )
+    @action(detail=True, methods=["get"], url_path="alerts")
     def list_alerts(self, request, pk=None):
         device: Device = self.get_object()
         qs = Alert.objects.filter(device=device, deleted_at__isnull=True)

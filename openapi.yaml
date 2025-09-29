@@ -1,0 +1,1645 @@
+openapi: 3.0.3
+info:
+  title: APS Fire Alarm API
+  version: 1.0.0
+  description: API schema for authentication, devices, telemetry, and alerts.
+paths:
+  /alerts/:
+    get:
+      operationId: alerts_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Alerts
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlertList'
+          description: ''
+  /alerts/{id}/:
+    get:
+      operationId: alerts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this alert.
+        required: true
+      tags:
+      - Alerts
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+  /alerts/{id}/resolve/:
+    post:
+      operationId: alerts_resolve_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this alert.
+        required: true
+      tags:
+      - Alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Alert'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+  /auth/login:
+    post:
+      operationId: auth_login_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      summary: Login with email & password
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailTokenObtainPair'
+            examples:
+              LoginRequest:
+                value:
+                  email: user@example.com
+                  password: Passw0rd!
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmailTokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmailTokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTokenObtainPair'
+              examples:
+                LoginResponse:
+                  value:
+                    refresh: <jwt-refresh>
+                    access: <jwt-access>
+          description: ''
+  /auth/me:
+    get:
+      operationId: auth_me_retrieve
+      summary: Get current user profile
+      tags:
+      - Auth
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+        '401':
+          description: No response body
+  /auth/refresh:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /auth/register:
+    post:
+      operationId: auth_register_create
+      summary: Register a new user
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Register'
+            examples:
+              RegisterRequest:
+                value:
+                  email: user@example.com
+                  password: Passw0rd!
+                  phone_number: '+8801712345678'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Register'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Register'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              examples:
+                RegisterResponse:
+                  value:
+                    id: 1
+                    email: user@example.com
+                    phone_number: '+8801712345678'
+                    role: user
+          description: ''
+        '409':
+          description: No response body
+        '400':
+          description: No response body
+  /devices/:
+    get:
+      operationId: devices_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Devices
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeviceList'
+          description: ''
+    post:
+      operationId: devices_create
+      tags:
+      - Devices
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Device'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Device'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Device'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+  /devices/{id}/:
+    get:
+      operationId: devices_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Devices
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+    patch:
+      operationId: devices_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Devices
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDevice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDevice'
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+    delete:
+      operationId: devices_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Devices
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /devices/{id}/alerts/:
+    get:
+      operationId: devices_alerts_retrieve
+      summary: List alerts for a device
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Device ID (integer)
+        required: true
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: 'Filter by status: open|resolved'
+      tags:
+      - Alerts
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+  /devices/{id}/telemetry/:
+    get:
+      operationId: devices_telemetry_retrieve
+      summary: List telemetry for a device
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Device ID (integer)
+        required: true
+      - in: query
+        name: since
+        schema:
+          type: string
+        description: ISO8601 datetime or epoch seconds (>=)
+      - in: query
+        name: until
+        schema:
+          type: string
+        description: ISO8601 datetime or epoch seconds (<=)
+      tags:
+      - Telemetry
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+  /devices/register/:
+    post:
+      operationId: devices_register_create
+      description: |
+        Register a device as either a master (default) or a slave.
+
+        How to register a slave device:
+        - Set `device_role` to `slave`.
+        - Provide `master_id` referencing an existing master device that you own (non-admin users). Admins/staff/superadmins can attach a slave to any master regardless of owner.
+        - The selected master must have role `master`; you cannot attach to another slave.
+
+        Additional rules:
+        - `master_id` is required when `device_role` is `slave`, and must NOT be provided when `device_role` is `master`.
+        - Latitude and longitude are required on first registration.
+        - If the hardware identifier is already registered by another user, the endpoint returns 409 Conflict.
+        - If the device is already registered by you (or you are superadmin), the same call updates name/coordinates and returns 200.
+      summary: Register/claim a device
+      tags:
+      - Devices
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegister'
+            examples:
+              RegisterMasterRequest:
+                value:
+                  hardware_identifier: MASTER-001
+                  device_name: Main Panel
+                  latitude: 23.777628
+                  longitude: 90.405449
+                  device_role: master
+              RegisterSlaveRequest:
+                value:
+                  hardware_identifier: SLAVE-101
+                  device_name: Floor 1 Sensor
+                  latitude: 23.7777
+                  longitude: 90.4055
+                  device_role: slave
+                  master_id: 123
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeviceRegister'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeviceRegister'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                DeviceAlreadyRegistered:
+                  value:
+                    detail: Device already registered by another user
+          description: Conflict when attempting to register a device owned by another
+            user.
+  /devices/tree/:
+    get:
+      operationId: devices_tree_retrieve
+      summary: List devices as a tree (masters with nested slaves)
+      tags:
+      - Devices
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeviceTreeList'
+              examples:
+                DevicesTreeResponse:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - - id: 123
+                        hardware_identifier: MASTER-001
+                        device_name: Main Panel
+                        device_role: master
+                        slaves:
+                        - id: 456
+                          hardware_identifier: SLAVE-101
+                          device_role: slave
+                          master_id: 123
+                        - id: 789
+                          hardware_identifier: SLAVE-102
+                          device_role: slave
+                          master_id: 123
+          description: ''
+  /healthz:
+    get:
+      operationId: healthz_retrieve
+      summary: Liveness probe
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Ok:
+                  value:
+                    status: ok
+                  summary: ok
+          description: Service is alive
+  /metrics/summary:
+    get:
+      operationId: metrics_summary_retrieve
+      summary: Dashboard metrics summary
+      tags:
+      - Metrics
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Metrics:
+                  value:
+                    total_devices: 12
+                    open_alerts: 3
+                    online: 9
+                    offline: 3
+                  summary: metrics
+          description: Counts for dashboard KPIs
+  /orders/{user_id}/:
+    get:
+      operationId: orders_retrieve
+      description: |-
+        Endpoint: /orders/<user_id>/
+
+        Methods:
+            GET    /orders/<user_id>/  -> list user's orders (?package=&status= filters)
+            POST   /orders/<user_id>/  -> create order
+            PATCH  /orders/<user_id>/  -> patch ONE order (order_id provided in body)
+            DELETE /orders/<user_id>/  -> soft delete all (non-deleted) orders of user
+
+        PATCH body format (Option B):
+            {
+                "order_id": 10,
+                "quantity": 15,              # optional
+                "shipping_address": "Updated address"  # optional
+            }
+
+        Only quantity and shipping_address are mutable now at this endpoint.
+      summary: List / create / patch / delete orders for a user
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: orders_create
+      description: |-
+        Endpoint: /orders/<user_id>/
+
+        Methods:
+            GET    /orders/<user_id>/  -> list user's orders (?package=&status= filters)
+            POST   /orders/<user_id>/  -> create order
+            PATCH  /orders/<user_id>/  -> patch ONE order (order_id provided in body)
+            DELETE /orders/<user_id>/  -> soft delete all (non-deleted) orders of user
+
+        PATCH body format (Option B):
+            {
+                "order_id": 10,
+                "quantity": 15,              # optional
+                "shipping_address": "Updated address"  # optional
+            }
+
+        Only quantity and shipping_address are mutable now at this endpoint.
+      summary: Create order for user
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                package_id:
+                  type: integer
+                quantity:
+                  type: integer
+                  minimum: 1
+                shipping_address:
+                  type: string
+              required:
+              - package_id
+              - quantity
+              example:
+                package_id: 1
+                quantity: 10
+                shipping_address: Dhaka
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: orders_partial_update
+      description: |-
+        Endpoint: /orders/<user_id>/
+
+        Methods:
+            GET    /orders/<user_id>/  -> list user's orders (?package=&status= filters)
+            POST   /orders/<user_id>/  -> create order
+            PATCH  /orders/<user_id>/  -> patch ONE order (order_id provided in body)
+            DELETE /orders/<user_id>/  -> soft delete all (non-deleted) orders of user
+
+        PATCH body format (Option B):
+            {
+                "order_id": 10,
+                "quantity": 15,              # optional
+                "shipping_address": "Updated address"  # optional
+            }
+
+        Only quantity and shipping_address are mutable now at this endpoint.
+      summary: Patch one order for a user
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_id:
+                  type: integer
+                quantity:
+                  type: integer
+                  minimum: 1
+                shipping_address:
+                  type: string
+              required:
+              - order_id
+              example:
+                order_id: 5
+                quantity: 15
+                shipping_address: Updated address
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: orders_destroy
+      description: |-
+        Endpoint: /orders/<user_id>/
+
+        Methods:
+            GET    /orders/<user_id>/  -> list user's orders (?package=&status= filters)
+            POST   /orders/<user_id>/  -> create order
+            PATCH  /orders/<user_id>/  -> patch ONE order (order_id provided in body)
+            DELETE /orders/<user_id>/  -> soft delete all (non-deleted) orders of user
+
+        PATCH body format (Option B):
+            {
+                "order_id": 10,
+                "quantity": 15,              # optional
+                "shipping_address": "Updated address"  # optional
+            }
+
+        Only quantity and shipping_address are mutable now at this endpoint.
+      summary: List / create / patch / delete orders for a user
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /orders/{user_id}/{order_id}/:
+    get:
+      operationId: orders_retrieve_2
+      summary: Retrieve/patch/delete a user's specific order
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: orders_partial_update_2
+      summary: Patch specific order (quantity / shipping_address only)
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                shipping_address:
+                  type: string
+              example:
+                quantity: 15
+                shipping_address: Updated address
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: orders_destroy_2
+      summary: Retrieve/patch/delete a user's specific order
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /packages/:
+    get:
+      operationId: packages_list
+      tags:
+      - Packages
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Package'
+          description: ''
+    post:
+      operationId: packages_create
+      tags:
+      - Packages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Package'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Package'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Package'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Package'
+          description: ''
+  /packages/{id}/:
+    get:
+      operationId: packages_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Packages
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Package'
+          description: ''
+    patch:
+      operationId: packages_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Packages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPackage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPackage'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPackage'
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Package'
+          description: ''
+    delete:
+      operationId: packages_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Packages
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /readyz:
+    get:
+      operationId: readyz_retrieve
+      summary: Readiness probe
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Ready:
+                  value:
+                    status: ready
+                  summary: ready
+          description: Service is ready
+  /telemetry/:
+    get:
+      operationId: telemetry_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Telemetry
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTelemetryList'
+          description: ''
+  /telemetry/{id}/:
+    get:
+      operationId: telemetry_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this telemetry.
+        required: true
+      tags:
+      - Telemetry
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Telemetry'
+          description: ''
+components:
+  schemas:
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        device:
+          type: integer
+        device_hardware_identifier:
+          type: string
+          readOnly: true
+        alert_type:
+          type: string
+          maxLength: 64
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        triggered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        owner_id:
+          type: integer
+          readOnly: true
+        owner_email:
+          type: string
+          format: email
+          readOnly: true
+        owner_phone:
+          type: string
+          readOnly: true
+      required:
+      - alert_type
+      - device
+      - device_hardware_identifier
+      - id
+      - owner_email
+      - owner_id
+      - owner_phone
+      - resolved_at
+      - triggered_at
+    Device:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        hardware_identifier:
+          type: string
+          maxLength: 64
+        device_name:
+          type: string
+          maxLength: 255
+        device_role:
+          type: string
+          readOnly: true
+        master_id:
+          type: integer
+          readOnly: true
+        master_hardware_identifier:
+          type: string
+          readOnly: true
+        master_device_name:
+          type: string
+          readOnly: true
+        master_last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        status:
+          type: string
+          maxLength: 32
+        registered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        online:
+          type: string
+          readOnly: true
+        owner_id:
+          type: integer
+          readOnly: true
+        owner_email:
+          type: string
+          format: email
+          readOnly: true
+        owner_phone:
+          type: string
+          readOnly: true
+      required:
+      - device_role
+      - hardware_identifier
+      - id
+      - last_seen
+      - master_device_name
+      - master_hardware_identifier
+      - master_id
+      - master_last_seen
+      - online
+      - owner_email
+      - owner_id
+      - owner_phone
+      - registered_at
+    DeviceNode:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        hardware_identifier:
+          type: string
+          maxLength: 64
+        device_name:
+          type: string
+          maxLength: 255
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        status:
+          type: string
+          maxLength: 32
+        registered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        online:
+          type: string
+          readOnly: true
+        device_role:
+          type: string
+          readOnly: true
+        master_id:
+          type: integer
+          readOnly: true
+        owner_id:
+          type: integer
+          readOnly: true
+        owner_email:
+          type: string
+          format: email
+          readOnly: true
+        owner_phone:
+          type: string
+          readOnly: true
+      required:
+      - device_role
+      - hardware_identifier
+      - id
+      - last_seen
+      - master_id
+      - online
+      - owner_email
+      - owner_id
+      - owner_phone
+      - registered_at
+    DeviceRegister:
+      type: object
+      properties:
+        hardware_identifier:
+          type: string
+          description: Unique hardware identifier of the device
+          maxLength: 64
+        device_name:
+          type: string
+          description: Optional name
+          maxLength: 255
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          description: Latitude in decimal degrees (-90..90)
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          description: Longitude in decimal degrees (-180..180)
+        device_role:
+          allOf:
+          - $ref: '#/components/schemas/DeviceRoleEnum'
+          default: master
+          description: |-
+            Role of the device: master (default) or slave
+
+            * `master` - Master
+            * `slave` - Slave
+        master_id:
+          type: integer
+          nullable: true
+          description: Required when device_role=slave. Must reference an existing
+            master device (ID) that belongs to you (unless superadmin).
+      required:
+      - hardware_identifier
+      - latitude
+      - longitude
+    DeviceRoleEnum:
+      enum:
+      - master
+      - slave
+      type: string
+      description: |-
+        * `master` - Master
+        * `slave` - Slave
+    DeviceTree:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        hardware_identifier:
+          type: string
+          maxLength: 64
+        device_name:
+          type: string
+          maxLength: 255
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        status:
+          type: string
+          maxLength: 32
+        registered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        online:
+          type: string
+          readOnly: true
+        device_role:
+          type: string
+          readOnly: true
+        master_id:
+          type: integer
+          readOnly: true
+        owner_id:
+          type: integer
+          readOnly: true
+        owner_email:
+          type: string
+          format: email
+          readOnly: true
+        owner_phone:
+          type: string
+          readOnly: true
+        slaves:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceNode'
+          readOnly: true
+      required:
+      - device_role
+      - hardware_identifier
+      - id
+      - last_seen
+      - master_id
+      - online
+      - owner_email
+      - owner_id
+      - owner_phone
+      - registered_at
+      - slaves
+    EmailTokenObtainPair:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+    Package:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 64
+        min_quantity:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        max_quantity:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        price_per_device:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        mrt:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Monthly recurring fee (MRF) for this package
+      required:
+      - id
+      - max_quantity
+      - name
+      - price_per_device
+    PaginatedAlertList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+    PaginatedDeviceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
+    PaginatedDeviceTreeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceTree'
+    PaginatedTelemetryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Telemetry'
+    PatchedDevice:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        hardware_identifier:
+          type: string
+          maxLength: 64
+        device_name:
+          type: string
+          maxLength: 255
+        device_role:
+          type: string
+          readOnly: true
+        master_id:
+          type: integer
+          readOnly: true
+        master_hardware_identifier:
+          type: string
+          readOnly: true
+        master_device_name:
+          type: string
+          readOnly: true
+        master_last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        status:
+          type: string
+          maxLength: 32
+        registered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        online:
+          type: string
+          readOnly: true
+        owner_id:
+          type: integer
+          readOnly: true
+        owner_email:
+          type: string
+          format: email
+          readOnly: true
+        owner_phone:
+          type: string
+          readOnly: true
+    PatchedPackage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 64
+        min_quantity:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        max_quantity:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        price_per_device:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        mrt:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Monthly recurring fee (MRF) for this package
+    Register:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+          minLength: 6
+        phone_number:
+          type: string
+      required:
+      - email
+      - password
+    RoleEnum:
+      enum:
+      - user
+      - superadmin
+      type: string
+      description: |-
+        * `user` - User
+        * `superadmin` - Super Admin
+    StatusEnum:
+      enum:
+      - open
+      - resolved
+      type: string
+      description: |-
+        * `open` - Open
+        * `resolved` - Resolved
+    Telemetry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        device_id:
+          type: integer
+          writeOnly: true
+        device:
+          type: integer
+          readOnly: true
+        device_hardware_identifier:
+          type: string
+          readOnly: true
+        smoke_level:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        device_status:
+          type: string
+          maxLength: 32
+        timestamp:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+          readOnly: true
+        owner_id:
+          type: integer
+          readOnly: true
+        owner_email:
+          type: string
+          format: email
+          readOnly: true
+        owner_phone:
+          type: string
+          readOnly: true
+      required:
+      - device
+      - device_hardware_identifier
+      - device_id
+      - device_status
+      - id
+      - owner_email
+      - owner_id
+      - owner_phone
+      - received_at
+      - smoke_level
+      - timestamp
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone_number:
+          type: string
+          maxLength: 32
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+      required:
+      - email
+      - id
+      - role
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
