@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 from rest_framework import status, viewsets, filters
+from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -216,6 +217,111 @@ class DeviceViewSet(viewsets.ModelViewSet):
         masters = qs.filter(device_role=Device.DeviceRole.MASTER)
         ser = DeviceTreeSerializer(masters, many=True)
         return Response(ser.data)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="Composite snapshot (master + slaves)",
+        description=(
+            "Return a composite payload for a master and its slaves using keys compatible with the IoT format.\n\n"
+            "- If the 'master' query parameter (hardware identifier) is provided, returns a single composite object.\n"
+            "- If omitted, returns a list of composite objects for all masters in the caller's scope.\n\n"
+            "Fields:\n"
+            "- masterDeviceID: string (hardware identifier of master)\n"
+            "- timestamp: epoch seconds derived from last_seen (or null)\n"
+            "- smoke: last known smoke level (latest telemetry within freshness window, else 0)\n"
+            "- status: device.status (defaults to 'alive' if empty)\n"
+            "- slaves: array of { deviceID, timestamp, smoke, status } for each registered slave under the master."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="master",
+                description="Master hardware identifier. If omitted, returns all masters",
+                required=False,
+                type=str,
+                location=OpenApiParameter.QUERY,
+            )
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(detail=False, methods=["get"], url_path="composite")
+    def composite(self, request):
+        """Return composite master/slave snapshot(s) matching the IoT payload schema."""
+        qs = (
+            self.get_queryset()
+            .select_related("user")
+            .prefetch_related("slaves")
+            .filter(device_role=Device.DeviceRole.MASTER)
+        )
+
+        master_hid = request.query_params.get("master", "").strip()
+        if master_hid:
+            qs = qs.filter(hardware_identifier=master_hid)
+            master = qs.first()
+            if not master:
+                return Response({"detail": "master not found"}, status=404)
+            return Response(self._composite_for_master(master))
+
+        # No specific master provided: return all masters in scope
+        data = [self._composite_for_master(m) for m in qs]
+        return Response(data)
+
+    def _composite_for_master(self, master: Device) -> dict:
+        """Build a composite object for a master matching the IoT keys."""
+        # Helper to compute last smoke within freshness window
+        from django.utils import timezone
+
+        def last_smoke(dev: Device) -> int:
+            # Use latest telemetry only if within freshness window; else 0
+            window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 180))
+            t = (
+                Telemetry.objects.filter(device=dev, deleted_at__isnull=True)
+                .order_by("-timestamp")
+                .first()
+            )
+            if not t:
+                return 0
+            if t.timestamp and t.timestamp >= timezone.now() - timezone.timedelta(
+                seconds=window
+            ):
+                try:
+                    return int(t.smoke_level)
+                except Exception:
+                    return 0
+            return 0
+
+        def to_epoch(dtobj) -> int | None:
+            if not dtobj:
+                return None
+            try:
+                return int(dtobj.timestamp())
+            except Exception:
+                return None
+
+        m_payload = {
+            "masterDeviceID": master.hardware_identifier,
+            "timestamp": to_epoch(master.last_seen),
+            "smoke": last_smoke(master),
+            "status": (master.status or "alive"),
+            "slaves": [],
+        }
+
+        # Load slaves belonging to this master (respecting soft-delete)
+        slaves_qs = (
+            Device.objects.filter(master_id=master.id, deleted_at__isnull=True)
+            .select_related("user", "master")
+            .order_by("id")
+        )
+        for s in slaves_qs:
+            m_payload["slaves"].append(
+                {
+                    "deviceID": s.hardware_identifier,
+                    "timestamp": to_epoch(s.last_seen),
+                    "smoke": last_smoke(s),
+                    "status": (s.status or "alive"),
+                }
+            )
+
+        return m_payload
 
     @extend_schema(
         tags=["Telemetry"],
