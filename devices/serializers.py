@@ -4,6 +4,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from .models import Device, Telemetry, Alert
+from django.db import models
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -22,6 +23,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     master_last_seen = serializers.DateTimeField(
         source="master.last_seen", read_only=True
     )
+    mesh_alert = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Device
@@ -34,6 +36,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "master_hardware_identifier",
             "master_device_name",
             "master_last_seen",
+            "mesh_alert",
             "latitude",
             "longitude",
             "status",
@@ -56,6 +59,30 @@ class DeviceSerializer(serializers.ModelSerializer):
         fresh = obj.last_seen >= timezone.now() - timezone.timedelta(seconds=window)
         # Online is determined solely by freshness window
         return bool(fresh)
+
+    def get_mesh_alert(self, obj: Device) -> bool:
+        """True if any device in this device's mesh has an open smoke_high alert.
+
+        Mesh is defined as: the master + all its slaves. For masters, master=self; for slaves, master=obj.master.
+        """
+        try:
+            master = obj if obj.device_role == Device.DeviceRole.MASTER else obj.master
+            if master is None:
+                return False
+            member_ids = list(
+                Device.objects.filter(deleted_at__isnull=True)
+                .filter(models.Q(id=master.id) | models.Q(master_id=master.id))
+                .values_list("id", flat=True)
+            )
+            if not member_ids:
+                return False
+            return Alert.objects.filter(
+                device_id__in=member_ids,
+                alert_type="smoke_high",
+                status=Alert.Status.OPEN,
+            ).exists()
+        except Exception:
+            return False
 
 
 class DeviceRegisterSerializer(serializers.Serializer):

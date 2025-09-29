@@ -5,6 +5,7 @@ from typing import Optional
 
 from django.utils import timezone
 from django.conf import settings
+from django.db import models
 
 from .models import Device, Telemetry, Alert
 from asgiref.sync import async_to_sync
@@ -38,6 +39,66 @@ def ingest_by_hardware_identifier(
         timestamp=timestamp,
     )
     return True
+
+
+def get_master_for_device(device: Device) -> Device:
+    """Return the master device for a given device (itself if it's a master)."""
+    if (
+        getattr(device, "device_role", None) == Device.DeviceRole.SLAVE
+        and device.master_id
+    ):
+        return device.master  # type: ignore[return-value]
+    return device
+
+
+def get_group_members(master: Device):
+    """Return a queryset of all members in the master's mesh (master + slaves)."""
+    # Ensure we have a master instance
+    m = master
+    if (
+        getattr(master, "device_role", None) == Device.DeviceRole.SLAVE
+        and master.master_id
+    ):
+        m = master.master  # type: ignore[assignment]
+    # master + slaves, excluding soft-deleted
+    return (
+        Device.objects.filter(deleted_at__isnull=True)
+        .filter(models.Q(id=m.id) | models.Q(master_id=m.id))
+        .select_related("user", "master")
+    )
+
+
+def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
+    """Ensure per-device Alerts reflect group alarm for all members.
+
+    - If group_alarm is True: open smoke_high Alert for every member (create if missing)
+    - If False: resolve any open smoke_high Alert for every member
+    """
+    members = list(get_group_members(master))
+    if not members:
+        return
+    if group_alarm:
+        # Open alert for each member if not already open
+        open_map = {
+            d.id: Alert.objects.filter(
+                device=d, alert_type="smoke_high", status=Alert.Status.OPEN
+            ).exists()
+            for d in members
+        }
+        to_create = [d for d in members if not open_map.get(d.id)]
+        Alert.objects.bulk_create(
+            [
+                Alert(device=d, alert_type="smoke_high", status=Alert.Status.OPEN)
+                for d in to_create
+            ]
+        )
+    else:
+        # Resolve all open alerts for members
+        Alert.objects.filter(
+            device__in=[d.id for d in members],
+            alert_type="smoke_high",
+            status=Alert.Status.OPEN,
+        ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
 
 
 def ingest_telemetry(

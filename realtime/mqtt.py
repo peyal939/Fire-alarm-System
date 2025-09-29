@@ -6,6 +6,7 @@ import datetime as dt
 import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import models
 
 from django.conf import settings
 from django.utils import timezone
@@ -40,6 +41,35 @@ def _to_ts_dt(ts_val):
         return ts_int, dt.datetime.fromtimestamp(ts_int, tz=tz)
     except Exception:
         return ts_int, timezone.now()
+
+
+def _compute_mesh_alert(device_obj: Device) -> bool:
+    """True if any device in this device's mesh has an open smoke_high alert.
+
+    Mesh: master + slaves. For slaves, find their master; if no master, treat self as master.
+    """
+    try:
+        from devices.models import Alert
+
+        master = (
+            device_obj
+            if device_obj.device_role == Device.DeviceRole.MASTER
+            else (device_obj.master or device_obj)
+        )
+        member_ids = list(
+            Device.objects.filter(deleted_at__isnull=True)
+            .filter(models.Q(id=master.id) | models.Q(master_id=master.id))
+            .values_list("id", flat=True)
+        )
+        if not member_ids:
+            return False
+        return Alert.objects.filter(
+            device_id__in=member_ids,
+            alert_type="smoke_high",
+            status=Alert.Status.OPEN,
+        ).exists()
+    except Exception:
+        return False
 
 
 def _broadcast_device_update(
@@ -81,6 +111,11 @@ def _broadcast_device_update(
         "smoke": smoke_val,
         "status": status_str,
     }
+    # Include mesh alert flag so clients can reflect group state reliably
+    try:
+        device_payload["mesh_alert"] = bool(_compute_mesh_alert(device_obj))
+    except Exception:
+        pass
     if pos is not None:
         device_payload["latitude"] = pos["latitude"]
         device_payload["longitude"] = pos["longitude"]
@@ -107,10 +142,15 @@ def process_payload(payload: dict) -> None:
     slaves_part = payload.get("slaves")
     if isinstance(slaves_part, list):
         master_id = str(
-            payload.get("masterID") or payload.get("deviceID") or ""
+            payload.get("masterDeviceID")
+            or payload.get("masterID")
+            or payload.get("deviceID")
+            or ""
         ).strip()
         if not master_id:
-            logging.info("Composite payload missing masterID/deviceID; ignoring")
+            logging.info(
+                "Composite payload missing masterDeviceID/masterID/deviceID; ignoring"
+            )
             return
 
         # Lookup master device (must be registered & not deleted)
@@ -153,6 +193,9 @@ def process_payload(payload: dict) -> None:
         )
 
         # Process slaves, enforcing preregistration under this master
+        # Track group alarm across all members
+        threshold = int(getattr(settings, "SMOKE_ALERT_THRESHOLD", 50))
+        group_alarm = (m_smoke or 0) > threshold
         for idx, sd in enumerate(slaves_part):
             sid = str(sd.get("deviceID") or sd.get("id") or "").strip()
             if not sid:
@@ -206,6 +249,14 @@ def process_payload(payload: dict) -> None:
                 smoke_val=s_smoke or 0,
                 status_str=s_status or "alive",
             )
+            if (s_smoke or 0) > threshold:
+                group_alarm = True
+
+        # Apply mesh alert to all members of the master's mesh
+        try:
+            services.apply_mesh_alert(master_obj, group_alarm=group_alarm)
+        except Exception as e:
+            logging.error(f"apply_mesh_alert failed for master {master_id}: {e}")
 
         return  # Composite handled
 
@@ -247,6 +298,28 @@ def process_payload(payload: dict) -> None:
         smoke_val=smoke_int,
         status_str=status,
     )
+
+    # Legacy path: recompute and apply mesh alert using the device's group
+    try:
+        # Determine the master for this device
+        master = services.get_master_for_device(device_obj)
+        # Compute group alarm: check if any member currently above threshold.
+        threshold = int(getattr(settings, "SMOKE_ALERT_THRESHOLD", 50))
+        # Evaluate recent/last known telemetry levels. We use latest Telemetry rows if any, else current smoke.
+        # Simple approach: any open smoke_high alert means group in alarm; otherwise compute by latest telemetry.
+        from devices.models import Alert
+
+        has_any_open = Alert.objects.filter(
+            device__in=services.get_group_members(master).values_list("id", flat=True),
+            alert_type="smoke_high",
+            status=Alert.Status.OPEN,
+        ).exists()
+        if not has_any_open:
+            # Fallback: if this device's incoming smoke exceeded threshold, consider alarm
+            has_any_open = smoke_int > threshold
+        services.apply_mesh_alert(master, group_alarm=has_any_open)
+    except Exception as e:
+        logging.error(f"apply_mesh_alert (legacy) failed for {device_id}: {e}")
 
 
 def ensure_mqtt_thread():

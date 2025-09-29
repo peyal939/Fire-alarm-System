@@ -148,13 +148,13 @@
       masters.forEach(m => {
         const smoke = Number(m.smoke) || 0;
         const online = isOnline(m.deviceID);
-        const isAlarm = smoke > SMOKE_ALERT_THRESHOLD;
+        const isAlarm = online && ((m.mesh_alert === true) || (smoke > SMOKE_ALERT_THRESHOLD));
         const tsRaw = m.received_at_iso || m.timestamp_iso;
         const ts = tsRaw ? (typeof tsRaw === 'string' && tsRaw.includes('T') ? formatDhaka(tsRaw) : tsRaw) : formatDhaka(m.timestamp);
 
         const li = document.createElement('li');
         li.className = 'device-item';
-        if (!online) li.classList.add('offline'); else if (isAlarm) li.classList.add('alert');
+  if (!online) li.classList.add('offline'); else if (isAlarm) li.classList.add('alert');
 
         const isExpanded = expandedMasters.has(m.device_pk);
         const chevClass = isExpanded ? '' : 'collapsed';
@@ -172,7 +172,7 @@
             <span>${m.deviceID}</span>
             <span class="text-muted">— ${m.device_name || ''}</span>
           </div>
-          <div class="device-sub"><b>Status:</b> ${online ? 'online' : 'offline'} · <b>Updated:</b> ${ts}</div>
+          <div class="device-sub"><b>Status:</b> ${online ? 'online' : 'offline'}${(!online && m.mesh_alert) ? ' · <span class="text-danger">mesh alert</span>' : ''} · <b>Updated:</b> ${ts}</div>
           ${ownerLine}
           <ul class="slave-list" style="display:${isExpanded ? 'block' : 'none'}"></ul>
         `;
@@ -182,7 +182,7 @@
         kids.forEach(s => {
           const sSmoke = Number(s.smoke) || 0;
           const sOnline = isOnline(s.deviceID);
-          const sAlarm = sSmoke > SMOKE_ALERT_THRESHOLD;
+          const sAlarm = sOnline && ((s.mesh_alert === true) || (sSmoke > SMOKE_ALERT_THRESHOLD));
           const sTsRaw = s.received_at_iso || s.timestamp_iso;
           const sTs = sTsRaw ? (typeof sTsRaw === 'string' && sTsRaw.includes('T') ? formatDhaka(sTsRaw) : sTsRaw) : formatDhaka(s.timestamp);
           const sli = document.createElement('li');
@@ -196,7 +196,7 @@
           }
           sli.innerHTML = `
             <div class="d-flex align-items-center gap-2"><span>${rolePillSlave}</span><span><b>${s.deviceID}</b> — ${s.device_name || ''}</span></div>
-            <div class="device-sub"><b>Master:</b> ${masterName} · <b>Status:</b> ${sOnline ? 'online' : 'offline'} · <b>Updated:</b> ${sTs}</div>
+            <div class="device-sub"><b>Master:</b> ${masterName} · <b>Status:</b> ${sOnline ? 'online' : 'offline'}${(!sOnline && s.mesh_alert) ? ' · <span class=\"text-danger\">mesh alert</span>' : ''} · <b>Updated:</b> ${sTs}</div>
             ${sOwnerLine}
           `;
           slaveUl.appendChild(sli);
@@ -237,7 +237,7 @@
       const smoke = Number(data.smoke) || 0;
       const statusLower = String(data.status || '').toLowerCase();
   const online = isOnline(id);
-  const isAlarm = smoke > SMOKE_ALERT_THRESHOLD; // alarm only when smoke > threshold
+  const isAlarm = online && ((data.mesh_alert === true) || (smoke > SMOKE_ALERT_THRESHOLD));
   let icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
 
       let hasLatLon = data.latitude !== undefined && data.longitude !== undefined;
@@ -270,7 +270,7 @@
       if (Number.isNaN(lat) || Number.isNaN(lon)) return;
   const smoke = Number(d.smoke) || 0;
   const online = isOnline(id);
-  const isAlarm = smoke > SMOKE_ALERT_THRESHOLD;
+  const isAlarm = online && ((d.mesh_alert === true) || (smoke > SMOKE_ALERT_THRESHOLD));
   const icon = getIcon(isAlarm ? 'alarm' : (online ? 'normal' : 'offline'), isAlarm);
       let marker = deviceMarkers[id];
       if (!marker) {
@@ -330,6 +330,7 @@
             device_name: dev.name || dev.device_name || '',
             owner_email: dev.owner_email || '',
             owner_phone: dev.owner_phone || '',
+            mesh_alert: !!dev.mesh_alert,
           };
           ensureMarkerFor(id);
         });

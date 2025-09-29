@@ -133,6 +133,30 @@ class MQTTIngestionTests(APITestCase):
             ).exists()
         )
 
+    def test_composite_accepts_masterDeviceID_alias(self):
+        ts = int(timezone.now().timestamp())
+        payload = {
+            "masterDeviceID": "MASTER-ING",
+            "timestamp": ts,
+            "status": "alive",
+            "smoke": 7,
+            "slaves": [
+                {
+                    "deviceID": "SLAVE-OK",
+                    "timestamp": ts,
+                    "status": "alive",
+                    "smoke": 160,
+                }
+            ],
+        }
+        process_payload(payload)
+        # Should ingest for the known slave
+        self.assertTrue(
+            Telemetry.objects.filter(
+                device=self.slave_ok, smoke_level__gte=160
+            ).exists()
+        )
+
     def test_unknown_master_ignored(self):
         ts = int(timezone.now().timestamp())
         payload = {
