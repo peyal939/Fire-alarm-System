@@ -172,7 +172,7 @@
             <span>${m.deviceID}</span>
             <span class="text-muted">— ${m.device_name || ''}</span>
           </div>
-          <div class="device-sub"><b>Status:</b> ${online ? 'online' : 'offline'}${(!online && m.mesh_alert) ? ' · <span class="text-danger">mesh alert</span>' : ''} · <b>Updated:</b> ${ts}</div>
+          <div class="device-sub"><b>Status:</b> ${online ? 'online' : 'offline'}${(!online && m.mesh_alert) ? ' · <span class="text-danger">mesh alert</span>' : ''} · <b>Smoke:</b> ${smoke} · <b>Updated:</b> ${ts}</div>
           ${ownerLine}
           <ul class="slave-list" style="display:${isExpanded ? 'block' : 'none'}"></ul>
         `;
@@ -196,7 +196,7 @@
           }
           sli.innerHTML = `
             <div class="d-flex align-items-center gap-2"><span>${rolePillSlave}</span><span><b>${s.deviceID}</b> — ${s.device_name || ''}</span></div>
-            <div class="device-sub"><b>Master:</b> ${masterName} · <b>Status:</b> ${sOnline ? 'online' : 'offline'}${(!sOnline && s.mesh_alert) ? ' · <span class=\"text-danger\">mesh alert</span>' : ''} · <b>Updated:</b> ${sTs}</div>
+            <div class="device-sub"><b>Master:</b> ${masterName} · <b>Status:</b> ${sOnline ? 'online' : 'offline'}${(!sOnline && s.mesh_alert) ? ' · <span class=\"text-danger\">mesh alert</span>' : ''} · <b>Smoke:</b> ${sSmoke} · <b>Updated:</b> ${sTs}</div>
             ${sOwnerLine}
           `;
           slaveUl.appendChild(sli);

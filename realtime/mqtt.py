@@ -177,25 +177,29 @@ def process_payload(payload: dict) -> None:
         m_smoke = _to_int(payload.get("smoke"), default=0)
         m_ts_int, m_ts_dt = _to_ts_dt(payload.get("timestamp"))
 
+        # Ingest master now; defer broadcast until after mesh alert is applied
         services.ingest_telemetry(
             master_obj,
             smoke_level=m_smoke or 0,
             device_status=m_status or "alive",
             timestamp=m_ts_dt,
         )
-        _broadcast_device_update(
-            master_obj,
-            device_id=master_id,
-            ts_int=m_ts_int,
-            ts_dt=m_ts_dt,
-            smoke_val=m_smoke or 0,
-            status_str=m_status or "alive",
-        )
 
         # Process slaves, enforcing preregistration under this master
         # Track group alarm across all members
         threshold = int(getattr(settings, "SMOKE_ALERT_THRESHOLD", 50))
         group_alarm = (m_smoke or 0) > threshold
+        devices_for_broadcast = [
+            (
+                master_obj,
+                master_id,
+                m_ts_int,
+                m_ts_dt,
+                (m_smoke or 0),
+                (m_status or "alive"),
+            )
+        ]
+
         for idx, sd in enumerate(slaves_part):
             sid = str(sd.get("deviceID") or sd.get("id") or "").strip()
             if not sid:
@@ -241,13 +245,15 @@ def process_payload(payload: dict) -> None:
                 device_status=s_status or "alive",
                 timestamp=s_ts_dt,
             )
-            _broadcast_device_update(
-                s_obj,
-                device_id=sid,
-                ts_int=s_ts_int,
-                ts_dt=s_ts_dt,
-                smoke_val=s_smoke or 0,
-                status_str=s_status or "alive",
+            devices_for_broadcast.append(
+                (
+                    s_obj,
+                    sid,
+                    s_ts_int,
+                    s_ts_dt,
+                    (s_smoke or 0),
+                    (s_status or "alive"),
+                )
             )
             if (s_smoke or 0) > threshold:
                 group_alarm = True
@@ -257,6 +263,20 @@ def process_payload(payload: dict) -> None:
             services.apply_mesh_alert(master_obj, group_alarm=group_alarm)
         except Exception as e:
             logging.error(f"apply_mesh_alert failed for master {master_id}: {e}")
+
+        # Now broadcast updates for master and all valid slaves so mesh_alert reflects the applied state
+        try:
+            for obj, did, ts_i, ts_d, smk, stat in devices_for_broadcast:
+                _broadcast_device_update(
+                    obj,
+                    device_id=did,
+                    ts_int=ts_i,
+                    ts_dt=ts_d,
+                    smoke_val=smk,
+                    status_str=stat,
+                )
+        except Exception:
+            pass
 
         return  # Composite handled
 
@@ -318,6 +338,29 @@ def process_payload(payload: dict) -> None:
             # Fallback: if this device's incoming smoke exceeded threshold, consider alarm
             has_any_open = smoke_int > threshold
         services.apply_mesh_alert(master, group_alarm=has_any_open)
+
+        # Broadcast mesh state for the group so UI can reflect whole-mesh alarm without flipping offline devices to online
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer is not None:
+                member_ids = list(
+                    services.get_group_members(master).values_list(
+                        "hardware_identifier", flat=True
+                    )
+                )
+                for hid in member_ids:
+                    async_to_sync(channel_layer.group_send)(
+                        "devices",
+                        {
+                            "type": "device.update",
+                            "device": {
+                                "deviceID": hid,
+                                "mesh_alert": bool(has_any_open),
+                            },
+                        },
+                    )
+        except Exception:
+            pass
     except Exception as e:
         logging.error(f"apply_mesh_alert (legacy) failed for {device_id}: {e}")
 

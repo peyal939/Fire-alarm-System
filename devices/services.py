@@ -147,18 +147,43 @@ def ingest_telemetry(
         )
         if qs.exists():
             qs.update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
-            # Notify websocket clients that alert(s) have been resolved for this device
+            # Notify websocket clients with an up-to-date device snapshot so UI can refresh smoke/status immediately
             try:
+                # Compute mesh_alert across the device's group (master + slaves)
+                master_dev = get_master_for_device(device)
+                member_ids = list(
+                    get_group_members(master_dev).values_list("id", flat=True)
+                )
+                mesh_open = Alert.objects.filter(
+                    device_id__in=member_ids,
+                    alert_type="smoke_high",
+                    status=Alert.Status.OPEN,
+                ).exists()
+
+                # Build minimal but complete payload similar to MQTT broadcast
+                ts_int = None
+                try:
+                    ts_int = int(timestamp.timestamp())
+                except Exception:
+                    ts_int = None
+
+                payload = {
+                    "deviceID": device.hardware_identifier,
+                    "timestamp": ts_int,
+                    "smoke": int(smoke_level),
+                    "status": status_lower,
+                    "mesh_alert": bool(mesh_open),
+                    # Keep legacy flags for consumers relying on them
+                    "alert_resolved": True,
+                    "alert_type": "smoke_high",
+                }
+
                 channel_layer = get_channel_layer()
                 async_to_sync(channel_layer.group_send)(
                     "devices",
                     {
                         "type": "device.update",
-                        "device": {
-                            "deviceID": device.hardware_identifier,
-                            "alert_resolved": True,
-                            "alert_type": "smoke_high",
-                        },
+                        "device": payload,
                     },
                 )
             except Exception:
