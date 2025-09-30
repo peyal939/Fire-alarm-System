@@ -159,7 +159,13 @@ class VerifyPaymentView(APIView):
                 # No such order id
                 txn.status = PaymentTransaction.Status.FAILED
             else:
-                status_str = getattr(verified, "transaction_status", "").lower()
+                # Null-safe status detection and support sp_code "1000"
+                status_raw = (
+                    getattr(verified, "transaction_status", None)
+                    or getattr(verified, "status", None)
+                    or ""
+                )
+                status_str = str(status_raw).lower()
                 sp_code_val = getattr(verified, "sp_code", None)
                 sp_code_str = str(sp_code_val) if sp_code_val is not None else None
                 is_success = (
