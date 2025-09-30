@@ -8,4 +8,5 @@ urlpatterns = [
     path("", include("realtime.urls")),
     path("", include("api.urls")),
     path("", include("products.urls")),
+    path("shurjopay/", include("shurjopay.urls")),
 ] + static(settings.STATIC_URL, document_root=settings.BASE_DIR / "static")
