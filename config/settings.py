@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "realtime",
     "drf_spectacular",
     "drf_spectacular_sidecar",
+    "shurjopay",
 ]
 
 MIDDLEWARE = [
