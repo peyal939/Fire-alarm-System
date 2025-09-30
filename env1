@@ -1,0 +1,23 @@
+# Django
+DJANGO_SECRET_KEY= DEV_SECRET_KEY
+DEBUG=false
+ALLOWED_HOSTS=your.domain.com,server-ip
+CSRF_TRUSTED_ORIGINS=https://your.domain.com
+TIME_ZONE=Asia/Dhaka
+
+# Database (example: MySQL on same host)
+MYSQL_DATABASE=aps
+MYSQL_USER=aps
+MYSQL_PASSWORD=your-db-pass
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+
+# MQTT broker (edit if you have one)
+MQTT_BROKER="152.42.179.228"
+MQTT_PORT=1885
+MQTT_TOPIC="aps/fire/data"
+MQTT_USER="apsIoT"
+MQTT_PASS="apsIoT25"
+
+# Channels via Redis (local redis on the same server)
+REDIS_URL=redis://:S3curePass@127.0.0.1:6379/0
