@@ -31,13 +31,12 @@ class PackageViewSet(viewsets.ModelViewSet):
         return Package.objects.filter(deleted_at__isnull=True)
 
 
-
-
 def _apply_order_patch(instance: Order, data: dict) -> Order:
     """Internal helper to apply mutable field updates and recalc total_amount.
     Mutable: package, quantity, shipping_address
     """
     from decimal import Decimal
+
     old_package_id = instance.package_id
     old_quantity = instance.quantity
     mutable_fields = {"package", "quantity", "shipping_address"}
@@ -49,30 +48,44 @@ def _apply_order_patch(instance: Order, data: dict) -> Order:
     ser.is_valid(raise_exception=True)
     updated = ser.save()
     if updated.package_id != old_package_id or updated.quantity != old_quantity:
-        updated.total_amount = updated.package.price_per_device * Decimal(updated.quantity)
+        updated.total_amount = updated.package.price_per_device * Decimal(
+            updated.quantity
+        )
         updated.save(update_fields=["total_amount"])
     return updated
 
 
-@extend_schema(tags=["Orders"], summary="List / create / patch / delete orders for a user")
+@extend_schema(
+    tags=["Orders"],
+    summary="List / create / patch / delete orders for a user",
+    responses={
+        200: OrderSerializer(many=True),
+        201: OrderSerializer,
+        400: None,
+        401: None,
+        403: None,
+        404: None,
+    },
+)
 class UserOrderListView(APIView):
     """Endpoint: /orders/<user_id>/
 
-        Methods:
-            GET    /orders/<user_id>/  -> list user's orders (?package=&status= filters)
-            POST   /orders/<user_id>/  -> create order
-            PATCH  /orders/<user_id>/  -> patch ONE order (order_id provided in body)
-            DELETE /orders/<user_id>/  -> soft delete all (non-deleted) orders of user
+    Methods:
+        GET    /orders/<user_id>/  -> list user's orders (?package=&status= filters)
+        POST   /orders/<user_id>/  -> create order
+        PATCH  /orders/<user_id>/  -> patch ONE order (order_id provided in body)
+        DELETE /orders/<user_id>/  -> soft delete all (non-deleted) orders of user
 
-        PATCH body format (Option B):
-            {
-                "order_id": 10,
-                "quantity": 15,              # optional
-                "shipping_address": "Updated address"  # optional
-            }
+    PATCH body format (Option B):
+        {
+            "order_id": 10,
+            "quantity": 15,              # optional
+            "shipping_address": "Updated address"  # optional
+        }
 
-        Only quantity and shipping_address are mutable now at this endpoint.
+    Only quantity and shipping_address are mutable now at this endpoint.
     """
+
     permission_classes = [IsOwnerOrSuperadmin]
 
     def _auth_user_allowed(self, request_user, target_user_id: int) -> bool:
@@ -93,7 +106,11 @@ class UserOrderListView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
         qs = (
             Order.objects.select_related("user", "package")
-            .filter(user_id=user_id, deleted_at__isnull=True, package__deleted_at__isnull=True)
+            .filter(
+                user_id=user_id,
+                deleted_at__isnull=True,
+                package__deleted_at__isnull=True,
+            )
             .order_by("-ordered_at")
         )
         package_id = request.query_params.get("package")
@@ -109,18 +126,8 @@ class UserOrderListView(APIView):
 
     @extend_schema(
         summary="Create order for user",
-        request={
-            "application/json": {
-                "type": "object",
-                "properties": {
-                    "package_id": {"type": "integer"},
-                    "quantity": {"type": "integer", "minimum": 1},
-                    "shipping_address": {"type": "string"},
-                },
-                "required": ["package_id", "quantity"],
-                "example": {"package_id": 1, "quantity": 10, "shipping_address": "Dhaka"},
-            }
-        },
+        request=OrderCreateSerializer,
+        responses={201: OrderSerializer, 400: None, 401: None, 403: None},
     )
     def post(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
@@ -128,7 +135,8 @@ class UserOrderListView(APIView):
                 return Response({"detail": "Authentication required"}, status=401)
             return Response({"detail": "Forbidden"}, status=403)
         if str(request.user.id) != str(user_id) and not (
-            request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"
+            request.user.is_superuser
+            or getattr(request.user, "role", None) == "superadmin"
         ):
             return Response({"detail": "Forbidden"}, status=403)
         ser = OrderCreateSerializer(data=request.data, context={"request": request})
@@ -147,9 +155,9 @@ class UserOrderListView(APIView):
                     "shipping_address": {"type": "string"},
                 },
                 "required": ["order_id"],
-                "example": {"order_id": 5, "quantity": 15, "shipping_address": "Updated address"},
             }
         },
+        responses={200: OrderSerializer, 400: None, 401: None, 403: None, 404: None},
     )
     def patch(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
@@ -191,19 +199,37 @@ class UserOrderListView(APIView):
         return Response({"deleted": updated}, status=200)
 
 
-@extend_schema(tags=["Orders"], summary="Retrieve/patch/delete a user's specific order")
+@extend_schema(
+    tags=["Orders"],
+    summary="Retrieve/patch/delete a user's specific order",
+    responses={
+        200: OrderSerializer,
+        204: None,
+        400: None,
+        401: None,
+        403: None,
+        404: None,
+    },
+)
 class UserOrderDetailView(APIView):
     permission_classes = [IsOwnerOrSuperadmin]
 
     def _get_order(self, user_id: int, order_id: int, request_user):
         try:
             order = Order.objects.select_related("package").get(
-                id=order_id, user_id=user_id, deleted_at__isnull=True, package__deleted_at__isnull=True
+                id=order_id,
+                user_id=user_id,
+                deleted_at__isnull=True,
+                package__deleted_at__isnull=True,
             )
         except Order.DoesNotExist:
             return None
         # Permission: owner or superadmin
-        if not (request_user.is_superuser or getattr(request_user, "role", None) == "superadmin" or order.user_id == request_user.id):
+        if not (
+            request_user.is_superuser
+            or getattr(request_user, "role", None) == "superadmin"
+            or order.user_id == request_user.id
+        ):
             return "forbidden"
         return order
 
@@ -226,9 +252,9 @@ class UserOrderDetailView(APIView):
                     "quantity": {"type": "integer", "minimum": 1},
                     "shipping_address": {"type": "string"},
                 },
-                "example": {"quantity": 15, "shipping_address": "Updated address"},
             }
         },
+        responses={200: OrderSerializer, 400: None, 401: None, 403: None, 404: None},
     )
     def patch(self, request, user_id: int, order_id: int):
         if not request.user or not request.user.is_authenticated:

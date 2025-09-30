@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from .models import Device, Telemetry, Alert
 from django.db import models
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -49,7 +51,8 @@ class DeviceSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "registered_at", "last_seen")
 
-    def get_online(self, obj: Device):
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_online(self, obj: Device) -> bool:
         try:
             window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5))
         except Exception:
@@ -60,6 +63,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         # Online is determined solely by freshness window
         return bool(fresh)
 
+    @extend_schema_field(OpenApiTypes.BOOL)
     def get_mesh_alert(self, obj: Device) -> bool:
         """True if any device in this device's mesh has an open smoke_high alert.
 
@@ -199,7 +203,8 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "registered_at", "last_seen")
 
-    def get_online(self, obj: Device):
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_online(self, obj: Device) -> bool:
         try:
             window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5))
         except Exception:
