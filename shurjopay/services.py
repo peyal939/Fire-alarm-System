@@ -30,6 +30,7 @@ class ShurjoEnv:
     cancel_url: str
     prefix: str
     logdir: str | None
+    verify_mode: str  # 'auto' (default), 'raw', or 'plugin'
 
 
 def load_env() -> ShurjoEnv:
@@ -41,6 +42,7 @@ def load_env() -> ShurjoEnv:
         cancel_url=os.getenv("SP_CANCEL", ""),
         prefix=os.getenv("SP_PREFIX", "SP_PLUGIN_PYTHON"),
         logdir=os.getenv("SP_LOGDIR") or None,
+        verify_mode=(os.getenv("SP_VERIFY_MODE", "auto") or "auto").lower(),
     )
 
 
@@ -104,23 +106,28 @@ def initiate_payment(
 
 
 def verify_payment(order_id: str):
+    env = load_env()
+    if env.verify_mode == "raw":
+        raw = _raw_verify(order_id)
+        return SimpleNamespace(**raw) if raw else None
+
     plugin = build_plugin()
     try:
         return plugin.verify_payment(order_id)
     except (ShurjopayException, ShurjopayAuthException, Exception) as e:
         # Be defensive: plugin may raise if response contains unexpected nulls.
-        logging.getLogger(__name__).warning(
-            "ShurjoPay verify failed for %s: %s", order_id, e
+        logging.getLogger(__name__).info(
+            "SDK verify raised for %s; falling back: %s", order_id, e
         )
-        # Fallback to raw REST verification to avoid parser issues in the SDK
-        try:
-            raw = _raw_verify(order_id)
-            if raw:
-                return SimpleNamespace(**raw)
-        except Exception as e2:
-            logging.getLogger(__name__).warning(
-                "Raw ShurjoPay verify fallback failed for %s: %s", order_id, e2
-            )
+        if env.verify_mode in ("auto", "fallback"):
+            try:
+                raw = _raw_verify(order_id)
+                if raw:
+                    return SimpleNamespace(**raw)
+            except Exception as e2:
+                logging.getLogger(__name__).info(
+                    "Raw ShurjoPay verify fallback failed for %s: %s", order_id, e2
+                )
         return None
 
 
