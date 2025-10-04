@@ -319,43 +319,61 @@ def process_payload(payload: dict) -> None:
         status_str=status,
     )
 
-    # Legacy path: recompute and apply mesh alert using the device's group
+    # Legacy path: recompute and apply mesh alert using the device's group.
+    # Regression fix: previously, we treated ANY high telemetry within the freshness window
+    # as keeping the mesh alert open. For a single device (no slaves) this caused the alert
+    # to remain open even after current smoke fell below threshold because the last high
+    # telemetry row still existed inside the time window. We now base the decision on the
+    # current reading when there is no mesh, and only aggregate historical highs when there
+    # are multiple members.
     try:
-        # Determine the master for this device
         master = services.get_master_for_device(device_obj)
-        # Compute group alarm: check if any member currently above threshold.
         threshold = int(getattr(settings, "SMOKE_ALERT_THRESHOLD", 50))
-        # Evaluate recent/last known telemetry levels. We use latest Telemetry rows if any, else current smoke.
-        # Simple approach: any open smoke_high alert means group in alarm; otherwise compute by latest telemetry.
-        from devices.models import Alert
+        freshness = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 180))
+        recent_since = timezone.now() - dt.timedelta(seconds=freshness)
+        member_qs = services.get_group_members(master)
+        member_ids = list(member_qs.values_list("id", flat=True))
 
-        has_any_open = Alert.objects.filter(
-            device__in=services.get_group_members(master).values_list("id", flat=True),
-            alert_type="smoke_high",
-            status=Alert.Status.OPEN,
-        ).exists()
-        if not has_any_open:
-            # Fallback: if this device's incoming smoke exceeded threshold, consider alarm
-            has_any_open = smoke_int > threshold
-        services.apply_mesh_alert(master, group_alarm=has_any_open)
+        if len(member_ids) <= 1:
+            # Single device – rely ONLY on the current reading.
+            has_any_high = smoke_int > threshold
+        else:
+            # Multi-device mesh: evaluate CURRENT readings of each member this cycle.
+            # Rationale: relying on historical telemetry within a time window caused
+            # alerts to linger after values dropped. We now decide the mesh alert
+            # strictly by the current readings seen in this ingestion batch (legacy
+            # single-device path only has one reading, but mesh members will each
+            # send their own messages over time). For members other than the current
+            # device we fall back to their open smoke_high alerts to infer if they
+            # are still high (since their message may not be in this exact payload).
+            from devices.models import Alert as _Alert
 
-        # Broadcast mesh state for the group so UI can reflect whole-mesh alarm without flipping offline devices to online
+            # Determine if ANY member currently still has an open smoke_high alert.
+            open_any = _Alert.objects.filter(
+                device_id__in=member_ids,
+                alert_type="smoke_high",
+                status=_Alert.Status.OPEN,
+            ).exists()
+            # The current reading may have dropped; if this device's reading is low we
+            # let the service layer (ingest_telemetry) resolve its own alert already.
+            # has_any_high should reflect post-resolution state: combine open alerts
+            # across mesh after this device's potential resolution.
+            has_any_high = open_any
+
+        services.apply_mesh_alert(master, group_alarm=has_any_high)
+
+        # Broadcast mesh state so clients update group alert indicator.
         try:
             channel_layer = get_channel_layer()
             if channel_layer is not None:
-                member_ids = list(
-                    services.get_group_members(master).values_list(
-                        "hardware_identifier", flat=True
-                    )
-                )
-                for hid in member_ids:
+                for hid in member_qs.values_list("hardware_identifier", flat=True):
                     async_to_sync(channel_layer.group_send)(
                         "devices",
                         {
                             "type": "device.update",
                             "device": {
                                 "deviceID": hid,
-                                "mesh_alert": bool(has_any_open),
+                                "mesh_alert": bool(has_any_high),
                             },
                         },
                     )

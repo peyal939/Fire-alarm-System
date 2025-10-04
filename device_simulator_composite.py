@@ -1,4 +1,5 @@
-"""Composite Master/Slaves Device Simulator
+"""
+Composite Master/Slaves Device Simulator
 
 Publishes a composite payload where a master periodically sends its own reading
 plus an array of slave readings. This matches the backend composite format.
@@ -27,16 +28,15 @@ import signal
 import sys
 import time
 import json
-from typing import Tuple
+from typing import Tuple, List, Dict, Any
 
 try:
     import paho.mqtt.client as mqtt  # type: ignore
 except ImportError:
-    print(
-        "paho-mqtt not installed. Install with: pip install paho-mqtt", file=sys.stderr
-    )
+    print("paho-mqtt not installed. Install with: pip install paho-mqtt", file=sys.stderr)
     sys.exit(1)
 
+# ====================== Defaults ======================
 DEFAULT_BROKER = os.environ.get("MQTT_BROKER", "152.42.179.228")
 DEFAULT_PORT = int(os.environ.get("MQTT_PORT", "1885"))
 DEFAULT_TOPIC = os.environ.get("MQTT_TOPIC", "aps/fire/data")
@@ -50,6 +50,7 @@ THRESHOLD = 50
 STOP_REQUESTED = False
 
 
+# ====================== Signal Handling ======================
 def handle_sigint(signum, frame):
     global STOP_REQUESTED
     STOP_REQUESTED = True
@@ -59,11 +60,10 @@ def handle_sigint(signum, frame):
 signal.signal(signal.SIGINT, handle_sigint)
 
 
+# ====================== CLI Args ======================
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="APS Composite Fire Alarm Simulator")
-    p.add_argument(
-        "--interval", type=float, default=5.0, help="Seconds between publishes"
-    )
+    p.add_argument("--interval", type=float, default=5.0, help="Seconds between publishes")
     p.add_argument("--broker", default=DEFAULT_BROKER)
     p.add_argument("--port", type=int, default=DEFAULT_PORT)
     p.add_argument("--topic", default=DEFAULT_TOPIC)
@@ -74,6 +74,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+# ====================== MQTT Setup ======================
 def connect_client(args: argparse.Namespace) -> mqtt.Client:
     client = mqtt.Client()
     if args.user:
@@ -81,21 +82,15 @@ def connect_client(args: argparse.Namespace) -> mqtt.Client:
     try:
         client.connect(args.broker, args.port, 60)
     except Exception as e:
-        print(
-            f"Failed to connect to MQTT broker {args.broker}:{args.port} -> {e}",
-            file=sys.stderr,
-        )
+        print(f"Failed to connect to MQTT broker {args.broker}:{args.port} -> {e}", file=sys.stderr)
         if not args.dry_run:
             sys.exit(2)
     return client
 
 
+# ====================== Device Logic ======================
 def pick_above_threshold() -> Tuple[bool, bool, bool]:
-    """Randomly decide who is above threshold among (master, s1, s2).
-
-    We vary the state as requested: sometimes all fine, sometimes S2 over,
-    sometimes S1 over, sometimes master over.
-    """
+    """Randomly decide who is above threshold among (master, s1, s2)."""
     choice = random.choice(["none", "s1", "s2", "master"])  # equally likely
     return (
         choice == "master",
@@ -104,7 +99,12 @@ def pick_above_threshold() -> Tuple[bool, bool, bool]:
     )
 
 
-def build_payload() -> dict:
+def build_payload() -> Tuple[Dict[str, Any], bool]:
+    """Build one composite payload for master and slaves.
+
+    Returns:
+        tuple[payload_dict, bool_high_detected]
+    """
     ts = int(time.time())
     m_over, s1_over, s2_over = pick_above_threshold()
 
@@ -135,9 +135,20 @@ def build_payload() -> dict:
             },
         ],
     }
-    return payload
+
+    # High detected if any reading exceeds threshold
+    high_detected = any(
+        v > THRESHOLD for v in [
+            payload["smoke"],
+            payload["slaves"][0]["smoke"],
+            payload["slaves"][1]["smoke"],
+        ]
+    )
+
+    return payload, high_detected
 
 
+# ====================== Main Loop ======================
 def main():
     args = parse_args()
     client = None
@@ -147,25 +158,31 @@ def main():
         print("[DRY-RUN] Not connecting to broker; messages will be printed only")
 
     print(
-        f"Composite sim: master {MASTER_ID} with slaves {SLAVE_IDS} -> topic '{args.topic}' (interval {args.interval}s)"
+        f"Composite sim: master {MASTER_ID} with slaves {SLAVE_IDS} "
+        f"-> topic '{args.topic}' (interval {args.interval}s)"
     )
 
     while not STOP_REQUESTED:
         start = time.time()
-        payload = build_payload()
+        payload, high = build_payload()
         out = json.dumps(payload, separators=(",", ":"))
         ts = time.strftime("%H:%M:%S")
+
         if args.dry_run:
-            print(f"{ts} {out}")
+            flag = "⚠️ HIGH" if high else "✅ OK"
+            print(f"{ts} {flag} {out}")
         else:
             try:
                 assert client is not None
                 client.publish(args.topic, out)
-                print(f"{ts} published: {out}")
+                flag = "⚠️" if high else "✅"
+                print(f"{ts} {flag} published: {out}")
             except Exception as e:
                 print(f"Publish failed: {e}", file=sys.stderr)
+
         if args.once:
             break
+
         elapsed = time.time() - start
         time.sleep(max(0, args.interval - elapsed))
 
