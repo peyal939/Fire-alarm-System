@@ -12,6 +12,7 @@ class UserAdmin(BaseUserAdmin):
     ordering = ("email",)
     list_display = (
         "email",
+        "full_name",
         "phone_number",
         "role",
         "is_active",
@@ -23,7 +24,7 @@ class UserAdmin(BaseUserAdmin):
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal info", {"fields": ("phone_number", "role")}),
+        ("Personal info", {"fields": ("full_name", "phone_number", "address", "role")}),
         (
             "Permissions",
             {
@@ -47,7 +48,9 @@ class UserAdmin(BaseUserAdmin):
                 "classes": ("wide",),
                 "fields": (
                     "email",
+                    "full_name",
                     "phone_number",
+                    "address",
                     "role",
                     "password1",
                     "password2",

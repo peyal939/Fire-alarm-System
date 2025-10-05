@@ -51,6 +51,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=32, blank=True)
+    full_name = models.CharField(max_length=255, blank=True)
+    address = models.TextField(blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.USER)
 
     # Django flags
