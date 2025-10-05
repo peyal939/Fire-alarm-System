@@ -47,7 +47,7 @@ signal.signal(signal.SIGINT, handle_sigint)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="APS Fire Alarm Device Simulator")
     parser.add_argument("--devices", type=int, default=1, help="Number of simulated devices")
-    parser.add_argument("--device-prefix", default="DEV", help="Device ID prefix")
+    parser.add_argument("--device-prefix", default="aPsF100", help="Device ID prefix")
     parser.add_argument("--interval", type=float, default=5.0, help="Seconds between publishes per device")
     parser.add_argument("--broker", default=DEFAULT_BROKER, help="MQTT broker host")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="MQTT broker port")

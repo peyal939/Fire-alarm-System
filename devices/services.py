@@ -69,23 +69,32 @@ def get_group_members(master: Device):
 
 
 def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
-    """Ensure per-device Alerts reflect group alarm for all members.
+    """Apply mesh alarm state constrained to *online* members.
 
-    - If group_alarm is True: open smoke_high Alert for every member (create if missing)
-    - If False: resolve any open smoke_high Alert for every member
+    Rules now:
+      - Only ONLINE members (fresh last_seen) can trigger or hold a mesh alarm open.
+      - When group_alarm=True: open smoke_high alerts only on online members lacking one.
+        Offline members are ignored (their old alert, if any, remains resolved or closed).
+      - When group_alarm=False: resolve smoke_high alerts for *all* members (online + offline)
+        so the mesh clears cleanly after final normal reading.
     """
     members = list(get_group_members(master))
     if not members:
         return
+
+    # Determine online status using model property if available
+    online_members = [m for m in members if getattr(m, "is_online", False)]
+
     if group_alarm:
-        # Open alert for each member if not already open
+        if not online_members:
+            return  # nothing to do; no online devices to carry alarm
         open_map = {
             d.id: Alert.objects.filter(
                 device=d, alert_type="smoke_high", status=Alert.Status.OPEN
             ).exists()
-            for d in members
+            for d in online_members
         }
-        to_create = [d for d in members if not open_map.get(d.id)]
+        to_create = [d for d in online_members if not open_map.get(d.id)]
         Alert.objects.bulk_create(
             [
                 Alert(device=d, alert_type="smoke_high", status=Alert.Status.OPEN)
@@ -93,12 +102,62 @@ def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
             ]
         )
     else:
-        # Resolve all open alerts for members
         Alert.objects.filter(
             device__in=[d.id for d in members],
             alert_type="smoke_high",
             status=Alert.Status.OPEN,
         ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+
+
+def recompute_mesh_after_change(device: Device) -> None:
+    """Recompute mesh alert state after a device opens or resolves its smoke alert.
+
+    Online members (fresh last_seen) are the only ones that can keep a mesh alarm open.
+    Steps:
+      1. Gather all members (master + slaves).
+      2. Filter online ones (is_online True).
+      3. If any online member has an open smoke_high alert => ensure all online members have one.
+      4. If none do => resolve all smoke_high alerts across the mesh (online + offline) to clear.
+    """
+    try:
+        master = get_master_for_device(device)
+        members = list(get_group_members(master))
+        if not members:
+            return
+        online_members = [m for m in members if getattr(m, "is_online", False)]
+        if not online_members:
+            # No online devices => clear all open alerts
+            Alert.objects.filter(
+                device__in=[d.id for d in members],
+                alert_type="smoke_high",
+                status=Alert.Status.OPEN,
+            ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+            return
+        open_online_ids = set(
+            Alert.objects.filter(
+                device_id__in=[m.id for m in online_members],
+                alert_type="smoke_high",
+                status=Alert.Status.OPEN,
+            ).values_list("device_id", flat=True)
+        )
+        if open_online_ids:
+            # Open mesh: make sure every ONLINE member has an alert
+            to_open = [m for m in online_members if m.id not in open_online_ids]
+            Alert.objects.bulk_create(
+                [
+                    Alert(device=m, alert_type="smoke_high", status=Alert.Status.OPEN)
+                    for m in to_open
+                ]
+            )
+        else:
+            # All cleared: resolve any lingering alerts for cleanliness
+            Alert.objects.filter(
+                device__in=[d.id for d in members],
+                alert_type="smoke_high",
+                status=Alert.Status.OPEN,
+            ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+    except Exception:
+        pass
 
 
 def ingest_telemetry(
@@ -141,12 +200,16 @@ def ingest_telemetry(
             Alert.objects.create(
                 device=device, alert_type="smoke_high", status=Alert.Status.OPEN
             )
+            # After opening, propagate mesh state among online members
+            recompute_mesh_after_change(device)
     else:
         qs = Alert.objects.filter(
             device=device, alert_type="smoke_high", status=Alert.Status.OPEN
         )
         if qs.exists():
             qs.update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+            # After resolution, recompute to possibly clear entire mesh
+            recompute_mesh_after_change(device)
             # Notify websocket clients with an up-to-date device snapshot so UI can refresh smoke/status immediately
             try:
                 # Compute mesh_alert across the device's group (master + slaves)

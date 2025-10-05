@@ -63,6 +63,29 @@ class Device(AuditSoftDeleteModel):
     registered_at = models.DateTimeField(default=timezone.now)
     last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
 
+    # --- Runtime / derived properties (not stored) ---------------------------------
+    @property
+    def is_online(self) -> bool:
+        """Return True if the device has been seen within the freshness window.
+
+        The freshness window is configured via settings.DEVICE_ONLINE_FRESHNESS_SECONDS
+        (default 180 seconds). This avoids relying on the persisted textual `status`
+        field which comes from the hardware payload. A slave that stops sending data
+        will naturally become offline once its own last_seen grows stale (a master
+        transmitting does NOT update its slaves' last_seen unless a slave section is
+        actually present in the composite payload).
+        """
+        if not self.last_seen:
+            return False
+        from django.conf import settings as _s  # local import to avoid circular
+        from django.utils import timezone as _tz
+
+        try:
+            window = int(getattr(_s, "DEVICE_ONLINE_FRESHNESS_SECONDS", 180))
+        except Exception:
+            window = 180
+        return self.last_seen >= _tz.now() - _tz.timedelta(seconds=window)
+
     class Meta:
         indexes = [
             models.Index(fields=["user"]),

@@ -110,6 +110,10 @@ def _broadcast_device_update(
         "received_at_iso": received_at_iso,
         "smoke": smoke_val,
         "status": status_str,
+        # Real-time online flag derived from last_seen freshness. This helps the
+        # frontend transition devices (especially slaves) to offline without
+        # waiting for a full REST refresh.
+        "online": bool(getattr(device_obj, "is_online", False)),
     }
     # Include mesh alert flag so clients can reflect group state reliably
     try:
@@ -235,9 +239,24 @@ def process_payload(payload: dict) -> None:
                 else (s_status or "alive")
             )
             s_smoke = _to_int(sd.get("smoke"), default=0)
-            s_ts_int, s_ts_dt = _to_ts_dt(
-                sd.get("timestamp") or payload.get("timestamp")
-            )
+            raw_slave_ts = sd.get("timestamp")
+            s_ts_int, s_ts_dt = _to_ts_dt(raw_slave_ts or payload.get("timestamp"))
+
+            # Enforce own timestamp if configured; if slave timestamp is missing or identical
+            # to master's timestamp while requirement enabled, skip updating this slave so it
+            # naturally becomes offline after freshness window.
+            if getattr(settings, "SLAVE_REQUIRE_OWN_TIMESTAMP", True):
+                try:
+                    # Compare numeric form; if slave ts missing OR equals master ts, treat as stale
+                    if raw_slave_ts is None or (
+                        m_ts_int is not None and s_ts_int == m_ts_int
+                    ):
+                        logging.info(
+                            f"Skipping slave '{sid}' update: own timestamp missing or not distinct"
+                        )
+                        continue
+                except Exception:
+                    pass
 
             services.ingest_telemetry(
                 s_obj,
@@ -338,27 +357,23 @@ def process_payload(payload: dict) -> None:
             # Single device – rely ONLY on the current reading.
             has_any_high = smoke_int > threshold
         else:
-            # Multi-device mesh: evaluate CURRENT readings of each member this cycle.
-            # Rationale: relying on historical telemetry within a time window caused
-            # alerts to linger after values dropped. We now decide the mesh alert
-            # strictly by the current readings seen in this ingestion batch (legacy
-            # single-device path only has one reading, but mesh members will each
-            # send their own messages over time). For members other than the current
-            # device we fall back to their open smoke_high alerts to infer if they
-            # are still high (since their message may not be in this exact payload).
-            from devices.models import Alert as _Alert
+            from devices.models import Alert as _Alert, Device as _Dev
 
-            # Determine if ANY member currently still has an open smoke_high alert.
-            open_any = _Alert.objects.filter(
-                device_id__in=member_ids,
-                alert_type="smoke_high",
-                status=_Alert.Status.OPEN,
-            ).exists()
-            # The current reading may have dropped; if this device's reading is low we
-            # let the service layer (ingest_telemetry) resolve its own alert already.
-            # has_any_high should reflect post-resolution state: combine open alerts
-            # across mesh after this device's potential resolution.
-            has_any_high = open_any
+            # Filter members to those that are ONLINE (fresh last_seen) before considering any open alerts.
+            fresh_cutoff = timezone.now() - dt.timedelta(seconds=freshness)
+            online_member_ids = list(
+                _Dev.objects.filter(
+                    id__in=member_ids, last_seen__gte=fresh_cutoff
+                ).values_list("id", flat=True)
+            )
+            if not online_member_ids:
+                has_any_high = False
+            else:
+                has_any_high = _Alert.objects.filter(
+                    device_id__in=online_member_ids,
+                    alert_type="smoke_high",
+                    status=_Alert.Status.OPEN,
+                ).exists()
 
         services.apply_mesh_alert(master, group_alarm=has_any_high)
 

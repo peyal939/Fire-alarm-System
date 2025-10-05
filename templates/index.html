@@ -274,7 +274,18 @@
       if (!id) return;
       // Preserve known metadata (role/master/owner) while updating live fields
       allDevices[id] = { ...(allDevices[id] || {}), ...data };
-      lastSeenAt[id] = Date.now();
+      // Only treat this as fresh telemetry if we actually have a direct reading.
+      // Criteria: payload includes either (smoke, status, timestamp/timestamp_iso/received_at_iso) OR explicit 'online' true AND a smoke field.
+      const hasTelemetryFields = (
+        Object.prototype.hasOwnProperty.call(data, 'smoke') ||
+        Object.prototype.hasOwnProperty.call(data, 'status') ||
+        Object.prototype.hasOwnProperty.call(data, 'timestamp') ||
+        Object.prototype.hasOwnProperty.call(data, 'timestamp_iso') ||
+        Object.prototype.hasOwnProperty.call(data, 'received_at_iso')
+      );
+      if (hasTelemetryFields) {
+        lastSeenAt[id] = Date.now();
+      }
 
       const smoke = Number(data.smoke) || 0;
       const online = isOnline(id);
@@ -407,17 +418,20 @@
     });
     collapseAllBtn.addEventListener('click', () => { expandedMasters.clear(); renderSidebarDevices(); });
 
-    // Seed from API on load so all registered devices show as offline by default
+    // Seed from API on load; devices start offline unless recent last_seen proves otherwise
     fetchAndSeedDevices();
 
-    // Periodically refresh UI to reflect offline status when devices go stale
+    // Periodic passive refresh (every 30s) to downgrade stale devices without traffic
     setInterval(() => {
-      // Update marker icons and popups based on current online/offline
+      const now = Date.now();
       Object.keys(allDevices).forEach(id => {
+        const dev = allDevices[id];
+        // Do not modify lastSeenAt here; only real telemetry bumps it.
+        // Marker/icon refresh reflects current computed online state.
         ensureMarkerFor(id);
       });
       renderSidebarDevices();
       updateNotificationBell();
-    }, 1000);
+    }, 30000);
   </script>
 {% endblock %}

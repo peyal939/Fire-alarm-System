@@ -40,6 +40,15 @@ DEVICE_ONLINE_FRESHNESS_SECONDS = int(
     os.getenv("DEVICE_ONLINE_FRESHNESS_SECONDS", "180")
 )
 
+# If True, a slave entry in a composite MQTT payload must contain its OWN
+# timestamp field (distinct from the master's) to be treated as a fresh
+# telemetry update. This prevents a master from continually marking slaves
+# online when they haven't actually sent data. Disable (set to 'false') if
+# your firmware does not yet send per-slave timestamps.
+SLAVE_REQUIRE_OWN_TIMESTAMP = (
+    os.getenv("SLAVE_REQUIRE_OWN_TIMESTAMP", "true").lower() == "true"
+)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
