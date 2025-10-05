@@ -40,6 +40,15 @@ DEVICE_ONLINE_FRESHNESS_SECONDS = int(
     os.getenv("DEVICE_ONLINE_FRESHNESS_SECONDS", "180")
 )
 
+# If True, a slave entry in a composite MQTT payload must contain its OWN
+# timestamp field (distinct from the master's) to be treated as a fresh
+# telemetry update. This prevents a master from continually marking slaves
+# online when they haven't actually sent data. Disable (set to 'false') if
+# your firmware does not yet send per-slave timestamps.
+SLAVE_REQUIRE_OWN_TIMESTAMP = (
+    os.getenv("SLAVE_REQUIRE_OWN_TIMESTAMP", "true").lower() == "true"
+)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -136,8 +145,23 @@ if REDIS_URL:
 else:
     CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
-STATIC_URL = "static/"
+"""Static & media configuration.
+
+In development Django can serve from STATICFILES_DIRS; in production we
+collect all assets into STATIC_ROOT and let Nginx (or another web server)
+serve them. A leading slash in STATIC_URL is required so references in
+templates become absolute ("/static/..."), otherwise some reverse proxy
+setups or the Django admin may fail to load CSS/JS.
+"""
+
+# Public URL prefix for static assets
+STATIC_URL = "/static/"
+
+# Source directories (uncollected) used in development & by collectstatic
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# Target directory for collected static files (created by collectstatic)
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

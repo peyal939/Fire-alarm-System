@@ -26,6 +26,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         source="master.last_seen", read_only=True
     )
     mesh_alert = serializers.SerializerMethodField(read_only=True)
+    effective_status = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Device
@@ -42,6 +43,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "status",
+            "effective_status",
             "registered_at",
             "last_seen",
             "online",
@@ -53,15 +55,8 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
-        try:
-            window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5))
-        except Exception:
-            window = 5
-        if not obj.last_seen:
-            return False
-        fresh = obj.last_seen >= timezone.now() - timezone.timedelta(seconds=window)
-        # Online is determined solely by freshness window
-        return bool(fresh)
+        # Delegate to model property; keeps single source of truth.
+        return bool(getattr(obj, "is_online", False))
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_mesh_alert(self, obj: Device) -> bool:
@@ -87,6 +82,17 @@ class DeviceSerializer(serializers.ModelSerializer):
             ).exists()
         except Exception:
             return False
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_effective_status(self, obj: Device) -> str:
+        """Return a derived status string prioritizing offline if stale.
+
+        Keeps the raw device-provided `status` field intact while ensuring UIs
+        can display an authoritative offline state when last_seen expired.
+        """
+        if not getattr(obj, "is_online", False):
+            return "offline"
+        return obj.status or "unknown"
 
 
 class DeviceRegisterSerializer(serializers.Serializer):
@@ -182,6 +188,7 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
     online = serializers.SerializerMethodField()
     device_role = serializers.CharField(read_only=True)
     master_id = serializers.IntegerField(source="master.id", read_only=True)
+    effective_status = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Device
@@ -192,6 +199,7 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "status",
+            "effective_status",
             "registered_at",
             "last_seen",
             "online",
@@ -205,14 +213,13 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
-        try:
-            window = int(getattr(settings, "DEVICE_ONLINE_FRESHNESS_SECONDS", 5))
-        except Exception:
-            window = 5
-        if not obj.last_seen:
-            return False
-        fresh = obj.last_seen >= timezone.now() - timezone.timedelta(seconds=window)
-        return bool(fresh)
+        return bool(getattr(obj, "is_online", False))
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_effective_status(self, obj: Device) -> str:
+        if not getattr(obj, "is_online", False):
+            return "offline"
+        return obj.status or "unknown"
 
 
 class DeviceTreeSerializer(DeviceNodeSerializer):
