@@ -1,7 +1,19 @@
+"""MQTT telemetry ingestion and real-time WebSocket broadcasting.
+
+This module handles incoming MQTT messages from IoT devices, processes telemetry data,
+and broadcasts updates to connected WebSocket clients for real-time dashboard updates.
+
+Supported Payload Formats:
+    1. Legacy single-device format
+    2. Composite master/slave format for mesh networks
+"""
+
 import json
 import logging
 import threading
 import datetime as dt
+from typing import Optional, Tuple, List, Dict, Any
+from decimal import Decimal
 
 import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
@@ -13,8 +25,17 @@ from django.utils import timezone
 
 from devices.models import Device
 from devices import services
+from devices.constants import (
+    AlertType,
+    DeviceStatus,
+    MQTTPayloadKeys,
+    InvalidTelemetryPayloadError,
+    UnregisteredDeviceError,
+    MQTTProcessingError,
+)
 from .consumers import DEVICES
 
+logger = logging.getLogger(__name__)
 _thread_started = False
 
 
@@ -23,52 +44,99 @@ def _fmt12(dtobj: dt.datetime) -> str:
     return s.replace("AM", "am").replace("PM", "pm")
 
 
-def _to_int(value, default=None):
+def _to_int(value, default=None) -> Optional[int]:
+    """Safely convert value to integer with fallback.
+
+    Args:
+        value: Value to convert (string, int, or other)
+        default: Value to return if conversion fails
+
+    Returns:
+        Integer value or default
+    """
     try:
         if isinstance(value, str):
             value = value.strip()
         return int(value)
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         return default
 
 
-def _to_ts_dt(ts_val):
+def _to_ts_dt(ts_val) -> Tuple[Optional[int], dt.datetime]:
+    """Convert timestamp value to integer and datetime objects.
+
+    Args:
+        ts_val: Unix timestamp (int or string)
+
+    Returns:
+        Tuple of (timestamp_int, datetime_obj). If conversion fails,
+        returns (None, current_time) or (ts_int, current_time)
+    """
     tz = timezone.get_current_timezone()
     ts_int = _to_int(ts_val)
     if ts_int is None:
         return None, timezone.now()
     try:
         return ts_int, dt.datetime.fromtimestamp(ts_int, tz=tz)
-    except Exception:
+    except (ValueError, OSError, OverflowError) as e:
+        logger.warning(f"Invalid timestamp {ts_int}: {e}")
         return ts_int, timezone.now()
 
 
 def _compute_mesh_alert(device_obj: Device) -> bool:
-    """True if any device in this device's mesh has an open smoke_high alert.
+    """Check if any device in the mesh network has an active smoke alert.
 
-    Mesh: master + slaves. For slaves, find their master; if no master, treat self as master.
+    A mesh network consists of a master device and all its slave devices.
+    This function determines if ANY device in that network currently has
+    an open smoke_high alert, which is used for the "mesh_alert" flag
+    in WebSocket broadcasts.
+
+    Args:
+        device_obj: Any device in the mesh (master or slave)
+
+    Returns:
+        True if any device in the mesh has an open smoke_high alert, False otherwise
+
+    Note:
+        For slave devices, this looks up their master first.
+        If no master is found (orphaned slave), treats device as its own master.
     """
     try:
         from devices.models import Alert
 
+        # Identify the master device for this mesh
+        # If device is already a master, use it directly
+        # If device is a slave, use its master (or itself if master is None)
         master = (
             device_obj
             if device_obj.device_role == Device.DeviceRole.MASTER
             else (device_obj.master or device_obj)
         )
+
+        # Get all member device IDs in this mesh (master + all slaves)
         member_ids = list(
             Device.objects.filter(deleted_at__isnull=True)
             .filter(models.Q(id=master.id) | models.Q(master_id=master.id))
             .values_list("id", flat=True)
         )
+
         if not member_ids:
+            logger.debug(f"No mesh members found for device {device_obj.id}")
             return False
-        return Alert.objects.filter(
+
+        # Check if any member has an open smoke_high alert
+        has_alert = Alert.objects.filter(
             device_id__in=member_ids,
-            alert_type="smoke_high",
+            alert_type=AlertType.SMOKE_HIGH,
             status=Alert.Status.OPEN,
         ).exists()
-    except Exception:
+
+        return has_alert
+
+    except Exception as e:
+        logger.error(
+            f"Error computing mesh alert for device {device_obj.id}: {e}", exc_info=True
+        )
         return False
 
 
@@ -76,12 +144,36 @@ def _broadcast_device_update(
     device_obj: Device,
     *,
     device_id: str,
-    ts_int: int | None,
+    ts_int: Optional[int],
     ts_dt: dt.datetime,
     smoke_val: int,
     status_str: str,
-):
-    # Persisted coords if any
+) -> None:
+    """Broadcast device telemetry update to WebSocket clients and update in-memory cache.
+
+    This function constructs a complete device state payload including:
+    - Current readings (smoke, status)
+    - Timestamps (Unix int and human-readable ISO)
+    - Location coordinates (if available)
+    - Online status (derived from last_seen freshness)
+    - Mesh alert status (group-wide alert state)
+
+    The payload is:
+    1. Stored in the in-memory DEVICES cache for snapshot delivery to new WebSocket connections
+    2. Broadcast to all connected WebSocket clients via Channels layer
+
+    Args:
+        device_obj: Device model instance
+        device_id: Hardware identifier for the device
+        ts_int: Unix timestamp (seconds since epoch) or None
+        ts_dt: Datetime object for the reading
+        smoke_val: Smoke level reading
+        status_str: Device status string (e.g., "alive", "alert")
+
+    Raises:
+        Does not raise; logs errors and continues
+    """
+    # Extract persisted GPS coordinates if available
     pos = None
     try:
         if device_obj.latitude is not None and device_obj.longitude is not None:
@@ -89,51 +181,64 @@ def _broadcast_device_update(
                 "latitude": float(device_obj.latitude),
                 "longitude": float(device_obj.longitude),
             }
-    except Exception:
-        pos = None
+    except (TypeError, ValueError, Decimal.InvalidOperation) as e:
+        logger.warning(f"Invalid coordinates for device {device_id}: {e}")
 
-    # Prepare local timestamps
+    # Format timestamps in local timezone for human readability
+    timestamp_iso = None
+    received_at_iso = None
     try:
         tz = timezone.get_current_timezone()
         ts_dt_local = ts_dt.astimezone(tz)
         rec_local = timezone.now().astimezone(tz)
         timestamp_iso = _fmt12(ts_dt_local)
         received_at_iso = _fmt12(rec_local)
-    except Exception:
-        timestamp_iso = None
-        received_at_iso = None
+    except (AttributeError, ValueError, OSError) as e:
+        logger.warning(f"Timestamp formatting failed for device {device_id}: {e}")
 
+    # Build the complete device state payload
     device_payload = {
-        "deviceID": device_id,
-        "timestamp": ts_int,
+        MQTTPayloadKeys.DEVICE_ID: device_id,
+        MQTTPayloadKeys.TIMESTAMP: ts_int,
         "timestamp_iso": timestamp_iso,
         "received_at_iso": received_at_iso,
-        "smoke": smoke_val,
-        "status": status_str,
-        # Real-time online flag derived from last_seen freshness. This helps the
-        # frontend transition devices (especially slaves) to offline without
-        # waiting for a full REST refresh.
+        MQTTPayloadKeys.SMOKE: smoke_val,
+        MQTTPayloadKeys.STATUS: status_str,
+        # Derive online status from last_seen freshness (defined in Device.is_online property)
+        # This allows frontend to show real-time offline transitions without API polling
         "online": bool(getattr(device_obj, "is_online", False)),
     }
-    # Include mesh alert flag so clients can reflect group state reliably
+
+    # Add mesh alert flag to show group-wide alert state
+    # This helps users see if ANY device in their network has high smoke
     try:
         device_payload["mesh_alert"] = bool(_compute_mesh_alert(device_obj))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to compute mesh alert for device {device_id}: {e}")
+        device_payload["mesh_alert"] = False
+
+    # Include GPS coordinates if available
     if pos is not None:
         device_payload["latitude"] = pos["latitude"]
         device_payload["longitude"] = pos["longitude"]
 
+    # Update in-memory cache for snapshot delivery to new WebSocket connections
     DEVICES[device_id] = device_payload
+
+    # Broadcast to all connected WebSocket clients via Channels
     try:
         channel_layer = get_channel_layer()
         if channel_layer is not None:
             async_to_sync(channel_layer.group_send)(
                 "devices", {"type": "device.update", "device": device_payload}
             )
-    except Exception:
-        # Non-fatal in tests or when channels is not configured
-        pass
+            logger.debug(f"Broadcasted update for device {device_id}")
+    except ImportError:
+        # Channels not configured - expected in test environments
+        logger.debug("Channels not available for broadcast")
+    except Exception as e:
+        # Non-fatal: WebSocket broadcast failures shouldn't break telemetry ingestion
+        logger.warning(f"Failed to broadcast update for device {device_id}: {e}")
 
 
 def process_payload(payload: dict) -> None:

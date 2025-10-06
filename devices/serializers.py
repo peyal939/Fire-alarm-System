@@ -4,6 +4,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from .models import Device, Telemetry, Alert
+from .constants import AlertType, DeviceStatus
 from django.db import models
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
@@ -77,7 +78,7 @@ class DeviceSerializer(serializers.ModelSerializer):
                 return False
             return Alert.objects.filter(
                 device_id__in=member_ids,
-                alert_type="smoke_high",
+                alert_type=AlertType.SMOKE_HIGH,
                 status=Alert.Status.OPEN,
             ).exists()
         except Exception:
@@ -91,8 +92,8 @@ class DeviceSerializer(serializers.ModelSerializer):
         can display an authoritative offline state when last_seen expired.
         """
         if not getattr(obj, "is_online", False):
-            return "offline"
-        return obj.status or "unknown"
+            return DeviceStatus.OFFLINE
+        return obj.status or DeviceStatus.UNKNOWN
 
 
 class DeviceRegisterSerializer(serializers.Serializer):
