@@ -12,6 +12,7 @@ import json
 import logging
 import threading
 import datetime as dt
+import time
 from typing import Optional, Tuple, List, Dict, Any
 from decimal import Decimal
 
@@ -37,6 +38,25 @@ from .consumers import DEVICES
 
 logger = logging.getLogger(__name__)
 _thread_started = False
+
+# MQTT connection status tracking for health checks
+_mqtt_status = {
+    "connected": False,
+    "last_message_time": None,
+    "connection_time": None,
+    "error": None,
+    "broker": None,
+    "port": None,
+}
+
+
+def get_mqtt_status():
+    """Return current MQTT connection status for health checks.
+
+    Returns:
+        dict: Status information including connection state, timestamps, and errors
+    """
+    return _mqtt_status.copy()
 
 
 def _fmt12(dtobj: dt.datetime) -> str:
@@ -504,6 +524,15 @@ def process_payload(payload: dict) -> None:
 
 
 def ensure_mqtt_thread():
+    """Start MQTT client thread with auto-reconnect and health monitoring.
+
+    This function starts a background thread that:
+    - Connects to the MQTT broker
+    - Subscribes to telemetry topics
+    - Processes incoming device messages
+    - Automatically reconnects on failure
+    - Tracks connection status for health checks
+    """
     global _thread_started
     if _thread_started:
         return
@@ -521,22 +550,81 @@ def ensure_mqtt_thread():
             "longitude": float(device.longitude),
         }
 
+    def on_connect(client, userdata, flags, rc):
+        """Callback when MQTT client connects to broker."""
+        if rc == 0:
+            _mqtt_status["connected"] = True
+            _mqtt_status["connection_time"] = time.time()
+            _mqtt_status["error"] = None
+            _mqtt_status["broker"] = settings.MQTT_BROKER
+            _mqtt_status["port"] = settings.MQTT_PORT
+            logger.info(
+                f"✅ MQTT connected to {settings.MQTT_BROKER}:{settings.MQTT_PORT} "
+                f"on topic '{settings.MQTT_TOPIC}'"
+            )
+        else:
+            _mqtt_status["connected"] = False
+            error_msgs = {
+                1: "Incorrect protocol version",
+                2: "Invalid client identifier",
+                3: "Server unavailable",
+                4: "Bad username or password",
+                5: "Not authorized",
+            }
+            error_msg = error_msgs.get(rc, f"Unknown error code {rc}")
+            _mqtt_status["error"] = error_msg
+            logger.error(f"❌ MQTT connection failed: {error_msg} (code {rc})")
+
+    def on_disconnect(client, userdata, rc):
+        """Callback when MQTT client disconnects from broker."""
+        _mqtt_status["connected"] = False
+        if rc != 0:
+            logger.warning(
+                f"⚠️ MQTT unexpected disconnect (code {rc}). Will auto-reconnect..."
+            )
+        else:
+            logger.info("MQTT disconnected normally")
+
     def on_message(client, userdata, msg):
+        """Callback when MQTT message received."""
+        _mqtt_status["last_message_time"] = time.time()
         raw = msg.payload.decode(errors="ignore").strip()
         try:
             payload = json.loads(raw)
             process_payload(payload)
         except Exception as e:
-            logging.error(f"Failed to process MQTT message: {e}; raw={raw}")
+            logger.error(f"Failed to process MQTT message: {e}; raw={raw}")
 
     def run():
-        client = mqtt.Client()
-        if settings.MQTT_USER:
-            client.username_pw_set(settings.MQTT_USER, settings.MQTT_PASS)
-        client.on_message = on_message
-        client.connect(settings.MQTT_BROKER, settings.MQTT_PORT, 60)
-        client.subscribe(settings.MQTT_TOPIC)
-        client.loop_forever()
+        """Main MQTT thread loop with auto-reconnect."""
+        while True:
+            try:
+                logger.info(
+                    f"🔄 Attempting MQTT connection to "
+                    f"{settings.MQTT_BROKER}:{settings.MQTT_PORT}"
+                )
 
-    t = threading.Thread(target=run, daemon=True)
+                client = mqtt.Client()
+                if settings.MQTT_USER:
+                    client.username_pw_set(settings.MQTT_USER, settings.MQTT_PASS)
+
+                client.on_connect = on_connect
+                client.on_disconnect = on_disconnect
+                client.on_message = on_message
+
+                # Connect and subscribe
+                client.connect(settings.MQTT_BROKER, settings.MQTT_PORT, 60)
+                client.subscribe(settings.MQTT_TOPIC)
+
+                # Blocking loop - will exit on disconnect
+                client.loop_forever()
+
+            except Exception as e:
+                _mqtt_status["connected"] = False
+                _mqtt_status["error"] = str(e)
+                logger.error(f"❌ MQTT thread crashed: {e}. Retrying in 10s...")
+                time.sleep(10)  # Wait before retry
+
+    t = threading.Thread(target=run, daemon=True, name="MQTT-Client")
     t.start()
+    logger.info("🚀 MQTT background thread started")
