@@ -60,7 +60,19 @@ class Order(AuditSoftDeleteModel):
         Package, on_delete=models.PROTECT, related_name="orders"
     )
     quantity = models.PositiveIntegerField()
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    # renamed from total_amount -> amount
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    # external/payment provider reference (e.g. SurjoPay order id)
+    reference = models.CharField(max_length=128, blank=True)
+
+    # currency and customer details
+    currency = models.CharField(max_length=8, default="BDT")
+    customer_name = models.CharField(max_length=128, blank=True)
+    customer_address = models.TextField(blank=True)
+    customer_phone = models.CharField(max_length=32, blank=True)
+    customer_city = models.CharField(max_length=64, blank=True)
+    customer_post_code = models.CharField(max_length=32, blank=True)
+    customer_email = models.CharField(max_length=254, blank=True)
     order_status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.PENDING
     )

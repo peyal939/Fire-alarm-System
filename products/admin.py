@@ -14,10 +14,14 @@ class OrderAdmin(admin.ModelAdmin):
         "id",
         "user",
         "package",
+        "reference",
         "quantity",
-        "total_amount",
+        "amount",
+        "currency",
+        "customer_name",
         "order_status",
         "ordered_at",
     )
     list_filter = ("order_status", "package")
-    search_fields = ("id", "gateway_transaction_id")
+    search_fields = ("id", "gateway_transaction_id", "reference", "customer_name", "customer_phone")
+    readonly_fields = ("gateway_response", "ordered_at")

@@ -54,6 +54,20 @@
               <textarea class="form-control" rows="2" id="orderAddr" placeholder="Please provide your device address"></textarea>
             </div>
             <div class="mb-3">
+              <label class="form-label">Currency</label>
+              <input class="form-control" id="orderCurrency" value="BDT" />
+            </div>
+            <hr />
+            <h6 class="small mb-2">Customer (optional)</h6>
+            <div class="mb-3">
+              <input class="form-control mb-2" id="customerName" placeholder="Name" />
+              <input class="form-control mb-2" id="customerPhone" placeholder="Phone" />
+              <input class="form-control mb-2" id="customerCity" placeholder="City" />
+              <input class="form-control mb-2" id="customerPostCode" placeholder="Post code" />
+              <input class="form-control mb-2" id="customerEmail" placeholder="Email" />
+              <textarea class="form-control" rows="2" id="customerAddress" placeholder="Customer address"></textarea>
+            </div>
+            <div class="mb-3">
               <div class="text-muted small" id="calcTotal">Total: —</div>
             </div>
             <button class="btn btn-primary w-100" type="submit" id="orderSubmit" disabled>Create Order</button>
@@ -83,6 +97,13 @@
   const orderPackage = document.getElementById('orderPackage');
   const orderQty = document.getElementById('orderQty');
   const orderAddr = document.getElementById('orderAddr');
+  const orderCurrency = document.getElementById('orderCurrency');
+  const customerName = document.getElementById('customerName');
+  const customerAddress = document.getElementById('customerAddress');
+  const customerPhone = document.getElementById('customerPhone');
+  const customerCity = document.getElementById('customerCity');
+  const customerPostCode = document.getElementById('customerPostCode');
+  const customerEmail = document.getElementById('customerEmail');
   const orderSubmit = document.getElementById('orderSubmit');
   const orderMsg = document.getElementById('orderMsg');
   const calcTotal = document.getElementById('calcTotal');
@@ -201,9 +222,9 @@
     const pkgName = (order.package && order.package.name)
         ? order.package.name
         : (pkgMap[order.package] && pkgMap[order.package].name) || `Package`;
-    const total = order.total_amount !== undefined
-        ? formatMoney(order.total_amount)
-        : (pkgMap[order.package] ? formatMoney(pkgMap[order.package].price_per_device * order.quantity) : '—');
+  const total = order.amount !== undefined
+    ? formatMoney(order.amount)
+    : (pkgMap[order.package] ? formatMoney(pkgMap[order.package].price_per_device * order.quantity) : '—');
     const created = order.ordered_at || order.created_at || '';
     const card = document.createElement('div');
     card.className = 'card border-success-subtle';
@@ -214,6 +235,8 @@
           <div><span class="text-muted">Package:</span> ${escapeHtml(pkgName)}</div>
           <div><span class="text-muted">Quantity:</span> ${order.quantity}</div>
           <div><span class="text-muted">Total:</span> ${total}</div>
+          ${order.customer_name ? `<div><span class="text-muted">Customer:</span> ${escapeHtml(order.customer_name)}</div>` : ''}
+          ${order.customer_phone ? `<div><span class="text-muted">Phone:</span> ${escapeHtml(order.customer_phone)}</div>` : ''}
           ${order.shipping_address ? `<div><span class="text-muted">Address:</span> ${escapeHtml(order.shipping_address)}</div>` : ''}
           ${created ? `<div class="text-muted">Time: ${escapeHtml(created)}</div>` : ''}
         </div>
@@ -231,17 +254,31 @@
     if (orderSubmit.disabled) return;
     orderMsg.textContent = '';
     orderMsg.className = 'mt-3 small';
-    const pkgId = orderPackage.value;
-    const qty = parseInt(orderQty.value, 10);
-    const addr = orderAddr.value.trim();
+  const pkgId = orderPackage.value;
+  const qty = parseInt(orderQty.value, 10);
+  const addr = orderAddr.value.trim();
+  const currency = orderCurrency.value.trim() || 'BDT';
+  const cName = customerName.value.trim();
+  const cAddr = customerAddress.value.trim();
+  const cPhone = customerPhone.value.trim();
+  const cCity = customerCity.value.trim();
+  const cPost = customerPostCode.value.trim();
+  const cEmail = customerEmail.value.trim();
     orderSubmit.disabled = true;
     orderSubmit.textContent = 'Creating…';
     try {
       const body = {
         package_id: parseInt(pkgId, 10),
         quantity: qty,
+        currency: currency,
       };
       if (addr) body.shipping_address = addr;
+      if (cName) body.customer_name = cName;
+      if (cAddr) body.customer_address = cAddr;
+      if (cPhone) body.customer_phone = cPhone;
+      if (cCity) body.customer_city = cCity;
+      if (cPost) body.customer_post_code = cPost;
+      if (cEmail) body.customer_email = cEmail;
       const res = await apiPost(`/orders/${userId}/`, body);
       orderMsg.classList.add('text-success');
       orderMsg.textContent = `Order ${res.id} created.`;

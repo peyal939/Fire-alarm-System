@@ -6,9 +6,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from django.utils import timezone
+from django.db import models
 from common.permissions import IsOwnerOrSuperadmin
 from .models import Package, Order
 from .serializers import PackageSerializer, OrderSerializer, OrderCreateSerializer
+
+# ensure signals are imported / registered
+from . import signals
 
 
 @extend_schema(tags=["Packages"])
@@ -48,11 +52,74 @@ def _apply_order_patch(instance: Order, data: dict) -> Order:
     ser.is_valid(raise_exception=True)
     updated = ser.save()
     if updated.package_id != old_package_id or updated.quantity != old_quantity:
-        updated.total_amount = updated.package.price_per_device * Decimal(
+        updated.amount = updated.package.price_per_device * Decimal(
             updated.quantity
         )
-        updated.save(update_fields=["total_amount"])
+        updated.save(update_fields=["amount"])
     return updated
+
+
+@extend_schema(
+    tags=["Orders"],
+    summary="Payment notification webhook - receive provider order id to mark pending order paid",
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string"},
+                "transaction_id": {"type": "string"},
+                "gateway_response": {"type": "object"},
+            },
+            "required": ["order_id"],
+        }
+    },
+    responses={200: None, 400: None},
+)
+class OrderIdNotifyView(APIView):
+    """
+    Webhook to receive the provider (SurjoPay) order id after successful payment.
+
+    Expected JSON:
+      {
+        "order_id": "provider-generated-id-or-our-integer-id",
+        "transaction_id": "tx_abc123",         # optional
+        "gateway_response": {...}              # optional
+      }
+
+    This sends the `payment_received` signal. A receiver will mark the order
+    as paid if it is currently pending.
+    """
+
+    authentication_classes = []  # adjust if you want auth
+    permission_classes = []  # open endpoint; adjust if needed
+
+    def post(self, request):
+        if not isinstance(request.data, dict):
+            return Response({"detail": "Payload must be an object"}, status=400)
+        provider_order_id = request.data.get("order_id")
+        if not provider_order_id:
+            return Response({"detail": "order_id is required"}, status=400)
+        transaction_id = request.data.get("transaction_id")
+        gateway_response = request.data.get("gateway_response", None)
+
+        # Fire signal; receiver will update DB if matching pending orders exist
+        from .signals import payment_received
+
+        payment_received.send(
+            sender=self.__class__,
+            provider_order_id=str(provider_order_id),
+            transaction_id=transaction_id,
+            gateway_response=gateway_response,
+        )
+
+        # indicate whether any order was marked paid
+        marked_paid = Order.objects.filter(
+            deleted_at__isnull=True, order_status=Order.Status.PAID
+        ).filter(
+            models.Q(reference=str(provider_order_id))
+            | models.Q(id__exact=provider_order_id if str(provider_order_id).isdigit() else None)
+        ).exists()
+        return Response({"provider_order_id": provider_order_id, "marked_paid": marked_paid}, status=200)
 
 
 @extend_schema(
