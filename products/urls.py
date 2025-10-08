@@ -5,6 +5,7 @@ from .views import (
     PackageViewSet,
     UserOrderListView,
     UserOrderDetailView,
+    OrderIdNotifyView,
 )
 
 router = DefaultRouter()
@@ -19,4 +20,6 @@ urlpatterns = [
         UserOrderDetailView.as_view(),
         name="user-order-detail",
     ),
+    # webhook to receive external provider order id after payment
+    path("orders/payment/notify/", OrderIdNotifyView.as_view(), name="orderid-notify"),
 ]

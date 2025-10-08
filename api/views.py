@@ -27,20 +27,100 @@ def healthz(request):
 
 @extend_schema(
     tags=["System"],
-    summary="Readiness probe",
+    summary="Readiness probe with component health checks",
     responses={
         200: OpenApiResponse(
             response=OpenApiTypes.OBJECT,
-            description="Service is ready",
+            description="Service is ready with all components healthy",
             examples=[
-                OpenApiExample("ready", value={"status": "ready"}, response_only=True)
+                OpenApiExample(
+                    "healthy",
+                    value={
+                        "status": "healthy",
+                        "timestamp": 1728234567.89,
+                        "checks": {
+                            "database": {"status": "ok"},
+                            "mqtt": {"status": "ok", "connected": True},
+                        },
+                    },
+                    response_only=True,
+                )
             ],
-        )
+        ),
+        503: OpenApiResponse(
+            description="Service unavailable - critical components failing"
+        ),
     },
 )
 @api_view(["GET"])
 def readyz(request):
-    return Response({"status": "ready"})
+    """
+    Comprehensive health check endpoint for monitoring.
+
+    Returns status of:
+    - Database connectivity
+    - MQTT connection status
+    - Application health
+
+    Use this endpoint for:
+    - Load balancer health checks
+    - Monitoring/alerting systems
+    - DevOps dashboards
+    """
+    import time
+    from django.db import connection
+    from rest_framework import status
+
+    health = {"status": "healthy", "timestamp": time.time(), "checks": {}}
+
+    # Database check
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        health["checks"]["database"] = {
+            "status": "ok",
+            "message": "Database connection successful",
+        }
+    except Exception as e:
+        health["checks"]["database"] = {"status": "error", "error": str(e)}
+        health["status"] = "unhealthy"
+
+    # MQTT check
+    try:
+        from realtime.mqtt import get_mqtt_status
+
+        mqtt_status = get_mqtt_status()
+
+        if mqtt_status["connected"]:
+            health["checks"]["mqtt"] = {
+                "status": "ok",
+                "connected": True,
+                "broker": mqtt_status.get("broker"),
+                "port": mqtt_status.get("port"),
+                "last_message_time": mqtt_status.get("last_message_time"),
+                "connection_time": mqtt_status.get("connection_time"),
+            }
+        else:
+            health["checks"]["mqtt"] = {
+                "status": "error",
+                "connected": False,
+                "error": mqtt_status.get("error", "Not connected"),
+            }
+            health["status"] = "degraded"
+
+    except Exception as e:
+        health["checks"]["mqtt"] = {
+            "status": "error",
+            "error": f"Failed to get MQTT status: {str(e)}",
+        }
+        health["status"] = "degraded"
+
+    # Return appropriate HTTP status code
+    http_status = status.HTTP_200_OK
+    if health["status"] == "unhealthy":
+        http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return Response(health, status=http_status)
 
 
 @extend_schema(

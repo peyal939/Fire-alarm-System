@@ -28,7 +28,15 @@ class OrderSerializer(serializers.ModelSerializer):
             "user",
             "package",
             "quantity",
-            "total_amount",
+            "amount",
+            "currency",
+            "reference",
+            "customer_name",
+            "customer_address",
+            "customer_phone",
+            "customer_city",
+            "customer_post_code",
+            "customer_email",
             "order_status",
             "gateway_transaction_id",
             "gateway_response",
@@ -38,7 +46,8 @@ class OrderSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "user",
-            "total_amount",
+            "amount",
+            "reference",
             "order_status",
             "gateway_transaction_id",
             "gateway_response",
@@ -52,6 +61,14 @@ class OrderCreateSerializer(serializers.Serializer):
     )
     quantity = serializers.IntegerField(min_value=1)
     shipping_address = serializers.CharField(allow_blank=True, required=False)
+    # optional customer info (reference is server-assigned)
+    currency = serializers.CharField(required=False, allow_blank=True, default="BDT")
+    customer_name = serializers.CharField(required=False, allow_blank=True)
+    customer_address = serializers.CharField(required=False, allow_blank=True)
+    customer_phone = serializers.CharField(required=False, allow_blank=True)
+    customer_city = serializers.CharField(required=False, allow_blank=True)
+    customer_post_code = serializers.CharField(required=False, allow_blank=True)
+    customer_email = serializers.EmailField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         package: Package = attrs["package"]
@@ -73,14 +90,28 @@ class OrderCreateSerializer(serializers.Serializer):
         if not user or not user.is_authenticated:
             raise serializers.ValidationError("Authentication required")
         total = package.price_per_device * Decimal(qty)
+        # build kwargs for optional customer/currency fields; reference will be assigned server-side
+        extra = {
+            "currency": validated_data.get("currency", "BDT") or "BDT",
+            "customer_name": validated_data.get("customer_name", ""),
+            "customer_address": validated_data.get("customer_address", ""),
+            "customer_phone": validated_data.get("customer_phone", ""),
+            "customer_city": validated_data.get("customer_city", ""),
+            "customer_post_code": validated_data.get("customer_post_code", ""),
+            "customer_email": validated_data.get("customer_email", ""),
+        }
         order = Order.objects.create(
             user=user,
             package=package,
             quantity=qty,
-            total_amount=total,
+            amount=total,
             created_by=user,
             shipping_address=validated_data.get("shipping_address", ""),
+            **extra,
         )
+        # assign server-side reference to the auto-incremented id (hide from client input)
+        order.reference = str(order.id)
+        order.save(update_fields=["reference"])
         return order
 
     def to_representation(self, instance):

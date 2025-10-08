@@ -327,5 +327,37 @@ The compose file loads environment from `.env`.
 
 ---
 
+## 🚀 Production Deployment
+
+For deploying to production/staging servers, see the comprehensive deployment guide:
+
+**📦 [`deployment_guide/`](./deployment_guide/)**
+
+### Quick Links:
+- **[START HERE - Quick Reference](./deployment_guide/DEPLOYMENT_QUICKREF.md)** - Fast deployment commands and troubleshooting
+- **[Complete Deployment Guide](./deployment_guide/DEPLOYMENT_GUIDE.md)** - Step-by-step instructions from scratch
+- **[Technical Deep-Dive](./deployment_guide/STAGING_DEPLOYMENT_ISSUES_AND_FIXES.md)** - Why things break and how to fix them
+- **[Architecture Diagrams](./deployment_guide/ARCHITECTURE_DIAGRAMS.md)** - Visual system architecture
+- **[Nginx Configuration](./deployment_guide/nginx-config-production.conf)** - Production web server config
+- **[Environment Template](./deployment_guide/.env.production.template)** - Production environment variables
+
+### Key Production Requirements:
+- ✅ Nginx reverse proxy (for static files + WebSocket)
+- ✅ Redis container (for Django Channels)
+- ✅ SSL/TLS certificate (Let's Encrypt/Certbot)
+- ✅ `DEBUG=False` in production `.env`
+- ✅ MQTT health monitoring
+
+The deployment guide covers:
+- Static file serving (fixes admin CSS issues)
+- WebSocket configuration (fixes live updates)
+- MQTT monitoring and auto-restart
+- Health check endpoints
+- Complete troubleshooting guide
+
+**Deployment time: 30-45 minutes** for experienced engineers.
+
+---
+
 ## License
 Internal project. If open-sourcing, add a LICENSE file.
