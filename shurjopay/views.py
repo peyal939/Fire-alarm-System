@@ -13,6 +13,7 @@ from drf_spectacular.types import OpenApiTypes
 
 from .models import PaymentTransaction
 from . import services
+from . import serializers as sz
 
 
 class InitiatePaymentView(APIView):
@@ -255,6 +256,7 @@ class CancelView(APIView):
                 type=str,
             )
         ],
+        responses={200: sz.CancelViewResponseSerializer},
     )
     def get(self, request: HttpRequest):
         order_id = request.query_params.get("order_id", "")
@@ -282,6 +284,10 @@ class StatusView(APIView):
                 type=int,
             )
         ],
+        responses={
+            200: sz.StatusViewResponseSerializer,
+            404: OpenApiResponse(description="Not found"),
+        },
     )
     def get(self, request: HttpRequest):
         try:
