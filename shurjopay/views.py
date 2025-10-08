@@ -284,7 +284,10 @@ class StatusView(APIView):
                 type=int,
             )
         ],
-        responses={200: sz.StatusViewResponseSerializer, 404: OpenApiResponse(description="Not found")},
+        responses={
+            200: sz.StatusViewResponseSerializer,
+            404: OpenApiResponse(description="Not found"),
+        },
     )
     def get(self, request: HttpRequest):
         try:
