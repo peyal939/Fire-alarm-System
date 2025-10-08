@@ -226,6 +226,7 @@ class UserOrderListView(APIView):
         },
         responses={200: OrderSerializer, 400: None, 401: None, 403: None, 404: None},
     )
+    @extend_schema(operation_id="orders_partial_update_for_user")
     def patch(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
             if not request.user or not request.user.is_authenticated:
@@ -255,6 +256,7 @@ class UserOrderListView(APIView):
         updated = _apply_order_patch(order, update_data)
         return Response(OrderSerializer(updated).data, status=200)
 
+    @extend_schema(operation_id="orders_delete_all_for_user")
     def delete(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
             if not request.user or not request.user.is_authenticated:
@@ -323,6 +325,7 @@ class UserOrderDetailView(APIView):
         },
         responses={200: OrderSerializer, 400: None, 401: None, 403: None, 404: None},
     )
+    @extend_schema(operation_id="orders_partial_update_for_user_detail")
     def patch(self, request, user_id: int, order_id: int):
         if not request.user or not request.user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=401)
@@ -343,6 +346,7 @@ class UserOrderDetailView(APIView):
         updated = _apply_order_patch(res, update_data)
         return Response(OrderSerializer(updated).data, status=200)
 
+    @extend_schema(operation_id="orders_destroy_for_user_detail")
     def delete(self, request, user_id: int, order_id: int):
         if not request.user or not request.user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=401)
