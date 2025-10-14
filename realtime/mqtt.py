@@ -23,6 +23,8 @@ from django.db import models
 
 from django.conf import settings
 from django.utils import timezone
+from django.db import close_old_connections
+from django.db.utils import InterfaceError, OperationalError
 
 from devices.models import Device
 from devices import services
@@ -267,6 +269,11 @@ def process_payload(payload: dict) -> None:
     Supports both legacy single-device and composite master/slave payloads.
     Safe to call from tests.
     """
+    try:
+        # Ensure background thread holds a fresh DB connection
+        close_old_connections()
+    except Exception:
+        pass
     # Composite payload from master? Expect an array at 'slaves'
     slaves_part = payload.get("slaves")
     if isinstance(slaves_part, list):
@@ -590,8 +597,17 @@ def ensure_mqtt_thread():
         _mqtt_status["last_message_time"] = time.time()
         raw = msg.payload.decode(errors="ignore").strip()
         try:
+            close_old_connections()
             payload = json.loads(raw)
             process_payload(payload)
+        except (InterfaceError, OperationalError) as e:
+            # Database connection went stale; recycle and retry on next message
+            close_old_connections()
+            logger.error(
+                "Database connection issue while processing MQTT message: %s; raw=%s",
+                e,
+                raw,
+            )
         except Exception as e:
             logger.error(f"Failed to process MQTT message: {e}; raw={raw}")
 
