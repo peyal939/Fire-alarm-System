@@ -20,7 +20,8 @@
                   <th class="text-end">Min</th>
                   <th class="text-end">Max</th>
                   <th class="text-end">Price/Device</th>
-                  <th class="text-end">MRT</th>
+                  <th class="text-end">MRF</th>
+                  <th>Description</th>
                 </tr>
               </thead>
               <tbody id="packagesTbody"></tbody>
@@ -50,12 +51,24 @@
               <div class="invalid-feedback" id="qtyError">Enter valid quantity.</div>
             </div>
             <div class="mb-3">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">Master devices</label>
+                  <input type="number" class="form-control" id="orderMaster" min="0" value="0" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Slave devices</label>
+                  <input type="number" class="form-control" id="orderSlave" min="0" value="0" />
+                </div>
+              </div>
+            </div>
+            <div class="mb-3">
               <label class="form-label">Shipping Address</label>
               <textarea class="form-control" rows="2" id="orderAddr" placeholder="Please provide your device address"></textarea>
             </div>
             <div class="mb-3">
               <label class="form-label">Currency</label>
-              <input class="form-control" id="orderCurrency" value="BDT" />
+              <input class="form-control" id="orderCurrency" value="BDT" maxlength="8" />
             </div>
             <hr />
             <h6 class="small mb-2">Customer (optional)</h6>
@@ -98,6 +111,8 @@
   const orderQty = document.getElementById('orderQty');
   const orderAddr = document.getElementById('orderAddr');
   const orderCurrency = document.getElementById('orderCurrency');
+  const orderMaster = document.getElementById('orderMaster');
+  const orderSlave = document.getElementById('orderSlave');
   const customerName = document.getElementById('customerName');
   const customerAddress = document.getElementById('customerAddress');
   const customerPhone = document.getElementById('customerPhone');
@@ -160,6 +175,7 @@
         <td class="text-end">${p.max_quantity}</td>
         <td class="text-end">${formatMoney(p.price_per_device)}</td>
         <td class="text-end">${formatMoney(p.mrt)}</td>
+        <td>${p.description ? escapeHtml(p.description) : ''}</td>
       </tr>
     `).join('');
   }
@@ -226,6 +242,8 @@
     ? formatMoney(order.amount)
     : (pkgMap[order.package] ? formatMoney(pkgMap[order.package].price_per_device * order.quantity) : '—');
     const created = order.ordered_at || order.created_at || '';
+    const nMaster = order.number_of_master_devices;
+    const nSlave = order.number_of_slave_devices;
     const card = document.createElement('div');
     card.className = 'card border-success-subtle';
     card.innerHTML = `
@@ -234,6 +252,8 @@
           <div><span class="text-muted">Status:</span> <span class="badge bg-secondary">${escapeHtml(order.order_status || 'created')}</span></div>
           <div><span class="text-muted">Package:</span> ${escapeHtml(pkgName)}</div>
           <div><span class="text-muted">Quantity:</span> ${order.quantity}</div>
+          ${Number.isFinite(nMaster) ? `<div><span class="text-muted">Master devices:</span> ${nMaster}</div>` : ''}
+          ${Number.isFinite(nSlave) ? `<div><span class="text-muted">Slave devices:</span> ${nSlave}</div>` : ''}
           <div><span class="text-muted">Total:</span> ${total}</div>
           ${order.customer_name ? `<div><span class="text-muted">Customer:</span> ${escapeHtml(order.customer_name)}</div>` : ''}
           ${order.customer_phone ? `<div><span class="text-muted">Phone:</span> ${escapeHtml(order.customer_phone)}</div>` : ''}
@@ -247,6 +267,10 @@
 
   orderPackage.addEventListener('change', validateForm);
   orderQty.addEventListener('input', validateForm);
+  orderCurrency.addEventListener('input', () => {
+    // Keep uppercase and within maxlength to match backend constraints
+    orderCurrency.value = (orderCurrency.value || '').toUpperCase().slice(0, 8);
+  });
 
   orderForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -256,6 +280,8 @@
     orderMsg.className = 'mt-3 small';
   const pkgId = orderPackage.value;
   const qty = parseInt(orderQty.value, 10);
+  const master = parseInt(orderMaster.value, 10);
+  const slave = parseInt(orderSlave.value, 10);
   const addr = orderAddr.value.trim();
   const currency = orderCurrency.value.trim() || 'BDT';
   const cName = customerName.value.trim();
@@ -270,6 +296,8 @@
       const body = {
         package_id: parseInt(pkgId, 10),
         quantity: qty,
+        number_of_master_devices: Number.isFinite(master) ? master : 1,
+        number_of_slave_devices: Number.isFinite(slave) ? slave : 1,
         currency: currency,
       };
       if (addr) body.shipping_address = addr;

@@ -28,22 +28,37 @@ class PackageViewSet(viewsets.ModelViewSet):
         instance: Package = self.get_object()
         instance.deleted_at = timezone.now()
         instance.deleted_by = request.user
-        instance.save(update_fields=["deleted_at", "deleted_by"])
+        instance.updated_by = request.user
+        instance.save(update_fields=["deleted_at", "deleted_by", "updated_by"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_queryset(self):
         return Package.objects.filter(deleted_at__isnull=True)
 
+    def perform_update(self, serializer):  # ensure updated_by is tracked
+        serializer.save(updated_by=self.request.user)
 
-def _apply_order_patch(instance: Order, data: dict) -> Order:
-    """Internal helper to apply mutable field updates and recalc total_amount.
-    Mutable: package, quantity, shipping_address
+
+def _apply_order_patch(instance: Order, data: dict, user=None) -> Order:
+    """Internal helper to apply mutable field updates and recalc amount when needed.
+    Mutable fields:
+      - package
+      - quantity
+      - shipping_address
+      - number_of_master_devices
+      - number_of_slave_devices
     """
     from decimal import Decimal
 
     old_package_id = instance.package_id
     old_quantity = instance.quantity
-    mutable_fields = {"package", "quantity", "shipping_address"}
+    mutable_fields = {
+        "package",
+        "quantity",
+        "shipping_address",
+        "number_of_master_devices",
+        "number_of_slave_devices",
+    }
     cleaned = {}
     for key, value in data.items():
         if key in mutable_fields:
@@ -51,11 +66,15 @@ def _apply_order_patch(instance: Order, data: dict) -> Order:
     ser = OrderSerializer(instance, data=cleaned, partial=True)
     ser.is_valid(raise_exception=True)
     updated = ser.save()
+    fields_to_update = []
     if updated.package_id != old_package_id or updated.quantity != old_quantity:
-        updated.amount = updated.package.price_per_device * Decimal(
-            updated.quantity
-        )
-        updated.save(update_fields=["amount"])
+        updated.amount = updated.package.price_per_device * Decimal(updated.quantity)
+        fields_to_update.append("amount")
+    if user is not None and getattr(user, "is_authenticated", False):
+        updated.updated_by = user
+        fields_to_update.append("updated_by")
+    if fields_to_update:
+        updated.save(update_fields=fields_to_update)
     return updated
 
 
@@ -150,7 +169,11 @@ class UserOrderListView(APIView):
             "shipping_address": "Updated address"  # optional
         }
 
-    Only quantity and shipping_address are mutable now at this endpoint.
+    Mutable fields at this endpoint:
+        - quantity
+        - shipping_address
+        - number_of_master_devices
+        - number_of_slave_devices
     """
 
     permission_classes = [IsOwnerOrSuperadmin]
@@ -220,6 +243,8 @@ class UserOrderListView(APIView):
                     "order_id": {"type": "integer"},
                     "quantity": {"type": "integer", "minimum": 1},
                     "shipping_address": {"type": "string"},
+                    "number_of_master_devices": {"type": "integer", "minimum": 0},
+                    "number_of_slave_devices": {"type": "integer", "minimum": 0},
                 },
                 "required": ["order_id"],
             }
@@ -251,9 +276,13 @@ class UserOrderListView(APIView):
             update_data["quantity"] = request.data["quantity"]
         if "shipping_address" in request.data:
             update_data["shipping_address"] = request.data["shipping_address"]
+        if "number_of_master_devices" in request.data:
+            update_data["number_of_master_devices"] = request.data["number_of_master_devices"]
+        if "number_of_slave_devices" in request.data:
+            update_data["number_of_slave_devices"] = request.data["number_of_slave_devices"]
         if not update_data:
             return Response({"detail": "No mutable fields provided"}, status=400)
-        updated = _apply_order_patch(order, update_data)
+        updated = _apply_order_patch(order, update_data, user=request.user)
         return Response(OrderSerializer(updated).data, status=200)
 
     @extend_schema(operation_id="orders_delete_all_for_user")
@@ -264,7 +293,7 @@ class UserOrderListView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
         qs = Order.objects.filter(user_id=user_id, deleted_at__isnull=True)
         now = timezone.now()
-        updated = qs.update(deleted_at=now, deleted_by=request.user)
+        updated = qs.update(deleted_at=now, deleted_by=request.user, updated_by=request.user)
         return Response({"deleted": updated}, status=200)
 
 
@@ -313,13 +342,15 @@ class UserOrderDetailView(APIView):
         return Response(OrderSerializer(res).data)
 
     @extend_schema(
-        summary="Patch specific order (quantity / shipping_address only)",
+        summary="Patch specific order (quantity / shipping_address / number_of_master_devices / number_of_slave_devices)",
         request={
             "application/json": {
                 "type": "object",
                 "properties": {
                     "quantity": {"type": "integer", "minimum": 1},
                     "shipping_address": {"type": "string"},
+                    "number_of_master_devices": {"type": "integer", "minimum": 0},
+                    "number_of_slave_devices": {"type": "integer", "minimum": 0},
                 },
             }
         },
@@ -341,9 +372,13 @@ class UserOrderDetailView(APIView):
             update_data["quantity"] = request.data["quantity"]
         if "shipping_address" in request.data:
             update_data["shipping_address"] = request.data["shipping_address"]
+        if "number_of_master_devices" in request.data:
+            update_data["number_of_master_devices"] = request.data["number_of_master_devices"]
+        if "number_of_slave_devices" in request.data:
+            update_data["number_of_slave_devices"] = request.data["number_of_slave_devices"]
         if not update_data:
             return Response({"detail": "No mutable fields provided"}, status=400)
-        updated = _apply_order_patch(res, update_data)
+        updated = _apply_order_patch(res, update_data, user=request.user)
         return Response(OrderSerializer(updated).data, status=200)
 
     @extend_schema(operation_id="orders_destroy_for_user_detail")
@@ -357,5 +392,78 @@ class UserOrderDetailView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
         res.deleted_at = timezone.now()
         res.deleted_by = request.user
-        res.save(update_fields=["deleted_at", "deleted_by"])
+        res.updated_by = request.user
+        res.save(update_fields=["deleted_at", "deleted_by", "updated_by"])
         return Response(status=204)
+
+
+@extend_schema(
+    tags=["Orders"],
+    summary="Admin: update order status",
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "order_status": {
+                    "type": "string",
+                    "enum": [s for s, _ in Order.Status.choices],
+                    "description": "New status (pending, paid, cancelled, failed, delivered)",
+                }
+            },
+            "required": ["order_status"],
+        }
+    },
+    responses={200: OrderSerializer, 400: None, 401: None, 403: None, 404: None},
+)
+class AdminOrderStatusUpdateView(APIView):
+    """Endpoint: /orders/update_status/<user_id>/<order_id>/
+
+    Admin-only endpoint to update the order_status of a specific order.
+
+    Body:
+      { "order_status": "paid" }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _is_admin(self, user) -> bool:
+        return bool(
+            user
+            and user.is_authenticated
+            and (user.is_superuser or getattr(user, "role", None) == "superadmin")
+        )
+
+    def post(self, request, user_id: int, order_id: int):
+        if not self._is_admin(request.user):
+            if not request.user or not request.user.is_authenticated:
+                return Response({"detail": "Authentication required"}, status=401)
+            return Response({"detail": "Forbidden"}, status=403)
+        if not isinstance(request.data, dict):
+            return Response({"detail": "Payload must be an object"}, status=400)
+        new_status = request.data.get("order_status")
+        valid_statuses = {s for s, _ in Order.Status.choices}
+        if not new_status or new_status not in valid_statuses:
+            return Response(
+                {
+                    "detail": "Invalid order_status",
+                    "allowed": sorted(list(valid_statuses)),
+                },
+                status=400,
+            )
+        try:
+            order = Order.objects.select_related("package").get(
+                id=order_id,
+                user_id=user_id,
+                deleted_at__isnull=True,
+                package__deleted_at__isnull=True,
+            )
+        except Order.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        # Update only if different
+        if order.order_status != new_status:
+            order.order_status = new_status
+            order.updated_by = request.user
+            order.save(update_fields=["order_status", "updated_by"])
+
+        return Response(OrderSerializer(order).data, status=200)

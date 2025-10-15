@@ -6,6 +6,7 @@ from .views import (
     UserOrderListView,
     UserOrderDetailView,
     OrderIdNotifyView,
+    AdminOrderStatusUpdateView,
 )
 
 router = DefaultRouter()
@@ -22,4 +23,10 @@ urlpatterns = [
     ),
     # webhook to receive external provider order id after payment
     path("orders/payment/notify/", OrderIdNotifyView.as_view(), name="orderid-notify"),
+    # admin: update order status
+    path(
+        "orders/update_status/<int:user_id>/<int:order_id>/",
+        AdminOrderStatusUpdateView.as_view(),
+        name="orders-update-status",
+    ),
 ]
