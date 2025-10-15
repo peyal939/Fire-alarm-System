@@ -22,6 +22,14 @@ class AuditSoftDeleteModel(models.Model):
         on_delete=models.SET_NULL,
         related_name="%(class)s_deleted_by",
     )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="%(class)s_updated_by",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         abstract = True
@@ -32,12 +40,13 @@ class Package(AuditSoftDeleteModel):
     min_quantity = models.PositiveIntegerField(default=1)
     max_quantity = models.PositiveIntegerField()
     price_per_device = models.DecimalField(max_digits=10, decimal_places=2)
-    mrt = models.DecimalField(
+    mrf = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
         help_text="Monthly recurring fee (MRF) for this package",
     )
+    description = models.TextField(blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -52,6 +61,7 @@ class Order(AuditSoftDeleteModel):
         PAID = "paid", "Paid"
         CANCELLED = "cancelled", "Cancelled"
         FAILED = "failed", "Failed"
+        DELIVERED = "delivered", "Delivered"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders"
@@ -59,6 +69,8 @@ class Order(AuditSoftDeleteModel):
     package = models.ForeignKey(
         Package, on_delete=models.PROTECT, related_name="orders"
     )
+    number_of_master_devices = models.PositiveIntegerField(default=1)
+    number_of_slave_devices = models.PositiveIntegerField(default=1)
     quantity = models.PositiveIntegerField()
     # renamed from total_amount -> amount
     amount = models.DecimalField(max_digits=12, decimal_places=2)

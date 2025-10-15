@@ -38,6 +38,7 @@
           <th>Last Seen</th>
           <th>Location</th>
           <th>Owner (email)</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -177,6 +178,73 @@
 
     let allDevices = [];
 
+    if (!window.apiDelete) {
+      const fallbackGetCookie = (name) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return '';
+      };
+      const fallbackCsrf = () => {
+        const fromCookie = fallbackGetCookie('csrftoken');
+        if (fromCookie) return fromCookie;
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return (meta && meta.content) || '';
+      };
+      window.apiDelete = async (url) => {
+        const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin);
+        const headers = { 'Accept': 'application/json' };
+        if (isSameOrigin) {
+          headers['X-CSRFToken'] = fallbackCsrf();
+        }
+        const opts = {
+          method: 'DELETE',
+          headers,
+        };
+        if (isSameOrigin) {
+          opts.credentials = 'same-origin';
+        }
+        const resp = await fetch(url, opts);
+        if (!resp.ok) {
+          let detail = `Request failed (HTTP ${resp.status})`;
+          let body = null;
+          try {
+            const ct = resp.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+              body = await resp.json();
+            } else {
+              body = await resp.text();
+            }
+          } catch (e) {
+            body = null;
+          }
+          if (body) {
+            if (typeof body === 'string' && body.trim()) {
+              detail = body;
+            } else if (body.detail) {
+              detail = body.detail;
+            }
+          }
+          const err = new Error(detail);
+          err.status = resp.status;
+          err.body = body;
+          throw err;
+        }
+        if (resp.status === 204 || resp.status === 205) {
+          return null;
+        }
+        const ct = resp.headers.get('content-type') || '';
+        return ct.includes('application/json') ? resp.json() : resp.text();
+      };
+    }
+
+    const deleteDevice = async (deviceId) => {
+      if (!window.apiDelete) {
+        throw new Error('Device API not ready (apiDelete missing)');
+      }
+      return window.apiDelete(`/devices/${deviceId}/`);
+    };
+
     async function fetchAllDevices() {
       // Fetch first page; if paginated, follow next links
       let url = '/devices/';
@@ -223,17 +291,28 @@
         const displayStatus = (!d.online) ? 'offline' : (d.effective_status || d.status || 'unknown');
         const statusBadgeClass = (!d.online) ? 'bg-secondary' : (displayStatus === 'alive' ? 'bg-success' : 'bg-warning text-dark');
         const statusCell = `<span class="badge ${statusBadgeClass}">${displayStatus}</span>`;
+        const displayName = d.device_name || '';
+        const actions = `
+          <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete" data-device-id="${d.id}">
+            Remove
+          </button>
+        `;
         tr.innerHTML = `
           <td>${d.id}</td>
           <td><code>${d.hardware_identifier || ''}</code></td>
-          <td>${d.device_name || ''}</td>
+          <td>${displayName}</td>
           <td>${roleBadge}</td>
           <td>${masterLabel}</td>
           <td>${statusCell}</td>
           <td>${lastSeen}</td>
           <td>${loc}</td>
           <td>${d.owner_email || ''}</td>
+          <td>${actions}</td>
         `;
+        const deleteBtn = tr.querySelector('button[data-action="delete"]');
+        if (deleteBtn) {
+          deleteBtn.dataset.deviceLabel = displayName || (d.hardware_identifier || 'this device');
+        }
         tableBody.appendChild(tr);
       });
       emptyState.style.display = roleFiltered.length ? 'none' : '';
@@ -365,6 +444,32 @@
   searchInput.addEventListener('input', () => renderDevices());
   roleFilter.addEventListener('change', () => renderDevices());
     refreshBtn.addEventListener('click', () => fetchAllDevices());
+    tableBody.addEventListener('click', async (event) => {
+      const btn = event.target.closest('button[data-action="delete"]');
+      if (!btn) return;
+      event.preventDefault();
+      const deviceId = btn.getAttribute('data-device-id');
+  const deviceLabel = btn.dataset.deviceLabel || 'this device';
+      const confirmed = window.confirm(`Are you sure you want to remove ${deviceLabel}?`);
+      if (!confirmed) return;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Removing…';
+      try {
+        if (!window.apiDelete) {
+          throw new Error('Delete helper unavailable. Please refresh.');
+        }
+        await deleteDevice(deviceId);
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        const msg = (err && err.message) || 'Failed to remove device. Please try again.';
+        alert(msg);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
     registerMasterBtn.addEventListener('click', () => {
       registerMasterForm.reset();
       mapPickerMasterWrap.style.display = 'none';

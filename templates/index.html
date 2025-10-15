@@ -270,6 +270,14 @@
       try { data = JSON.parse(event.data); } catch { return; }
       // Ignore heartbeat echos if any
       if (data && data.type === 'pong') return;
+      if (data && data.type === 'ping') {
+        try {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('{"type":"pong"}');
+          }
+        } catch {}
+        return;
+      }
       const id = data.deviceID;
       if (!id) return;
       // Preserve known metadata (role/master/owner) while updating live fields

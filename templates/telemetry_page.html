@@ -5,7 +5,9 @@
   <div class="d-flex align-items-center justify-content-between mb-2">
     <h1 class="h4 mb-0">Telemetry</h1>
     <div class="d-flex gap-2 align-items-center flex-wrap">
-      <input id="deviceIdInput" class="form-control" placeholder="Device ID (optional)" style="max-width: 200px;" />
+      <select id="deviceSelect" class="form-select" style="min-width: 220px;">
+        <option value="">All devices</option>
+      </select>
       <input id="sinceInput" type="datetime-local" class="form-control" style="max-width: 240px;" />
       <input id="untilInput" type="datetime-local" class="form-control" style="max-width: 240px;" />
       <button id="refreshTelemetryBtn" class="btn btn-outline-secondary">Refresh</button>
@@ -24,13 +26,22 @@
 {% block scripts %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
   <script>
-    const deviceIdInput = document.getElementById('deviceIdInput');
+    const deviceSelect = document.getElementById('deviceSelect');
     const sinceInput = document.getElementById('sinceInput');
     const untilInput = document.getElementById('untilInput');
     const refreshBtn = document.getElementById('refreshTelemetryBtn');
     const empty = document.getElementById('telemetryEmpty');
     let chart;
+
+    const deviceIndex = new Map();
+    const DEFAULT_THRESHOLD = 50;
+    const threshold = Number(window.SMOKE_ALERT_THRESHOLD || DEFAULT_THRESHOLD);
+
+    if (window.Chart && window['chartjs-plugin-annotation']) {
+      Chart.register(window['chartjs-plugin-annotation']);
+    }
 
     function toIsoLocal(dtLocal) {
       if (!dtLocal) return '';
@@ -41,10 +52,53 @@
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     }
 
+    function deviceLabel(deviceId, fallbackHardware) {
+      const info = deviceIndex.get(String(deviceId));
+      if (info) {
+        const name = info.device_name ? ` — ${info.device_name}` : '';
+        return `${info.hardware_identifier}${name}`;
+      }
+      return fallbackHardware || `Device ${deviceId}`;
+    }
+
+    function populateDeviceOptions(devices) {
+      deviceIndex.clear();
+      const options = ['<option value="">All devices</option>'];
+      devices.forEach((device) => {
+        deviceIndex.set(String(device.id), device);
+        const name = device.device_name ? ` — ${device.device_name}` : '';
+        options.push(`<option value="${device.id}">${device.hardware_identifier}${name}</option>`);
+      });
+      deviceSelect.innerHTML = options.join('');
+    }
+
+    async function loadDevices() {
+      try {
+        let url = '/devices/';
+        const items = [];
+        for (let i = 0; i < 10; i++) {
+          const data = await apiGet(url);
+          if (Array.isArray(data)) {
+            items.push(...data);
+            break;
+          }
+          if (Array.isArray(data.results)) {
+            items.push(...data.results);
+          }
+          if (!data.next) break;
+          url = data.next;
+        }
+        populateDeviceOptions(items);
+      } catch (err) {
+        console.error('Failed to load devices', err);
+        populateDeviceOptions([]);
+      }
+    }
+
     async function fetchTelemetry() {
       let url = '/telemetry/';
       const params = [];
-      const dev = (deviceIdInput.value || '').trim();
+    const dev = (deviceSelect.value || '').trim();
       if (dev) params.push(`device=${encodeURIComponent(dev)}`);
       const since = toIsoLocal(sinceInput.value);
       const until = toIsoLocal(untilInput.value);
@@ -66,38 +120,107 @@
     function renderChart(items) {
       if (chart) { chart.destroy(); chart = null; }
       if (!items.length) {
-        empty.textContent = 'No telemetry found. Telemetry is persisted only when smoke > 50.';
+        empty.textContent = 'No telemetry found. Telemetry is persisted only when smoke exceeds the alert threshold.';
         empty.style.display = '';
         return;
       }
       empty.style.display = 'none';
-      // Sort ascending by timestamp for chart
-      items.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-      const labels = items.map(i => new Date(i.timestamp));
-      const smoke = items.map(i => i.smoke_level);
+
+      items.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const labels = items.map((entry) => new Date(entry.timestamp));
+      const smokeLevels = items.map((entry) => entry.smoke_level);
+      const statuses = items.map((entry) => (entry.device_status || '').toLowerCase());
+      const datasetLabel = deviceSelect.value
+        ? `Smoke level — ${deviceLabel(deviceSelect.value)}`
+        : 'Smoke level (all devices)';
+
+      const annotations = {
+        thresholdLine: {
+          type: 'line',
+          yMin: threshold,
+          yMax: threshold,
+          borderColor: '#7b1fa2',
+          borderDash: [6, 6],
+          label: {
+            display: true,
+            content: `Alert threshold (${threshold})`,
+            position: 'start',
+            backgroundColor: 'rgba(123,31,162,0.75)',
+            color: '#fff',
+          },
+        },
+      };
+
+      smokeLevels.forEach((value, idx) => {
+        if (value < threshold) return;
+        annotations[`spike_${idx}`] = {
+          type: 'label',
+          xValue: labels[idx],
+          yValue: value,
+          backgroundColor: 'rgba(229,57,53,0.9)',
+          color: '#fff',
+          content: [`High smoke: ${value}`],
+          font: { weight: 'bold', size: 11 },
+          padding: 6,
+          position: 'end',
+          yAdjust: -12,
+        };
+      });
+
       const ctx = document.getElementById('telemetryChart');
       chart = new Chart(ctx, {
         type: 'line',
         data: {
           labels,
-          datasets: [{ label: 'Smoke Level', data: smoke, borderColor: '#e53935', backgroundColor: 'rgba(229,57,53,0.12)', fill: true, tension: 0.25 }]
+          datasets: [
+            {
+              label: datasetLabel,
+              data: smokeLevels,
+              borderColor: '#e53935',
+              backgroundColor: 'rgba(229,57,53,0.16)',
+              fill: true,
+              tension: 0.25,
+              pointRadius: (context) => (context.raw >= threshold ? 4 : 2),
+              pointBackgroundColor: (context) => (context.raw >= threshold ? '#c62828' : '#f7b6b6'),
+            },
+          ],
         },
         options: {
           responsive: true,
           scales: {
-            x: { type: 'time', time: { unit: 'minute' } },
-            y: { beginAtZero: true }
+            x: {
+              type: 'time',
+              time: { unit: 'minute', tooltipFormat: 'PPpp' },
+              title: { display: true, text: 'Timestamp' },
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Smoke level' },
+            },
           },
-          plugins: { legend: { display: true } }
-        }
+          plugins: {
+            legend: { display: true },
+            annotation: { annotations },
+            tooltip: {
+              callbacks: {
+                title: (items) => (items.length ? new Date(items[0].parsed.x).toLocaleString() : ''),
+                label: (context) => {
+                  const value = context.parsed.y;
+                  const status = statuses[context.dataIndex] || 'unknown';
+                  return `Smoke: ${value} | Status: ${status}`;
+                },
+              },
+            },
+          },
+        },
       });
     }
 
     refreshBtn.addEventListener('click', fetchTelemetry);
-    deviceIdInput.addEventListener('change', fetchTelemetry);
+    deviceSelect.addEventListener('change', fetchTelemetry);
     sinceInput.addEventListener('change', fetchTelemetry);
     untilInput.addEventListener('change', fetchTelemetry);
 
-    fetchTelemetry();
-  </script>
+    loadDevices().finally(fetchTelemetry);
+  </script>  
 {% endblock %}

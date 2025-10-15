@@ -15,7 +15,8 @@ class PackageSerializer(serializers.ModelSerializer):
             "min_quantity",
             "max_quantity",
             "price_per_device",
-            "mrt",
+            "mrf",
+            "description",
         )
         read_only_fields = ("id",)
 
@@ -27,6 +28,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "package",
+            "number_of_master_devices",
+            "number_of_slave_devices",
             "quantity",
             "amount",
             "currency",
@@ -60,6 +63,8 @@ class OrderCreateSerializer(serializers.Serializer):
         queryset=Package.objects.all(), source="package"
     )
     quantity = serializers.IntegerField(min_value=1)
+    number_of_master_devices = serializers.IntegerField(min_value=0, default=1)
+    number_of_slave_devices = serializers.IntegerField(min_value=0, default=1)
     shipping_address = serializers.CharField(allow_blank=True, required=False)
     # optional customer info (reference is server-assigned)
     currency = serializers.CharField(required=False, allow_blank=True, default="BDT")
@@ -69,6 +74,16 @@ class OrderCreateSerializer(serializers.Serializer):
     customer_city = serializers.CharField(required=False, allow_blank=True)
     customer_post_code = serializers.CharField(required=False, allow_blank=True)
     customer_email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate_currency(self, value: str) -> str:
+        # Normalize and enforce DB max length for currency to prevent 500s
+        v = (value or "BDT").strip().upper()
+        max_len = Order._meta.get_field("currency").max_length
+        if len(v) > max_len:
+            raise serializers.ValidationError(
+                f"Currency must be at most {max_len} characters."
+            )
+        return v or "BDT"
 
     def validate(self, attrs):
         package: Package = attrs["package"]

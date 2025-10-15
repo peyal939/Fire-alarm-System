@@ -5,6 +5,21 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
+from rest_framework.permissions import IsAuthenticated
+
+
+class DocsPermission(IsAuthenticated):
+    """Allow access only to authenticated superusers or users with role=superadmin."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        user = request.user
+        return bool(
+            getattr(user, "is_superuser", False)
+            or getattr(user, "role", "") == "superadmin"
+        )
+
 
 urlpatterns = [
     path("healthz", views.healthz),
@@ -13,15 +28,23 @@ urlpatterns = [
     path("auth/", include("accounts.urls")),
     path("", include("devices.urls")),
     # OpenAPI schema and docs
-    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "schema/",
+        SpectacularAPIView.as_view(permission_classes=[DocsPermission]),
+        name="schema",
+    ),
     path(
         "docs/",
-        SpectacularSwaggerView.as_view(url_name="schema"),
+        SpectacularSwaggerView.as_view(
+            url_name="schema", permission_classes=[DocsPermission]
+        ),
         name="swagger-ui",
     ),
     path(
         "redoc/",
-        SpectacularRedocView.as_view(url_name="schema"),
+        SpectacularRedocView.as_view(
+            url_name="schema", permission_classes=[DocsPermission]
+        ),
         name="redoc",
     ),
 ]
