@@ -93,8 +93,8 @@ class Device(AuditSoftDeleteModel):
             models.Index(fields=["device_role"]),
             models.Index(fields=["master"]),
         ]
-        # Default ordering ensures stable pagination and removes DRF warning
-        ordering = ["-registered_at"]
+        # Default ordering surfaces most recently active devices first while preserving stability
+        ordering = ["-last_seen", "-registered_at"]
         constraints = [
             # If role is master, master FK must be NULL
             models.CheckConstraint(
