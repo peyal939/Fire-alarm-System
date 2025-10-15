@@ -6,11 +6,13 @@
     <h1 class="h4 mb-0">Alerts</h1>
     <div class="d-flex gap-2 align-items-center flex-wrap">
       <select id="statusFilter" class="form-select" style="max-width: 180px;">
-        <option value="">All Status</option>
-        <option value="open">Open</option>
-        <option value="resolved">Resolved</option>
+        <option value="">All status</option>
+        <option value="open">Open only</option>
+        <option value="resolved">Resolved only</option>
       </select>
-      <input id="deviceFilter" class="form-control" placeholder="Device ID (optional)" style="max-width: 200px;" />
+      <select id="deviceFilter" class="form-select" style="min-width: 220px;">
+        <option value="">All devices</option>
+      </select>
       <button id="refreshAlertsBtn" class="btn btn-outline-secondary">Refresh</button>
     </div>
   </div>
@@ -19,11 +21,11 @@
     <table class="table table-striped align-middle" id="alertsTable">
       <thead>
         <tr>
-          <th>ID</th>
           <th>Device</th>
-          <th>Type</th>
+          <th>Alert</th>
           <th>Status</th>
           <th>Triggered</th>
+          <th>Resolved</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -41,6 +43,69 @@
     const statusFilter = document.getElementById('statusFilter');
     const deviceFilter = document.getElementById('deviceFilter');
     const refreshBtn = document.getElementById('refreshAlertsBtn');
+
+    const deviceIndex = new Map();
+    const ALERT_LABELS = {
+      smoke_high: 'High smoke detected',
+    };
+
+    const STATUS_LABELS = {
+      open: { text: 'Open', badge: 'bg-danger' },
+      resolved: { text: 'Resolved', badge: 'bg-success' },
+    };
+
+    function formatDate(value) {
+      if (!value) return '—';
+      try {
+        return new Date(value).toLocaleString();
+      } catch (err) {
+        return value;
+      }
+    }
+
+    function deviceLabel(alert) {
+      const info = deviceIndex.get(String(alert.device));
+      if (info) {
+        const name = info.device_name ? ` — ${info.device_name}` : '';
+        return `<strong>${info.hardware_identifier}</strong>${name}`;
+      }
+      if (alert.device_hardware_identifier) {
+        return `<strong>${alert.device_hardware_identifier}</strong>`;
+      }
+      return 'Unknown device';
+    }
+
+    async function loadDevices() {
+      try {
+        let url = '/devices/';
+        const items = [];
+        for (let i = 0; i < 10; i++) {
+          const data = await apiGet(url);
+          if (Array.isArray(data)) {
+            items.push(...data);
+            break;
+          }
+          if (Array.isArray(data.results)) {
+            items.push(...data.results);
+          }
+          if (!data.next) break;
+          url = data.next;
+        }
+        deviceIndex.clear();
+        items.forEach((device) => {
+          deviceIndex.set(String(device.id), device);
+        });
+        deviceFilter.innerHTML = '<option value="">All devices</option>' + items
+          .map((device) => {
+            const name = device.device_name ? ` — ${device.device_name}` : '';
+            return `<option value="${device.id}">${device.hardware_identifier}${name}</option>`;
+          })
+          .join('');
+      } catch (err) {
+        console.error('Failed to load device list', err);
+        deviceFilter.innerHTML = '<option value="">All devices</option>'; // keep default
+      }
+    }
 
     async function fetchAlerts() {
       let url = '/alerts/';
@@ -63,17 +128,18 @@
 
     function renderAlerts(items) {
       tbody.innerHTML = '';
-      items.forEach(a => {
+      items.forEach((alert) => {
         const tr = document.createElement('tr');
-        const triggered = a.triggered_at ? new Date(a.triggered_at).toLocaleString() : '—';
+        const statusInfo = STATUS_LABELS[alert.status] || { text: alert.status || 'Unknown', badge: 'bg-secondary' };
+        const alertLabel = ALERT_LABELS[alert.alert_type] || (alert.alert_type ? alert.alert_type.replace(/_/g, ' ') : 'Alert');
         tr.innerHTML = `
-          <td>${a.id}</td>
-          <td>${a.device || ''}</td>
-          <td><code>${a.alert_type || ''}</code></td>
-          <td>${a.status || ''}</td>
-          <td>${triggered}</td>
+          <td>${deviceLabel(alert)}</td>
+          <td>${alertLabel}</td>
+          <td><span class="badge ${statusInfo.badge}">${statusInfo.text}</span></td>
+          <td>${formatDate(alert.triggered_at)}</td>
+          <td>${formatDate(alert.resolved_at)}</td>
           <td>
-            ${a.status === 'open' ? `<button class="btn btn-sm btn-outline-success" data-action="resolve" data-id="${a.id}">Resolve</button>` : ''}
+            ${alert.status === 'open' ? `<button class="btn btn-sm btn-outline-success" data-action="resolve" data-id="${alert.id}">Resolve</button>` : ''}
           </td>
         `;
         tbody.appendChild(tr);
@@ -101,6 +167,6 @@
     deviceFilter.addEventListener('change', fetchAlerts);
     refreshBtn.addEventListener('click', fetchAlerts);
 
-    fetchAlerts();
+    loadDevices().finally(fetchAlerts);
   </script>
 {% endblock %}

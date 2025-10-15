@@ -35,11 +35,40 @@
       }
     }
     const resp = await fetch(url, opts);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) {
+      let detail = `Request failed (HTTP ${resp.status})`;
+      let payload = null;
+      try {
+        const ct = resp.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          payload = await resp.json();
+        } else {
+          payload = await resp.text();
+        }
+      } catch (e) {
+        payload = null;
+      }
+      if (payload) {
+        if (typeof payload === 'string' && payload.trim()) {
+          detail = payload;
+        } else if (payload.detail) {
+          detail = payload.detail;
+        }
+      }
+      const err = new Error(detail);
+      err.status = resp.status;
+      err.body = payload;
+      throw err;
+    }
+    const hasBody = resp.status !== 204 && resp.status !== 205;
+    if (!hasBody) {
+      return null;
+    }
     const ct = resp.headers.get('content-type') || '';
     return ct.includes('application/json') ? resp.json() : resp.text();
   }
 
   window.apiGet = (url) => apiFetch(url, { method: 'GET' });
   window.apiPost = (url, body) => apiFetch(url, { method: 'POST', body: JSON.stringify(body || {}) });
+  window.apiDelete = (url) => apiFetch(url, { method: 'DELETE' });
 })();
