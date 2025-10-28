@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import logging
 
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import status, viewsets, filters
 from django.conf import settings
@@ -17,6 +19,8 @@ from drf_spectacular.utils import (
     OpenApiResponse,
     OpenApiTypes,
 )
+
+from . import services
 from .models import Device, Telemetry, Alert
 from .serializers import (
     DeviceSerializer,
@@ -24,10 +28,47 @@ from .serializers import (
     AlertSerializer,
     DeviceRegisterSerializer,
     DeviceTreeSerializer,
+    DevicePhoneUpdateSerializer,
 )
+from .constants import DeviceConfigurationPublishError
+
+logger = logging.getLogger(__name__)
 
 
-@extend_schema(tags=["Devices"])
+def _broadcast_new_device(device: Device) -> None:
+    """Push newly registered device state to real-time subscribers."""
+
+    try:
+        from realtime.mqtt import _broadcast_device_update
+        from devices.constants import DeviceStatus
+
+        latest = Telemetry.objects.filter(device=device).order_by("-timestamp").first()
+
+        ts_int = None
+        ts_dt = timezone.now()
+        smoke_val = 0
+
+        if latest:
+            ts_int = int(latest.timestamp.timestamp())
+            ts_dt = latest.timestamp
+            smoke_val = latest.smoke_level
+
+        _broadcast_device_update(
+            device,
+            device_id=device.hardware_identifier,
+            ts_int=ts_int,
+            ts_dt=ts_dt,
+            smoke_val=smoke_val,
+            status_str=device.status or DeviceStatus.OFFLINE,
+        )
+    except Exception as exc:  # pragma: no cover - broadcast failure shouldn't block
+        logger.warning(
+            "Failed to broadcast device %s registration update: %s",
+            device.hardware_identifier,
+            exc,
+        )
+
+
 class DeviceViewSet(viewsets.ModelViewSet):
     serializer_class = DeviceSerializer
     # Require authentication first to avoid AnonymousUser reaching queryset resolution
@@ -47,6 +88,30 @@ class DeviceViewSet(viewsets.ModelViewSet):
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
         return base.filter(user=user)
+
+    def list(self, request, *args, **kwargs):
+        """List all devices with ordering: online devices first, then offline.
+
+        Since is_online is a computed property based on last_seen, we order by:
+        1. last_seen DESC (nulls last) - puts recently active devices first
+        2. This effectively shows online devices at the top
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Order by last_seen descending (most recent first), nulls last
+        # This puts online devices (recently seen) at the top
+        queryset = queryset.order_by(
+            models.F("last_seen").desc(nulls_last=True),
+            "-registered_at",  # Secondary sort by registration time
+        )
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):  # disable default create
         return Response(
@@ -133,11 +198,14 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         # Note: new device registration requires lat/lon via serializer validation
 
-        # Enforce unique ownership
+        # Check for existing device (including soft-deleted ones)
+        # First check active devices
         existing = Device.objects.filter(
             hardware_identifier=hid, deleted_at__isnull=True
         ).first()
+
         if existing:
+            # Active device exists - update it if allowed
             if existing.user != request.user and not (
                 request.user.is_superuser
                 or getattr(request.user, "role", None) == "superadmin"
@@ -152,10 +220,50 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 existing.latitude = lat_dec
             if lon_dec is not None:
                 existing.longitude = lon_dec
+            # Update role and master if provided
+            if role:
+                existing.device_role = role
+            if role == Device.DeviceRole.SLAVE and master:
+                existing.master = master
+            elif role == Device.DeviceRole.MASTER:
+                existing.master = None
             existing.save()
+
+            # Broadcast the updated device to WebSocket clients
+            _broadcast_new_device(existing)
+
             return Response(DeviceSerializer(existing).data, status=200)
 
-        # Create new and assign to current user
+        # Check for soft-deleted device with the same hardware_identifier
+        soft_deleted = Device.objects.filter(
+            hardware_identifier=hid, deleted_at__isnull=False
+        ).first()
+
+        if soft_deleted:
+            # Un-delete (restore) the device and reassign to current user
+            soft_deleted.deleted_at = None
+            soft_deleted.deleted_by = None
+            soft_deleted.user = request.user
+            soft_deleted.created_by = request.user
+            soft_deleted.created_at = timezone.now()
+            soft_deleted.registered_at = timezone.now()
+
+            if name:
+                soft_deleted.device_name = name
+            if lat_dec is not None:
+                soft_deleted.latitude = lat_dec
+            if lon_dec is not None:
+                soft_deleted.longitude = lon_dec
+            soft_deleted.device_role = role
+            if role == Device.DeviceRole.SLAVE and master:
+                soft_deleted.master = master
+            elif role == Device.DeviceRole.MASTER:
+                soft_deleted.master = None
+
+            soft_deleted.save()
+            _broadcast_new_device(soft_deleted)
+            return Response(DeviceSerializer(soft_deleted).data, status=201)
+
         device = Device(
             user=request.user,
             hardware_identifier=hid,
@@ -168,7 +276,199 @@ class DeviceViewSet(viewsets.ModelViewSet):
         if role == Device.DeviceRole.SLAVE:
             device.master = master
         device.save()
+
+        _broadcast_new_device(device)
         return Response(DeviceSerializer(device).data, status=201)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="Assign a phone number to a device",
+        description=(
+            "Attach a Bangladeshi phone number to a registered, online device and"
+            " propagate it to the IoT hardware via MQTT. Numbers are stored in"
+            " +880XXXXXXXXXX format."
+        ),
+        request=DevicePhoneUpdateSerializer,
+        responses={
+            200: DeviceSerializer,
+            409: OpenApiResponse(
+                description="Device offline",
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "DeviceOffline",
+                        value={
+                            "detail": "Device must be online to assign a phone number."
+                        },
+                        response_only=True,
+                    )
+                ],
+            ),
+            502: OpenApiResponse(
+                description="MQTT publish failed",
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "PublishFailed",
+                        value={
+                            "detail": "Failed to push phone number update to the device. Please try again shortly."
+                        },
+                        response_only=True,
+                    )
+                ],
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "AssignPhoneRequest",
+                value={"phone_number": "01778043119"},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "AssignPhoneResponse",
+                value={
+                    "id": 42,
+                    "hardware_identifier": "aPsF1001",
+                    "phone_number": "+8801778043119",
+                    "phone_number_updated_at": "2025-10-27T10:30:00+0600",
+                },
+                response_only=True,
+            ),
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="phone")
+    def assign_phone(self, request, pk=None):
+        device = self.get_object()
+        serializer = DevicePhoneUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if not device.is_online:
+            return Response(
+                {"detail": "Device must be online to assign a phone number."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        phone_number = serializer.validated_data["phone_number"]
+        try:
+            with transaction.atomic():
+                now = timezone.now()
+                device.phone_number = phone_number
+                device.phone_number_updated_at = now
+                device.save(update_fields=["phone_number", "phone_number_updated_at"])
+                services.publish_device_phone_assignment(
+                    device,
+                    phone_number=phone_number,
+                )
+        except DeviceConfigurationPublishError as exc:
+            logger.error(
+                "Failed to publish phone number for %s: %s",
+                device.hardware_identifier,
+                exc,
+            )
+            return Response(
+                {
+                    "detail": "Failed to push phone number update to the device. Please try again shortly."
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        device.refresh_from_db(fields=["phone_number", "phone_number_updated_at"])
+        return Response(self.get_serializer(device).data)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="Assign a phone number to a device",
+        description=(
+            "Attach a Bangladeshi phone number to an already registered device and push"
+            f" it to the IoT hardware via MQTT on topic `{settings.MQTT_DEVICE_REG_TOPIC}`."
+            " The device must be online (fresh last_seen) for the update to succeed."
+            " Numbers are normalized to +880XXXXXXXXXX and published using the payload"
+            " {device_id, phoneNumber, soundOff} with soundOff fixed at 0."
+        ),
+        request=DevicePhoneUpdateSerializer,
+        responses={
+            200: DeviceSerializer,
+            409: OpenApiResponse(
+                description="Device offline",
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "DeviceOffline",
+                        value={
+                            "detail": "Device must be online to assign a phone number."
+                        },
+                    )
+                ],
+            ),
+            502: OpenApiResponse(
+                description="MQTT publish failure",
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "PublishFailed",
+                        value={
+                            "detail": "Failed to push phone number update to the device. Please try again shortly."
+                        },
+                    )
+                ],
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "AssignPhoneRequest",
+                value={"phone_number": "01778043119"},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "AssignPhoneResponse",
+                value={
+                    "id": 101,
+                    "hardware_identifier": "aPsF1001",
+                    "phone_number": "+8801778043119",
+                    "phone_number_updated_at": "2025-10-27T10:22:00+0600",
+                },
+                response_only=True,
+            ),
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="phone")
+    def assign_phone(self, request, pk=None):
+        device = self.get_object()
+        ser = DevicePhoneUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        if not device.is_online:
+            return Response(
+                {"detail": "Device must be online to assign a phone number."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        phone_number = ser.validated_data["phone_number"]
+        try:
+            with transaction.atomic():
+                now = timezone.now()
+                device.phone_number = phone_number
+                device.phone_number_updated_at = now
+                device.save(update_fields=["phone_number", "phone_number_updated_at"])
+                services.publish_device_phone_assignment(
+                    device,
+                    phone_number=phone_number,
+                )
+        except DeviceConfigurationPublishError as exc:
+            logger.error(
+                "Failed to publish phone number for %s: %s",
+                device.hardware_identifier,
+                exc,
+            )
+            return Response(
+                {
+                    "detail": "Failed to push phone number update to the device. Please try again shortly."
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        device.refresh_from_db(fields=["phone_number", "phone_number_updated_at"])
+        return Response(self.get_serializer(device).data, status=200)
 
     @extend_schema(
         tags=["Devices"],
@@ -209,12 +509,15 @@ class DeviceViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=["get"], url_path="tree")
     def tree(self, request):
+        """List devices as a tree with online masters first."""
         qs = (
             self.get_queryset()
             .select_related("master", "user")
             .prefetch_related("slaves")
         )
-        masters = qs.filter(device_role=Device.DeviceRole.MASTER)
+        masters = qs.filter(device_role=Device.DeviceRole.MASTER).order_by(
+            models.F("last_seen").desc(nulls_last=True), "-registered_at"
+        )
         ser = DeviceTreeSerializer(masters, many=True)
         return Response(ser.data)
 

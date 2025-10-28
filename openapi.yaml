@@ -82,6 +82,346 @@ paths:
               schema:
                 $ref: '#/components/schemas/Alert'
           description: ''
+  /api/fcm/devices/:
+    get:
+      operationId: api_fcm_devices_list
+      description: Get all FCM devices registered for the current user
+      summary: List registered devices
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFCMDeviceList'
+          description: ''
+    post:
+      operationId: api_fcm_devices_create
+      description: Register a new FCM device token for push notifications. If the
+        token already exists, it will be updated with the current user.
+      summary: Register FCM device token
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FCMDevice'
+          description: ''
+  /api/fcm/devices/{id}/:
+    get:
+      operationId: api_fcm_devices_retrieve
+      description: |-
+        ViewSet for managing FCM device tokens.
+
+        Endpoints:
+        - POST /api/fcm/devices/ - Register new FCM token
+        - GET /api/fcm/devices/ - List user's registered devices
+        - DELETE /api/fcm/devices/{id}/ - Unregister a device
+        - POST /api/fcm/devices/test/ - Send test notification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FCMDevice'
+          description: ''
+    put:
+      operationId: api_fcm_devices_update
+      description: |-
+        ViewSet for managing FCM device tokens.
+
+        Endpoints:
+        - POST /api/fcm/devices/ - Register new FCM token
+        - GET /api/fcm/devices/ - List user's registered devices
+        - DELETE /api/fcm/devices/{id}/ - Unregister a device
+        - POST /api/fcm/devices/test/ - Send test notification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FCMDevice'
+          description: ''
+    patch:
+      operationId: api_fcm_devices_partial_update
+      description: |-
+        ViewSet for managing FCM device tokens.
+
+        Endpoints:
+        - POST /api/fcm/devices/ - Register new FCM token
+        - GET /api/fcm/devices/ - List user's registered devices
+        - DELETE /api/fcm/devices/{id}/ - Unregister a device
+        - POST /api/fcm/devices/test/ - Send test notification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFCMDevice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedFCMDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedFCMDevice'
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FCMDevice'
+          description: ''
+    delete:
+      operationId: api_fcm_devices_destroy
+      description: Remove an FCM device token (stop receiving notifications)
+      summary: Unregister device
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/fcm/devices/{id}/activate/:
+    post:
+      operationId: api_fcm_devices_activate_create
+      description: Re-activate a previously deactivated device token
+      summary: Activate device token
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FCMDevice'
+          description: ''
+  /api/fcm/devices/{id}/deactivate/:
+    post:
+      operationId: api_fcm_devices_deactivate_create
+      description: Deactivate a device token without deleting it
+      summary: Deactivate device token
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FCMDevice'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FCMDevice'
+          description: ''
+  /api/fcm/devices/test/:
+    post:
+      operationId: api_fcm_devices_test_create
+      description: Send a test push notification to all registered devices
+      summary: Send test notification
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestNotification'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TestNotification'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TestNotification'
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Test notification sent
+                examples:
+                  application/json:
+                    message: Test notification sent successfully
+                    results:
+                      success: 1
+                      failure: 0
+                      invalid_tokens: []
+          description: ''
+  /api/fcm/logs/:
+    get:
+      operationId: api_fcm_logs_list
+      description: Get notification history for the current user
+      summary: List notification history
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filter by status (sent, failed, invalid_token)
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationLogList'
+          description: ''
+  /api/fcm/logs/{id}/:
+    get:
+      operationId: api_fcm_logs_retrieve
+      description: |-
+        ViewSet for viewing notification history.
+
+        Endpoints:
+        - GET /api/fcm/logs/ - List notification history
+        - GET /api/fcm/logs/{id}/ - Get specific notification details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationLog'
+          description: ''
   /auth/login:
     post:
       operationId: auth_login_create
@@ -123,7 +463,10 @@ paths:
   /auth/me:
     get:
       operationId: auth_me_retrieve
-      summary: Get current user profile
+      description: "Returns the authenticated user's full profile including owned\
+        \ devices.\n\nPATCH allows partial updates of: full_name, phone_number, address.\
+        \ \nRole and email cannot be changed via this endpoint."
+      summary: Get or update current user profile
       tags:
       - Auth
       security:
@@ -134,8 +477,103 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserDetail'
+              examples:
+                GetProfileResponse:
+                  value:
+                    id: 7
+                    email: user@example.com
+                    phone_number: '+8801712345678'
+                    role: user
+                    full_name: Jane Operator
+                    address: 123 Flame Ave, Dhaka
+                    devices:
+                    - id: 21
+                      hardware_identifier: FD-ABC123
+                      device_name: Kitchen Detector
+                      device_role: master
+                      latitude: 23.78001
+                      longitude: 90.41002
+                      status: normal
+                      last_seen: '2025-10-05T06:30:00Z'
+                PatchProfileResponse:
+                  value:
+                    id: 7
+                    email: user@example.com
+                    phone_number: '+8801999887766'
+                    role: user
+                    full_name: Jane Firewatch
+                    address: 456 Smoke Rd, Dhaka
+                    devices: []
           description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+    patch:
+      operationId: auth_me_partial_update
+      description: "Returns the authenticated user's full profile including owned\
+        \ devices.\n\nPATCH allows partial updates of: full_name, phone_number, address.\
+        \ \nRole and email cannot be changed via this endpoint."
+      summary: Get or update current user profile
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserUpdate'
+            examples:
+              PatchProfileRequest:
+                value:
+                  full_name: Jane Firewatch
+                  address: 456 Smoke Rd, Dhaka
+                  phone_number: '+8801999887766'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserUpdate'
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetail'
+              examples:
+                GetProfileResponse:
+                  value:
+                    id: 7
+                    email: user@example.com
+                    phone_number: '+8801712345678'
+                    role: user
+                    full_name: Jane Operator
+                    address: 123 Flame Ave, Dhaka
+                    devices:
+                    - id: 21
+                      hardware_identifier: FD-ABC123
+                      device_name: Kitchen Detector
+                      device_role: master
+                      latitude: 23.78001
+                      longitude: 90.41002
+                      status: normal
+                      last_seen: '2025-10-05T06:30:00Z'
+                PatchProfileResponse:
+                  value:
+                    id: 7
+                    email: user@example.com
+                    phone_number: '+8801999887766'
+                    role: user
+                    full_name: Jane Firewatch
+                    address: 456 Smoke Rd, Dhaka
+                    devices: []
+          description: ''
+        '400':
+          description: No response body
         '401':
           description: No response body
   /auth/refresh:
@@ -211,9 +649,150 @@ paths:
           description: No response body
         '400':
           description: No response body
+  /auth/users/{id}:
+    get:
+      operationId: auth_users_retrieve
+      description: |-
+        Allows staff/superusers to retrieve or partially update a user.
+
+        Updatable fields: full_name, phone_number, address, role.
+        Email and privilege flags (is_staff/is_superuser) are not exposed here.
+      summary: 'Admin: get or update user detail by ID'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Users
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetail'
+              examples:
+                AdminGetUserResponse:
+                  value:
+                    id: 4
+                    email: client@example.com
+                    phone_number: '+8801700112233'
+                    role: user
+                    full_name: Client A
+                    address: 10 Alarm Street
+                    devices:
+                    - id: 55
+                      hardware_identifier: FD-XYZ987
+                      device_name: Lobby Detector
+                      device_role: master
+                      latitude: 23.70001
+                      longitude: 90.42002
+                      status: normal
+                      last_seen: '2025-10-05T05:57:10Z'
+                AdminPatchUserResponse:
+                  value:
+                    id: 4
+                    email: client@example.com
+                    phone_number: '+8801700112233'
+                    role: superadmin
+                    full_name: Client Alpha
+                    address: 10 Alarm Street
+                    devices: []
+          description: ''
+        '400':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
+          description: No response body
+    patch:
+      operationId: auth_users_partial_update
+      description: |-
+        Allows staff/superusers to retrieve or partially update a user.
+
+        Updatable fields: full_name, phone_number, address, role.
+        Email and privilege flags (is_staff/is_superuser) are not exposed here.
+      summary: 'Admin: get or update user detail by ID'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUserUpdate'
+            examples:
+              AdminPatchUserRequest:
+                value:
+                  full_name: Client Alpha
+                  role: superadmin
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUserUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUserUpdate'
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetail'
+              examples:
+                AdminGetUserResponse:
+                  value:
+                    id: 4
+                    email: client@example.com
+                    phone_number: '+8801700112233'
+                    role: user
+                    full_name: Client A
+                    address: 10 Alarm Street
+                    devices:
+                    - id: 55
+                      hardware_identifier: FD-XYZ987
+                      device_name: Lobby Detector
+                      device_role: master
+                      latitude: 23.70001
+                      longitude: 90.42002
+                      status: normal
+                      last_seen: '2025-10-05T05:57:10Z'
+                AdminPatchUserResponse:
+                  value:
+                    id: 4
+                    email: client@example.com
+                    phone_number: '+8801700112233'
+                    role: superadmin
+                    full_name: Client Alpha
+                    address: 10 Alarm Street
+                    devices: []
+          description: ''
+        '400':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
+          description: No response body
   /devices/:
     get:
       operationId: devices_list
+      description: |-
+        List all devices with ordering: online devices first, then offline.
+
+        Since is_online is a computed property based on last_seen, we order by:
+        1. last_seen DESC (nulls last) - puts recently active devices first
+        2. This effectively shows online devices at the top
       parameters:
       - name: page
         required: false
@@ -222,7 +801,7 @@ paths:
         schema:
           type: integer
       tags:
-      - Devices
+      - devices
       security:
       - cookieAuth: []
       - jwtAuth: []
@@ -236,7 +815,7 @@ paths:
     post:
       operationId: devices_create
       tags:
-      - Devices
+      - devices
       requestBody:
         content:
           application/json:
@@ -270,7 +849,7 @@ paths:
           pattern: ^\d+$
         required: true
       tags:
-      - Devices
+      - devices
       security:
       - cookieAuth: []
       - jwtAuth: []
@@ -291,7 +870,7 @@ paths:
           pattern: ^\d+$
         required: true
       tags:
-      - Devices
+      - devices
       requestBody:
         content:
           application/json:
@@ -323,7 +902,7 @@ paths:
           pattern: ^\d+$
         required: true
       tags:
-      - Devices
+      - devices
       security:
       - cookieAuth: []
       - jwtAuth: []
@@ -358,6 +937,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/Device'
           description: ''
+  /devices/{id}/phone/:
+    post:
+      operationId: devices_phone_create
+      description: Attach a Bangladeshi phone number to an already registered device
+        and push it to the IoT hardware via MQTT on topic `aps/fire/reg`. The device
+        must be online (fresh last_seen) for the update to succeed. Numbers are normalized
+        to +880XXXXXXXXXX and published using the payload {device_id, phoneNumber,
+        soundOff} with soundOff fixed at 0.
+      summary: Assign a phone number to a device
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Devices
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicePhoneUpdate'
+            examples:
+              AssignPhoneRequest:
+                value:
+                  phone_number: 01778043119
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DevicePhoneUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DevicePhoneUpdate'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              examples:
+                AssignPhoneResponse:
+                  value:
+                    id: 101
+                    hardware_identifier: aPsF1001
+                    phone_number: '+8801778043119'
+                    phone_number_updated_at: 2025-10-27T10:22:00+0600
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                DeviceOffline:
+                  value:
+                    detail: Device must be online to assign a phone number.
+          description: Device offline
+        '502':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                PublishFailed:
+                  value:
+                    detail: Failed to push phone number update to the device. Please
+                      try again shortly.
+          description: MQTT publish failure
   /devices/{id}/telemetry/:
     get:
       operationId: devices_telemetry_retrieve
@@ -390,6 +1043,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Device'
+          description: ''
+  /devices/composite/:
+    get:
+      operationId: devices_composite_retrieve
+      description: |-
+        Return a composite payload for a master and its slaves using keys compatible with the IoT format.
+
+        - If the 'master' query parameter (hardware identifier) is provided, returns a single composite object.
+        - If omitted, returns a list of composite objects for all masters in the caller's scope.
+
+        Fields:
+        - masterDeviceID: string (hardware identifier of master)
+        - timestamp: epoch seconds derived from last_seen (or null)
+        - smoke: last known smoke level (latest telemetry within freshness window, else 0)
+        - status: device.status (defaults to 'alive' if empty)
+        - slaves: array of { deviceID, timestamp, smoke, status } for each registered slave under the master.
+      summary: Composite snapshot (master + slaves)
+      parameters:
+      - in: query
+        name: master
+        schema:
+          type: string
+        description: Master hardware identifier. If omitted, returns all masters
+      tags:
+      - Devices
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /devices/register/:
     post:
@@ -469,6 +1157,7 @@ paths:
   /devices/tree/:
     get:
       operationId: devices_tree_retrieve
+      description: List devices as a tree with online masters first.
       summary: List devices as a tree (masters with nested slaves)
       tags:
       - Devices
@@ -551,7 +1240,7 @@ paths:
           description: Counts for dashboard KPIs
   /orders/{user_id}/:
     get:
-      operationId: orders_retrieve
+      operationId: orders_list
       description: |-
         Endpoint: /orders/<user_id>/
 
@@ -568,7 +1257,11 @@ paths:
                 "shipping_address": "Updated address"  # optional
             }
 
-        Only quantity and shipping_address are mutable now at this endpoint.
+        Mutable fields at this endpoint:
+            - quantity
+            - shipping_address
+            - number_of_master_devices
+            - number_of_slave_devices
       summary: List / create / patch / delete orders for a user
       parameters:
       - in: path
@@ -583,6 +1276,26 @@ paths:
       - jwtAuth: []
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
           description: No response body
     post:
       operationId: orders_create
@@ -602,7 +1315,11 @@ paths:
                 "shipping_address": "Updated address"  # optional
             }
 
-        Only quantity and shipping_address are mutable now at this endpoint.
+        Mutable fields at this endpoint:
+            - quantity
+            - shipping_address
+            - number_of_master_devices
+            - number_of_slave_devices
       summary: Create order for user
       parameters:
       - in: path
@@ -616,30 +1333,32 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                package_id:
-                  type: integer
-                quantity:
-                  type: integer
-                  minimum: 1
-                shipping_address:
-                  type: string
-              required:
-              - package_id
-              - quantity
-              example:
-                package_id: 1
-                quantity: 10
-                shipping_address: Dhaka
+              $ref: '#/components/schemas/OrderCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+        required: true
       security:
       - cookieAuth: []
       - jwtAuth: []
       responses:
-        '200':
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
           description: No response body
     patch:
-      operationId: orders_partial_update
+      operationId: orders_partial_update_for_user
       description: |-
         Endpoint: /orders/<user_id>/
 
@@ -656,7 +1375,11 @@ paths:
                 "shipping_address": "Updated address"  # optional
             }
 
-        Only quantity and shipping_address are mutable now at this endpoint.
+        Mutable fields at this endpoint:
+            - quantity
+            - shipping_address
+            - number_of_master_devices
+            - number_of_slave_devices
       summary: Patch one order for a user
       parameters:
       - in: path
@@ -679,20 +1402,34 @@ paths:
                   minimum: 1
                 shipping_address:
                   type: string
+                number_of_master_devices:
+                  type: integer
+                  minimum: 0
+                number_of_slave_devices:
+                  type: integer
+                  minimum: 0
               required:
               - order_id
-              example:
-                order_id: 5
-                quantity: 15
-                shipping_address: Updated address
       security:
       - cookieAuth: []
       - jwtAuth: []
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
           description: No response body
     delete:
-      operationId: orders_destroy
+      operationId: orders_delete_all_for_user
       description: |-
         Endpoint: /orders/<user_id>/
 
@@ -709,7 +1446,11 @@ paths:
                 "shipping_address": "Updated address"  # optional
             }
 
-        Only quantity and shipping_address are mutable now at this endpoint.
+        Mutable fields at this endpoint:
+            - quantity
+            - shipping_address
+            - number_of_master_devices
+            - number_of_slave_devices
       summary: List / create / patch / delete orders for a user
       parameters:
       - in: path
@@ -723,11 +1464,31 @@ paths:
       - cookieAuth: []
       - jwtAuth: []
       responses:
-        '204':
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
           description: No response body
   /orders/{user_id}/{order_id}/:
     get:
-      operationId: orders_retrieve_2
+      operationId: orders_retrieve
       summary: Retrieve/patch/delete a user's specific order
       parameters:
       - in: path
@@ -747,10 +1508,25 @@ paths:
       - jwtAuth: []
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '204':
+          description: No response body
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
           description: No response body
     patch:
-      operationId: orders_partial_update_2
-      summary: Patch specific order (quantity / shipping_address only)
+      operationId: orders_partial_update_for_user_detail
+      summary: Patch specific order (quantity / shipping_address / number_of_master_devices
+        / number_of_slave_devices)
       parameters:
       - in: path
         name: order_id
@@ -775,17 +1551,32 @@ paths:
                   minimum: 1
                 shipping_address:
                   type: string
-              example:
-                quantity: 15
-                shipping_address: Updated address
+                number_of_master_devices:
+                  type: integer
+                  minimum: 0
+                number_of_slave_devices:
+                  type: integer
+                  minimum: 0
       security:
       - cookieAuth: []
       - jwtAuth: []
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
           description: No response body
     delete:
-      operationId: orders_destroy_2
+      operationId: orders_destroy_for_user_detail
       summary: Retrieve/patch/delete a user's specific order
       parameters:
       - in: path
@@ -804,7 +1595,118 @@ paths:
       - cookieAuth: []
       - jwtAuth: []
       responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
         '204':
+          description: No response body
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
+          description: No response body
+  /orders/payment/notify/:
+    post:
+      operationId: orders_payment_notify_create
+      description: |-
+        Webhook to receive the provider (SurjoPay) order id after successful payment.
+
+        Expected JSON:
+          {
+            "order_id": "provider-generated-id-or-our-integer-id",
+            "transaction_id": "tx_abc123",         # optional
+            "gateway_response": {...}              # optional
+          }
+
+        This sends the `payment_received` signal. A receiver will mark the order
+        as paid if it is currently pending.
+      summary: Payment notification webhook - receive provider order id to mark pending
+        order paid
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_id:
+                  type: string
+                transaction_id:
+                  type: string
+                gateway_response:
+                  type: object
+              required:
+              - order_id
+      responses:
+        '200':
+          description: No response body
+        '400':
+          description: No response body
+  /orders/update_status/{user_id}/{order_id}/:
+    post:
+      operationId: orders_update_status_create
+      description: |-
+        Endpoint: /orders/update_status/<user_id>/<order_id>/
+
+        Admin-only endpoint to update the order_status of a specific order.
+
+        Body:
+          { "order_status": "paid" }
+      summary: 'Admin: update order status'
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_status:
+                  type: string
+                  enum:
+                  - pending
+                  - paid
+                  - cancelled
+                  - failed
+                  - delivered
+                  description: New status (pending, paid, cancelled, failed, delivered)
+              required:
+              - order_status
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '403':
+          description: No response body
+        '404':
           description: No response body
   /packages/:
     get:
@@ -923,7 +1825,19 @@ paths:
   /readyz:
     get:
       operationId: readyz_retrieve
-      summary: Readiness probe
+      description: |-
+        Comprehensive health check endpoint for monitoring.
+
+        Returns status of:
+        - Database connectivity
+        - MQTT connection status
+        - Application health
+
+        Use this endpoint for:
+        - Load balancer health checks
+        - Monitoring/alerting systems
+        - DevOps dashboards
+      summary: Readiness probe with component health checks
       tags:
       - System
       security:
@@ -937,11 +1851,156 @@ paths:
                 type: object
                 additionalProperties: {}
               examples:
-                Ready:
+                Healthy:
                   value:
-                    status: ready
-                  summary: ready
-          description: Service is ready
+                    status: healthy
+                    timestamp: 1728234567.89
+                    checks:
+                      database:
+                        status: ok
+                      mqtt:
+                        status: ok
+                        connected: true
+                  summary: healthy
+          description: Service is ready with all components healthy
+        '503':
+          description: Service unavailable - critical components failing
+  /shurjopay/cancel/:
+    get:
+      operationId: shurjopay_cancel_retrieve
+      summary: Cancel URL endpoint (browser redirect)
+      parameters:
+      - in: query
+        name: order_id
+        schema:
+          type: string
+      tags:
+      - ShurjoPay
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelViewResponse'
+          description: ''
+  /shurjopay/initiate/:
+    post:
+      operationId: shurjopay_initiate_create
+      summary: Initiate a shurjoPay payment and get checkout URL
+      tags:
+      - ShurjoPay
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reference:
+                  type: string
+                  description: Domain reference, e.g., Order ID
+                amount:
+                  type: number
+                currency:
+                  type: string
+                  default: BDT
+                customer_name:
+                  type: string
+                customer_address:
+                  type: string
+                customer_phone:
+                  type: string
+                customer_city:
+                  type: string
+                customer_post_code:
+                  type: string
+                customer_email:
+                  type: string
+                  format: email
+              required:
+              - amount
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Checkout URL and identifiers returned
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+  /shurjopay/return/:
+    get:
+      operationId: shurjopay_return_retrieve
+      summary: Return URL endpoint (browser redirect)
+      parameters:
+      - in: query
+        name: order_id
+        schema:
+          type: string
+      tags:
+      - ShurjoPay
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /shurjopay/status/:
+    get:
+      operationId: shurjopay_status_retrieve
+      summary: Get transaction status
+      parameters:
+      - in: query
+        name: transaction_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - ShurjoPay
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusViewResponse'
+          description: ''
+        '404':
+          description: Not found
+  /shurjopay/verify/:
+    post:
+      operationId: shurjopay_verify_create
+      summary: Verify payment by shurjoPay order_id
+      tags:
+      - ShurjoPay
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_id:
+                  type: string
+              required:
+              - order_id
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Verified payment details or null if invalid
   /telemetry/:
     get:
       operationId: telemetry_list
@@ -1003,7 +2062,7 @@ components:
           type: string
           maxLength: 64
         status:
-          $ref: '#/components/schemas/StatusEnum'
+          $ref: '#/components/schemas/AlertStatusEnum'
         triggered_at:
           type: string
           format: date-time
@@ -1033,6 +2092,24 @@ components:
       - owner_phone
       - resolved_at
       - triggered_at
+    AlertStatusEnum:
+      enum:
+      - open
+      - resolved
+      type: string
+      description: |-
+        * `open` - Open
+        * `resolved` - Resolved
+    CancelViewResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        order_id:
+          type: string
+          nullable: true
+      required:
+      - message
     Device:
       type: object
       properties:
@@ -1061,6 +2138,13 @@ components:
           type: string
           format: date-time
           readOnly: true
+        mesh_alert:
+          type: boolean
+          description: |-
+            True if any device in this device's mesh has an open smoke_high alert.
+
+            Mesh is defined as: the master + all its slaves. For masters, master=self; for slaves, master=obj.master.
+          readOnly: true
         latitude:
           type: string
           format: decimal
@@ -1071,9 +2155,26 @@ components:
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
           nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         status:
           type: string
           maxLength: 32
+        effective_status:
+          type: string
+          description: |-
+            Return a derived status string prioritizing offline if stale.
+
+            Keeps the raw device-provided `status` field intact while ensuring UIs
+            can display an authoritative offline state when last_seen expired.
+          readOnly: true
         registered_at:
           type: string
           format: date-time
@@ -1084,7 +2185,7 @@ components:
           readOnly: true
           nullable: true
         online:
-          type: string
+          type: boolean
           readOnly: true
         owner_id:
           type: integer
@@ -1098,6 +2199,7 @@ components:
           readOnly: true
       required:
       - device_role
+      - effective_status
       - hardware_identifier
       - id
       - last_seen
@@ -1105,75 +2207,22 @@ components:
       - master_hardware_identifier
       - master_id
       - master_last_seen
+      - mesh_alert
       - online
       - owner_email
       - owner_id
       - owner_phone
+      - phone_number
+      - phone_number_updated_at
       - registered_at
-    DeviceNode:
+    DevicePhoneUpdate:
       type: object
       properties:
-        id:
-          type: integer
-          readOnly: true
-        hardware_identifier:
+        phone_number:
           type: string
-          maxLength: 64
-        device_name:
-          type: string
-          maxLength: 255
-        latitude:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
-          nullable: true
-        longitude:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
-          nullable: true
-        status:
-          type: string
-          maxLength: 32
-        registered_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_seen:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        online:
-          type: string
-          readOnly: true
-        device_role:
-          type: string
-          readOnly: true
-        master_id:
-          type: integer
-          readOnly: true
-        owner_id:
-          type: integer
-          readOnly: true
-        owner_email:
-          type: string
-          format: email
-          readOnly: true
-        owner_phone:
-          type: string
-          readOnly: true
+          maxLength: 20
       required:
-      - device_role
-      - hardware_identifier
-      - id
-      - last_seen
-      - master_id
-      - online
-      - owner_email
-      - owner_id
-      - owner_phone
-      - registered_at
+      - phone_number
     DeviceRegister:
       type: object
       properties:
@@ -1221,6 +2270,52 @@ components:
       description: |-
         * `master` - Master
         * `slave` - Slave
+    DeviceSummary:
+      type: object
+      description: Minimal device representation for embedding inside user detail.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        hardware_identifier:
+          type: string
+          readOnly: true
+        device_name:
+          type: string
+          readOnly: true
+        device_role:
+          allOf:
+          - $ref: '#/components/schemas/DeviceRoleEnum'
+          readOnly: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          readOnly: true
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          readOnly: true
+          nullable: true
+        status:
+          type: string
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - device_name
+      - device_role
+      - hardware_identifier
+      - id
+      - last_seen
+      - latitude
+      - longitude
+      - status
     DeviceTree:
       type: object
       properties:
@@ -1243,9 +2338,21 @@ components:
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
           nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         status:
           type: string
           maxLength: 32
+        effective_status:
+          type: string
+          readOnly: true
         registered_at:
           type: string
           format: date-time
@@ -1256,7 +2363,7 @@ components:
           readOnly: true
           nullable: true
         online:
-          type: string
+          type: boolean
           readOnly: true
         device_role:
           type: string
@@ -1275,12 +2382,11 @@ components:
           type: string
           readOnly: true
         slaves:
-          type: array
-          items:
-            $ref: '#/components/schemas/DeviceNode'
+          type: string
           readOnly: true
       required:
       - device_role
+      - effective_status
       - hardware_identifier
       - id
       - last_seen
@@ -1289,8 +2395,20 @@ components:
       - owner_email
       - owner_id
       - owner_phone
+      - phone_number
+      - phone_number_updated_at
       - registered_at
       - slaves
+    DeviceTypeEnum:
+      enum:
+      - android
+      - ios
+      - web
+      type: string
+      description: |-
+        * `android` - Android
+        * `ios` - iOS
+        * `web` - Web
     EmailTokenObtainPair:
       type: object
       properties:
@@ -1303,6 +2421,228 @@ components:
       required:
       - email
       - password
+    FCMDevice:
+      type: object
+      description: Serializer for FCM device registration.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        registration_token:
+          type: string
+          description: FCM registration token from the mobile app
+          maxLength: 255
+        device_name:
+          type: string
+          description: Optional device name for identification (e.g., 'John's iPhone')
+          maxLength: 100
+        device_type:
+          $ref: '#/components/schemas/DeviceTypeEnum'
+        active:
+          type: boolean
+          description: Inactive tokens will not receive notifications
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_used_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Last time a notification was successfully sent to this token
+      required:
+      - created_at
+      - id
+      - last_used_at
+      - registration_token
+      - updated_at
+    NotificationLog:
+      type: object
+      description: Serializer for notification history.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+        data:
+          readOnly: true
+          nullable: true
+          description: Additional data payload sent with notification
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NotificationLogStatusEnum'
+          readOnly: true
+        error_message:
+          type: string
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          readOnly: true
+        device_name:
+          type: string
+          readOnly: true
+      required:
+      - body
+      - data
+      - device_name
+      - error_message
+      - id
+      - sent_at
+      - status
+      - title
+    NotificationLogStatusEnum:
+      enum:
+      - sent
+      - failed
+      - invalid_token
+      type: string
+      description: |-
+        * `sent` - Sent Successfully
+        * `failed` - Failed
+        * `invalid_token` - Invalid Token
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        package:
+          type: integer
+        number_of_master_devices:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        number_of_slave_devices:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        quantity:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          format: int64
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        currency:
+          type: string
+          maxLength: 8
+        reference:
+          type: string
+          readOnly: true
+        customer_name:
+          type: string
+          maxLength: 128
+        customer_address:
+          type: string
+        customer_phone:
+          type: string
+          maxLength: 32
+        customer_city:
+          type: string
+          maxLength: 64
+        customer_post_code:
+          type: string
+          maxLength: 32
+        customer_email:
+          type: string
+          maxLength: 254
+        order_status:
+          allOf:
+          - $ref: '#/components/schemas/OrderStatusEnum'
+          readOnly: true
+        gateway_transaction_id:
+          type: string
+          readOnly: true
+        gateway_response:
+          readOnly: true
+          nullable: true
+        shipping_address:
+          type: string
+        ordered_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - gateway_response
+      - gateway_transaction_id
+      - id
+      - order_status
+      - ordered_at
+      - package
+      - quantity
+      - reference
+      - user
+    OrderCreate:
+      type: object
+      properties:
+        package_id:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 1
+        number_of_master_devices:
+          type: integer
+          minimum: 0
+          default: 1
+        number_of_slave_devices:
+          type: integer
+          minimum: 0
+          default: 1
+        shipping_address:
+          type: string
+        currency:
+          type: string
+          default: BDT
+        customer_name:
+          type: string
+        customer_address:
+          type: string
+        customer_phone:
+          type: string
+        customer_city:
+          type: string
+        customer_post_code:
+          type: string
+        customer_email:
+          type: string
+          format: email
+      required:
+      - package_id
+      - quantity
+    OrderStatusEnum:
+      enum:
+      - pending
+      - paid
+      - cancelled
+      - failed
+      - delivered
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `paid` - Paid
+        * `cancelled` - Cancelled
+        * `failed` - Failed
+        * `delivered` - Delivered
     Package:
       type: object
       properties:
@@ -1326,11 +2666,13 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
-        mrt:
+        mrf:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
           description: Monthly recurring fee (MRF) for this package
+        description:
+          type: string
       required:
       - id
       - max_quantity
@@ -1405,6 +2747,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeviceTree'
+    PaginatedFCMDeviceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FCMDevice'
+    PaginatedNotificationLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationLog'
     PaginatedTelemetryList:
       type: object
       required:
@@ -1428,6 +2816,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Telemetry'
+    PatchedAdminUserUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+          maxLength: 255
+        phone_number:
+          type: string
+          maxLength: 32
+        address:
+          type: string
+        role:
+          $ref: '#/components/schemas/RoleEnum'
     PatchedDevice:
       type: object
       properties:
@@ -1456,6 +2857,13 @@ components:
           type: string
           format: date-time
           readOnly: true
+        mesh_alert:
+          type: boolean
+          description: |-
+            True if any device in this device's mesh has an open smoke_high alert.
+
+            Mesh is defined as: the master + all its slaves. For masters, master=self; for slaves, master=obj.master.
+          readOnly: true
         latitude:
           type: string
           format: decimal
@@ -1466,9 +2874,26 @@ components:
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
           nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         status:
           type: string
           maxLength: 32
+        effective_status:
+          type: string
+          description: |-
+            Return a derived status string prioritizing offline if stale.
+
+            Keeps the raw device-provided `status` field intact while ensuring UIs
+            can display an authoritative offline state when last_seen expired.
+          readOnly: true
         registered_at:
           type: string
           format: date-time
@@ -1479,7 +2904,7 @@ components:
           readOnly: true
           nullable: true
         online:
-          type: string
+          type: boolean
           readOnly: true
         owner_id:
           type: integer
@@ -1491,6 +2916,40 @@ components:
         owner_phone:
           type: string
           readOnly: true
+    PatchedFCMDevice:
+      type: object
+      description: Serializer for FCM device registration.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        registration_token:
+          type: string
+          description: FCM registration token from the mobile app
+          maxLength: 255
+        device_name:
+          type: string
+          description: Optional device name for identification (e.g., 'John's iPhone')
+          maxLength: 100
+        device_type:
+          $ref: '#/components/schemas/DeviceTypeEnum'
+        active:
+          type: boolean
+          description: Inactive tokens will not receive notifications
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_used_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Last time a notification was successfully sent to this token
     PatchedPackage:
       type: object
       properties:
@@ -1514,11 +2973,24 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
-        mrt:
+        mrf:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
           description: Monthly recurring fee (MRF) for this package
+        description:
+          type: string
+    PatchedUserUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+          maxLength: 255
+        phone_number:
+          type: string
+          maxLength: 32
+        address:
+          type: string
     Register:
       type: object
       properties:
@@ -1542,14 +3014,42 @@ components:
       description: |-
         * `user` - User
         * `superadmin` - Super Admin
-    StatusEnum:
-      enum:
-      - open
-      - resolved
-      type: string
-      description: |-
-        * `open` - Open
-        * `resolved` - Resolved
+    StatusViewResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        sp_order_id:
+          type: string
+        customer_order_id:
+          type: string
+        checkout_url:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        reference:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - checkout_url
+      - created_at
+      - currency
+      - customer_order_id
+      - id
+      - reference
+      - sp_order_id
+      - status
+      - updated_at
     Telemetry:
       type: object
       properties:
@@ -1601,6 +3101,14 @@ components:
       - received_at
       - smoke_level
       - timestamp
+    TestNotification:
+      type: object
+      description: Serializer for sending test notifications.
+      properties:
+        message:
+          type: string
+          default: Test notification from Fire Alarm System
+          maxLength: 500
     TokenRefresh:
       type: object
       properties:
@@ -1615,6 +3123,7 @@ components:
       - refresh
     User:
       type: object
+      description: Base serializer (kept for backwards compatibility in auth responses).
       properties:
         id:
           type: integer
@@ -1630,7 +3139,45 @@ components:
           allOf:
           - $ref: '#/components/schemas/RoleEnum'
           readOnly: true
+        full_name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
       required:
+      - email
+      - id
+      - role
+    UserDetail:
+      type: object
+      description: Base serializer (kept for backwards compatibility in auth responses).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone_number:
+          type: string
+          maxLength: 32
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        full_name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceSummary'
+          readOnly: true
+      required:
+      - devices
       - email
       - id
       - role

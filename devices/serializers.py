@@ -1,7 +1,7 @@
-from rest_framework import serializers
-from django.conf import settings
-from django.utils import timezone
+import re
 from decimal import Decimal
+
+from rest_framework import serializers
 
 from .models import Device, Telemetry, Alert
 from .constants import AlertType, DeviceStatus
@@ -43,6 +43,8 @@ class DeviceSerializer(serializers.ModelSerializer):
             "mesh_alert",
             "latitude",
             "longitude",
+            "phone_number",
+            "phone_number_updated_at",
             "status",
             "effective_status",
             "registered_at",
@@ -52,7 +54,13 @@ class DeviceSerializer(serializers.ModelSerializer):
             "owner_email",
             "owner_phone",
         )
-        read_only_fields = ("id", "registered_at", "last_seen")
+        read_only_fields = (
+            "id",
+            "registered_at",
+            "last_seen",
+            "phone_number",
+            "phone_number_updated_at",
+        )
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
@@ -94,6 +102,34 @@ class DeviceSerializer(serializers.ModelSerializer):
         if not getattr(obj, "is_online", False):
             return DeviceStatus.OFFLINE
         return obj.status or DeviceStatus.UNKNOWN
+
+
+def normalize_bd_phone_number(raw: str) -> str:
+    """Normalize Bangladeshi phone numbers to +880XXXXXXXXXX format.
+
+    Accepts inputs like 017XXXXXXXX, +88017XXXXXXXX, 88017XXXXXXXX, or 1712345678.
+    Raises ValueError if the number cannot be normalized to the expected shape.
+    """
+
+    if raw is None:
+        raise ValueError("Phone number is required")
+
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        raise ValueError("Phone number must contain digits")
+
+    if digits.startswith("880"):
+        digits = digits[3:]
+    elif digits.startswith("88"):
+        digits = digits[2:]
+
+    if digits.startswith("0"):
+        digits = digits[1:]
+
+    if len(digits) != 10 or not digits.startswith("1"):
+        raise ValueError("Enter a valid Bangladeshi mobile number (e.g. 017XXXXXXXX)")
+
+    return f"+880{digits}"
 
 
 class DeviceRegisterSerializer(serializers.Serializer):
@@ -182,6 +218,16 @@ class DeviceRegisterSerializer(serializers.Serializer):
         return attrs
 
 
+class DevicePhoneUpdateSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=20)
+
+    def validate_phone_number(self, value: str) -> str:
+        try:
+            return normalize_bd_phone_number(value)
+        except ValueError as exc:  # pragma: no cover - validation handles messaging
+            raise serializers.ValidationError(str(exc)) from exc
+
+
 class DeviceNodeSerializer(serializers.ModelSerializer):
     owner_id = serializers.IntegerField(source="user.id", read_only=True)
     owner_email = serializers.EmailField(source="user.email", read_only=True)
@@ -199,6 +245,8 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
             "device_name",
             "latitude",
             "longitude",
+            "phone_number",
+            "phone_number_updated_at",
             "status",
             "effective_status",
             "registered_at",
@@ -210,7 +258,13 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
             "owner_email",
             "owner_phone",
         )
-        read_only_fields = ("id", "registered_at", "last_seen")
+        read_only_fields = (
+            "id",
+            "registered_at",
+            "last_seen",
+            "phone_number",
+            "phone_number_updated_at",
+        )
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
@@ -224,10 +278,20 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
 
 
 class DeviceTreeSerializer(DeviceNodeSerializer):
-    slaves = DeviceNodeSerializer(many=True, read_only=True)
+    slaves = serializers.SerializerMethodField()
 
     class Meta(DeviceNodeSerializer.Meta):
         fields = DeviceNodeSerializer.Meta.fields + ("slaves",)
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_slaves(self, obj: Device):
+        """Return slaves ordered by online status (online first)."""
+        # Order slaves by last_seen descending (most recent first)
+        # This puts online slaves at the top
+        slaves = obj.slaves.all().order_by(
+            models.F("last_seen").desc(nulls_last=True), "-registered_at"
+        )
+        return DeviceNodeSerializer(slaves, many=True).data
 
 
 class TelemetrySerializer(serializers.ModelSerializer):

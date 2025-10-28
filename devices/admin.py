@@ -20,12 +20,18 @@ class DeviceAdmin(admin.ModelAdmin):
         "device_role",
         "master",
         "user",
+        "phone_number",
         "status",
         "last_seen",
         "registered_at",
     )
     list_filter = ("device_role", "status")
-    search_fields = ("hardware_identifier", "device_name", "user__email")
+    search_fields = (
+        "hardware_identifier",
+        "device_name",
+        "user__email",
+        "phone_number",
+    )
     autocomplete_fields = ("user", "master")
     inlines = [SlaveInline]
 

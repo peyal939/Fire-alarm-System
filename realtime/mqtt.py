@@ -218,6 +218,13 @@ def _broadcast_device_update(
     except (AttributeError, ValueError, OSError) as e:
         logger.warning(f"Timestamp formatting failed for device {device_id}: {e}")
 
+    # Add mesh alert flag to show group-wide alert state
+    mesh_alert = False
+    try:
+        mesh_alert = bool(_compute_mesh_alert(device_obj))
+    except Exception as e:
+        logger.error(f"Failed to compute mesh alert for device {device_id}: {e}")
+
     # Build the complete device state payload
     device_payload = {
         MQTTPayloadKeys.DEVICE_ID: device_id,
@@ -229,15 +236,8 @@ def _broadcast_device_update(
         # Derive online status from last_seen freshness (defined in Device.is_online property)
         # This allows frontend to show real-time offline transitions without API polling
         "online": bool(getattr(device_obj, "is_online", False)),
+        "mesh_alert": mesh_alert,
     }
-
-    # Add mesh alert flag to show group-wide alert state
-    # This helps users see if ANY device in their network has high smoke
-    try:
-        device_payload["mesh_alert"] = bool(_compute_mesh_alert(device_obj))
-    except Exception as e:
-        logger.error(f"Failed to compute mesh alert for device {device_id}: {e}")
-        device_payload["mesh_alert"] = False
 
     # Include GPS coordinates if available
     if pos is not None:
@@ -247,7 +247,8 @@ def _broadcast_device_update(
     # Update in-memory cache for snapshot delivery to new WebSocket connections
     DEVICES[device_id] = device_payload
 
-    # Broadcast to all connected WebSocket clients via Channels
+    # Always broadcast MQTT messages for real-time updates (removed throttling)
+    # The channel capacity increase (1000) and message expiry (60s) handle burst traffic
     try:
         channel_layer = get_channel_layer()
         if channel_layer is not None:
@@ -260,6 +261,7 @@ def _broadcast_device_update(
         logger.debug("Channels not available for broadcast")
     except Exception as e:
         # Non-fatal: WebSocket broadcast failures shouldn't break telemetry ingestion
+        # This includes channel overflow - log but don't crash
         logger.warning(f"Failed to broadcast update for device {device_id}: {e}")
 
 
@@ -530,6 +532,87 @@ def process_payload(payload: dict) -> None:
         logging.error(f"apply_mesh_alert (legacy) failed for {device_id}: {e}")
 
 
+def _populate_devices_cache():
+    """Populate the DEVICES cache with all registered devices on startup.
+
+    This ensures that devices already running and sending telemetry before
+    the server starts will be visible on the dashboard immediately when
+    WebSocket clients connect, without waiting for new MQTT messages.
+    """
+    try:
+        close_old_connections()
+        devices = Device.objects.filter(deleted_at__isnull=True).select_related("user")
+
+        for device in devices:
+            try:
+                # Get the most recent telemetry for this device (if any)
+                from devices.models import Telemetry
+
+                latest_telemetry = (
+                    Telemetry.objects.filter(device=device)
+                    .order_by("-timestamp")
+                    .first()
+                )
+
+                # Prepare device payload with last known state
+                ts_int = None
+                timestamp_iso = None
+                smoke_val = 0
+                status_str = device.status or DeviceStatus.OFFLINE
+
+                if latest_telemetry:
+                    ts_int = int(latest_telemetry.timestamp.timestamp())
+                    tz = timezone.get_current_timezone()
+                    ts_dt_local = latest_telemetry.timestamp.astimezone(tz)
+                    timestamp_iso = _fmt12(ts_dt_local)
+                    smoke_val = latest_telemetry.smoke_level
+
+                # Build device payload
+                device_payload = {
+                    MQTTPayloadKeys.DEVICE_ID: device.hardware_identifier,
+                    MQTTPayloadKeys.TIMESTAMP: ts_int,
+                    "timestamp_iso": timestamp_iso,
+                    "received_at_iso": None,
+                    MQTTPayloadKeys.SMOKE: smoke_val,
+                    MQTTPayloadKeys.STATUS: status_str,
+                    "online": bool(device.is_online),
+                }
+
+                # Add mesh alert flag
+                try:
+                    device_payload["mesh_alert"] = bool(_compute_mesh_alert(device))
+                except Exception as e:
+                    logger.debug(
+                        f"Failed to compute mesh alert for device {device.hardware_identifier}: {e}"
+                    )
+                    device_payload["mesh_alert"] = False
+
+                # Add GPS coordinates if available
+                if device.latitude is not None and device.longitude is not None:
+                    try:
+                        device_payload["latitude"] = float(device.latitude)
+                        device_payload["longitude"] = float(device.longitude)
+                    except (TypeError, ValueError, Decimal.InvalidOperation):
+                        pass
+
+                # Update the in-memory cache
+                DEVICES[device.hardware_identifier] = device_payload
+                logger.debug(
+                    f"Pre-loaded device {device.hardware_identifier} into cache"
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to pre-load device {device.hardware_identifier}: {e}"
+                )
+                continue
+
+        logger.info(f"✅ Pre-loaded {len(DEVICES)} registered devices into cache")
+
+    except Exception as e:
+        logger.error(f"Failed to populate devices cache: {e}", exc_info=True)
+
+
 def ensure_mqtt_thread():
     """Start MQTT client thread with auto-reconnect and health monitoring.
 
@@ -544,6 +627,9 @@ def ensure_mqtt_thread():
     if _thread_started:
         return
     _thread_started = True
+
+    # Populate the DEVICES cache with all registered devices on startup
+    _populate_devices_cache()
 
     def get_position(device: Device):
         """Return persisted lat/lon for UI broadcast, if present.
