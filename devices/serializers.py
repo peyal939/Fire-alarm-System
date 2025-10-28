@@ -283,6 +283,7 @@ class DeviceTreeSerializer(DeviceNodeSerializer):
     class Meta(DeviceNodeSerializer.Meta):
         fields = DeviceNodeSerializer.Meta.fields + ("slaves",)
 
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_slaves(self, obj: Device):
         """Return slaves ordered by online status (online first)."""
         # Order slaves by last_seen descending (most recent first)

@@ -25,6 +25,71 @@ from .models import Alert, Device, Telemetry
 logger = logging.getLogger(__name__)
 
 
+def _send_alert_notifications(devices):
+    """Send push notifications for new alerts.
+
+    Args:
+        devices: List of Device objects that have new alerts
+    """
+    try:
+        from notifications.services import FCMService
+
+        # Group devices by user to avoid duplicate notifications
+        user_devices = {}
+        for device in devices:
+            user_id = device.user_id
+            if user_id not in user_devices:
+                user_devices[user_id] = []
+            user_devices[user_id].append(device)
+
+        # Send one notification per user with info about all their affected devices
+        for user_id, user_device_list in user_devices.items():
+            try:
+                # Get the first device's user object
+                user = user_device_list[0].user
+
+                # If multiple devices, list them all
+                if len(user_device_list) > 1:
+                    device_names = ", ".join(
+                        [
+                            d.device_name or d.hardware_identifier
+                            for d in user_device_list
+                        ]
+                    )
+                    device_name = f"{len(user_device_list)} devices: {device_names}"
+                else:
+                    device = user_device_list[0]
+                    device_name = device.device_name or device.hardware_identifier
+
+                # Send the alert notification
+                FCMService.send_alert_notification(
+                    user=user,
+                    device_name=device_name,
+                    alert_type=AlertType.SMOKE_HIGH,
+                    alert_id=0,  # Bulk alert doesn't have single ID
+                )
+
+                logger.info(
+                    f"Sent alert notification to user {user_id} for {len(user_device_list)} device(s)"
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to send notification to user {user_id}: {e}", exc_info=True
+                )
+                # Continue with other users even if one fails
+
+    except ImportError:
+        # Notifications app not available (shouldn't happen but handle gracefully)
+        logger.warning(
+            "Notifications service not available, skipping push notifications"
+        )
+    except Exception as e:
+        logger.error(
+            f"Unexpected error sending alert notifications: {e}", exc_info=True
+        )
+
+
 def publish_device_phone_assignment(device: Device, *, phone_number: str) -> None:
     """Publish phone assignment to the IoT device via MQTT.
 
@@ -208,6 +273,9 @@ def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
                 logger.info(
                     f"Created {len(to_create)} mesh alerts for master {master.id}"
                 )
+
+                # Send push notifications to affected users
+                _send_alert_notifications(to_create)
         else:
             # Group alarm is cleared - resolve ALL alerts (online and offline)
             # This ensures clean slate when smoke normalizes
@@ -405,7 +473,7 @@ def ingest_telemetry(
 
             if not has_open:
                 # Create new alert for this device
-                Alert.objects.create(
+                alert = Alert.objects.create(
                     device=device,
                     alert_type=AlertType.SMOKE_HIGH,
                     status=Alert.Status.OPEN,
@@ -413,6 +481,22 @@ def ingest_telemetry(
                 logger.info(
                     f"Created smoke_high alert for device {device.id} (smoke: {smoke_level})"
                 )
+
+                # Send push notification for this single device alert
+                try:
+                    from notifications.services import FCMService
+
+                    device_name = device.device_name or device.hardware_identifier
+                    FCMService.send_alert_notification(
+                        user=device.user,
+                        device_name=device_name,
+                        alert_type=AlertType.SMOKE_HIGH,
+                        alert_id=alert.id,
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to send notification for alert {alert.id}: {e}"
+                    )
 
                 # Propagate alert to all online members in the mesh
                 # This ensures coordinated group alerting across master/slave networks
@@ -456,7 +540,7 @@ def ingest_telemetry(
                 status=Alert.Status.OPEN,
             ).exists()
             if not has_open:
-                Alert.objects.create(
+                alert = Alert.objects.create(
                     device=device,
                     alert_type=AlertType.DEVICE_STATUS,
                     status=Alert.Status.OPEN,
@@ -464,6 +548,29 @@ def ingest_telemetry(
                 logger.info(
                     f"Created device_status alert for device {device.id} (status: {status_lower})"
                 )
+
+                # Send push notification for device status issue
+                try:
+                    from notifications.services import FCMService
+
+                    device_name = device.device_name or device.hardware_identifier
+                    FCMService.send_to_user(
+                        user=device.user,
+                        title="⚠️ Device Status Alert",
+                        body=f"{device_name} reported status: {status_lower}",
+                        data={
+                            "type": "device_status",
+                            "alert_id": str(alert.id),
+                            "alert_type": AlertType.DEVICE_STATUS,
+                            "device_name": device_name,
+                            "device_status": status_lower,
+                        },
+                        sound="default",
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to send notification for device status alert {alert.id}: {e}"
+                    )
         else:
             # Device is alive - resolve any status alerts
             qs = Alert.objects.filter(

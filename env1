@@ -22,3 +22,7 @@ MQTT_PASS="apsIoT25"
 
 # Channels via Redis (local redis on the same server)
 REDIS_URL=redis://:S3curePass@127.0.0.1:6379/0
+
+
+#firebase location
+FIREBASE_CREDENTIALS_PATH=firebase-credentials.json

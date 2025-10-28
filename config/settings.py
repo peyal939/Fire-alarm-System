@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     "products",
     "api",
     "realtime",
+    "notifications",
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "shurjopay",
