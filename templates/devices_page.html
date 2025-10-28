@@ -37,6 +37,7 @@
           <th>Status</th>
           <th>Last Seen</th>
           <th>Location</th>
+          <th>Phone</th>
           <th>Owner (email)</th>
           <th>Actions</th>
         </tr>
@@ -146,6 +147,36 @@
     </div>
   </div>
  </div>
+
+  <!-- Assign Phone Modal -->
+  <div class="modal fade" id="assignPhoneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="assignPhoneModalTitle">Assign Phone Number</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-danger d-none" id="errPhone"></div>
+          <form id="assignPhoneForm">
+            <input type="hidden" name="device_id" />
+            <div class="mb-3">
+              <label class="form-label" for="assignPhoneInput">Phone Number</label>
+              <div class="input-group">
+                <span class="input-group-text">+88</span>
+                <input type="text" class="form-control" id="assignPhoneInput" name="phone_number" placeholder="017XXXXXXXX" maxlength="13" required />
+              </div>
+              <div class="form-text">Enter Bangladeshi mobile number (e.g. 017XXXXXXXX). Prefix +88 is added automatically.</div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" form="assignPhoneForm" class="btn btn-primary" id="submitAssignPhoneBtn">Save</button>
+        </div>
+      </div>
+    </div>
+   </div>
 {% endblock %}
 
 {% block scripts %}
@@ -163,6 +194,15 @@
     const slaveModalEl = document.getElementById('registerSlaveModal');
     const masterModal = new bootstrap.Modal(masterModalEl);
     const slaveModal = new bootstrap.Modal(slaveModalEl);
+
+  const assignPhoneModalEl = document.getElementById('assignPhoneModal');
+  const assignPhoneModal = new bootstrap.Modal(assignPhoneModalEl);
+  const assignPhoneForm = document.getElementById('assignPhoneForm');
+  const assignPhoneSubmitBtn = document.getElementById('submitAssignPhoneBtn');
+  const assignPhoneError = document.getElementById('errPhone');
+  const assignPhoneInput = document.getElementById('assignPhoneInput');
+  const assignPhoneModalTitle = document.getElementById('assignPhoneModalTitle');
+  let phoneTargetDevice = null;
 
     const registerMasterForm = document.getElementById('registerMasterForm');
     const registerSlaveForm = document.getElementById('registerSlaveForm');
@@ -292,10 +332,21 @@
         const statusBadgeClass = (!d.online) ? 'bg-secondary' : (displayStatus === 'alive' ? 'bg-success' : 'bg-warning text-dark');
         const statusCell = `<span class="badge ${statusBadgeClass}">${displayStatus}</span>`;
         const displayName = d.device_name || '';
+        const phoneDisplay = d.phone_number
+          ? `<div>${d.phone_number}</div>${d.phone_number_updated_at ? `<div class="text-muted small">Updated ${new Date(d.phone_number_updated_at).toLocaleString()}</div>` : ''}`
+          : '—';
+        const phoneActionLabel = d.phone_number ? 'Update phone' : 'Add phone';
+        const phoneDisabled = d.online ? '' : 'disabled';
+        const phoneTitle = d.online ? '' : 'Device must be online';
         const actions = `
-          <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete" data-device-id="${d.id}">
-            Remove
-          </button>
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-primary" data-action="phone" data-device-id="${d.id}" title="${phoneTitle}" ${phoneDisabled}>
+              ${phoneActionLabel}
+            </button>
+            <button type="button" class="btn btn-outline-danger" data-action="delete" data-device-id="${d.id}">
+              Remove
+            </button>
+          </div>
         `;
         tr.innerHTML = `
           <td>${d.id}</td>
@@ -306,12 +357,17 @@
           <td>${statusCell}</td>
           <td>${lastSeen}</td>
           <td>${loc}</td>
+          <td>${phoneDisplay}</td>
           <td>${d.owner_email || ''}</td>
           <td>${actions}</td>
         `;
         const deleteBtn = tr.querySelector('button[data-action="delete"]');
         if (deleteBtn) {
           deleteBtn.dataset.deviceLabel = displayName || (d.hardware_identifier || 'this device');
+        }
+        const phoneBtn = tr.querySelector('button[data-action="phone"]');
+        if (phoneBtn) {
+          phoneBtn.dataset.deviceLabel = displayName || (d.hardware_identifier || 'this device');
         }
         tableBody.appendChild(tr);
       });
@@ -369,6 +425,84 @@
     function parseNumber(v) {
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
+    }
+
+    function normalizePhoneForInput(phone) {
+      if (!phone) return '';
+      let cleaned = phone.trim();
+      if (cleaned.startsWith('+880')) {
+        return '0' + cleaned.slice(4);
+      }
+      if (cleaned.startsWith('880')) {
+        return '0' + cleaned.slice(3);
+      }
+      if (cleaned.startsWith('+88')) {
+        return cleaned.slice(3);
+      }
+      if (cleaned.startsWith('88')) {
+        return cleaned.slice(2);
+      }
+      return cleaned;
+    }
+
+    function openAssignPhoneModal(device) {
+      if (!device) return;
+      if (!device.online) {
+        alert('Device must be online before adding a phone number.');
+        return;
+      }
+      phoneTargetDevice = device;
+      assignPhoneForm.reset();
+      assignPhoneError.classList.add('d-none');
+      assignPhoneForm.device_id.value = device.id;
+      assignPhoneInput.value = normalizePhoneForInput(device.phone_number || '');
+      assignPhoneModalTitle.textContent = `Assign Phone · ${device.hardware_identifier || ''}`;
+      assignPhoneModal.show();
+      setTimeout(() => assignPhoneInput.focus({ preventScroll: true }), 200);
+    }
+
+    async function onSubmitAssignPhone(event) {
+      event.preventDefault();
+      if (!phoneTargetDevice) {
+        assignPhoneModal.hide();
+        return;
+      }
+      const raw = (assignPhoneInput.value || '').trim();
+      if (!raw) {
+        assignPhoneError.textContent = 'Please enter a phone number.';
+        assignPhoneError.classList.remove('d-none');
+        return;
+      }
+
+      assignPhoneError.classList.add('d-none');
+      assignPhoneSubmitBtn.disabled = true;
+      try {
+        await apiPost(`/devices/${phoneTargetDevice.id}/phone/`, {
+          phone_number: raw,
+        });
+        assignPhoneModal.hide();
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        let detail = 'Failed to update phone number.';
+        if (err && err.body) {
+          if (typeof err.body === 'string' && err.body.trim()) {
+            detail = err.body;
+          } else if (err.body.detail) {
+            detail = err.body.detail;
+          } else if (err.body.phone_number) {
+            detail = Array.isArray(err.body.phone_number)
+              ? err.body.phone_number.join(' ')
+              : err.body.phone_number;
+          }
+        } else if (err && err.message) {
+          detail = err.message;
+        }
+        assignPhoneError.textContent = detail;
+        assignPhoneError.classList.remove('d-none');
+      } finally {
+        assignPhoneSubmitBtn.disabled = false;
+      }
     }
 
     async function populateMastersSelect() {
@@ -445,29 +579,44 @@
   roleFilter.addEventListener('change', () => renderDevices());
     refreshBtn.addEventListener('click', () => fetchAllDevices());
     tableBody.addEventListener('click', async (event) => {
-      const btn = event.target.closest('button[data-action="delete"]');
+      const btn = event.target.closest('button[data-action]');
       if (!btn) return;
       event.preventDefault();
-      const deviceId = btn.getAttribute('data-device-id');
-  const deviceLabel = btn.dataset.deviceLabel || 'this device';
-      const confirmed = window.confirm(`Are you sure you want to remove ${deviceLabel}?`);
-      if (!confirmed) return;
-      const originalText = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = 'Removing…';
-      try {
-        if (!window.apiDelete) {
-          throw new Error('Delete helper unavailable. Please refresh.');
+      const action = btn.dataset.action;
+
+      if (action === 'delete') {
+        const deviceId = btn.getAttribute('data-device-id');
+        const deviceLabel = btn.dataset.deviceLabel || 'this device';
+        const confirmed = window.confirm(`Are you sure you want to remove ${deviceLabel}?`);
+        if (!confirmed) return;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Removing…';
+        try {
+          if (!window.apiDelete) {
+            throw new Error('Delete helper unavailable. Please refresh.');
+          }
+          await deleteDevice(deviceId);
+          await fetchAllDevices();
+        } catch (err) {
+          console.error(err);
+          const msg = (err && err.message) || 'Failed to remove device. Please try again.';
+          alert(msg);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
         }
-        await deleteDevice(deviceId);
-        await fetchAllDevices();
-      } catch (err) {
-        console.error(err);
-        const msg = (err && err.message) || 'Failed to remove device. Please try again.';
-        alert(msg);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = originalText;
+        return;
+      }
+
+      if (action === 'phone') {
+        const deviceId = parseInt(btn.getAttribute('data-device-id'), 10);
+        const device = allDevices.find(d => d.id === deviceId);
+        if (!device) {
+          alert('Device not found. Please refresh.');
+          return;
+        }
+        openAssignPhoneModal(device);
       }
     });
     registerMasterBtn.addEventListener('click', () => {
@@ -491,6 +640,11 @@
     });
     submitRegisterMasterBtn.addEventListener('click', onSubmitRegisterMaster);
     submitRegisterSlaveBtn.addEventListener('click', onSubmitRegisterSlave);
+    assignPhoneForm.addEventListener('submit', onSubmitAssignPhone);
+    assignPhoneModalEl.addEventListener('hidden.bs.modal', () => {
+      phoneTargetDevice = null;
+      assignPhoneError.classList.add('d-none');
+    });
 
     // Initial load
     fetchAllDevices();

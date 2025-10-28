@@ -28,6 +28,7 @@ PORT = int(os.getenv("PORT", "8000"))
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883") or "1883")
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "aps/fire/data")
+MQTT_DEVICE_REG_TOPIC = os.getenv("MQTT_DEVICE_REG_TOPIC", "aps/fire/reg")
 MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASS = os.getenv("MQTT_PASS", "")
 
@@ -139,11 +140,25 @@ if REDIS_URL:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [REDIS_URL]},
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+                # Increase capacity to handle burst traffic from MQTT
+                # Default is 100, which is too low for production IoT systems
+                "capacity": 1000,  # Max messages per channel
+                "expiry": 60,  # Message TTL in seconds (discard old messages)
+            },
         }
     }
 else:
-    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+            "CONFIG": {
+                "capacity": 1000,  # Increase from default 100
+                "expiry": 60,  # Message TTL in seconds
+            },
+        }
+    }
 
 """Static & media configuration.
 

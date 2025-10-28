@@ -6,7 +6,7 @@ class RealtimeConfig(AppConfig):
     name = "realtime"
 
     def ready(self):
-        # Start MQTT background thread on app ready (only once)
-        from .mqtt import ensure_mqtt_thread
-
-        ensure_mqtt_thread()
+        # Intentionally left side-effect free so management commands/tests don't
+        # touch MQTT or the database during app registry setup.
+        # The MQTT worker is started from config.asgi when the ASGI server boots.
+        return None

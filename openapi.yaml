@@ -330,6 +330,78 @@ paths:
       responses:
         '204':
           description: No response body
+  /devices/{id}/phone/:
+    post:
+      operationId: devices_assign_phone_create
+      summary: Assign a phone number to a device
+      description: |
+        Attach a Bangladeshi phone number to a device and push the change to the IoT
+        hardware via MQTT using the configured topic. The device must be online for
+        the update to succeed. Numbers are normalized to the +880XXXXXXXXXX format
+        before being saved and published with the payload {device_id, phoneNumber,
+        soundOff} (soundOff is fixed at 0).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - Devices
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicePhoneUpdate'
+            examples:
+              AssignPhoneRequest:
+                value:
+                  phone_number: '01778043119'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              examples:
+                AssignPhoneResponse:
+                  value:
+                    id: 42
+                    hardware_identifier: aPsF1001
+                    phone_number: '+8801778043119'
+                    phone_number_updated_at: '2025-10-27T10:30:00+06:00'
+          description: Phone number assigned
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                DeviceOffline:
+                  value:
+                    detail: Device must be online to assign a phone number.
+          description: Device is offline
+        '502':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                PublishFailed:
+                  value:
+                    detail: Failed to push phone number update to the device. Please try again shortly.
+          description: Failed to publish update to device
   /devices/{id}/alerts/:
     get:
       operationId: devices_alerts_retrieve
@@ -1071,6 +1143,15 @@ components:
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
           nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         status:
           type: string
           maxLength: 32
@@ -1131,6 +1212,15 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
           nullable: true
         status:
           type: string
@@ -1213,6 +1303,14 @@ components:
       - hardware_identifier
       - latitude
       - longitude
+    DevicePhoneUpdate:
+      type: object
+      properties:
+        phone_number:
+          type: string
+          description: Bangladeshi mobile number in any common format (normalized to +880XXXXXXXXXX)
+      required:
+      - phone_number
     DeviceRoleEnum:
       enum:
       - master
@@ -1242,6 +1340,15 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
           nullable: true
         status:
           type: string
@@ -1465,6 +1572,15 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        phone_number:
+          type: string
+          readOnly: true
+          nullable: true
+        phone_number_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
           nullable: true
         status:
           type: string

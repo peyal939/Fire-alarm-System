@@ -65,6 +65,7 @@ MYSQL_PORT=3306
 MQTT_BROKER=localhost
 MQTT_PORT=1883
 MQTT_TOPIC=aps/fire/data
+MQTT_DEVICE_REG_TOPIC=aps/fire/reg
 MQTT_USER=
 MQTT_PASS=
 
@@ -119,6 +120,7 @@ Devices:
 - `GET /devices/` – list devices (owned by user; superadmin sees all)
 - `POST /devices/register/` – claim/register a device to the current user (supports master/slave)
 - `GET /devices/{id}/` – retrieve
+- `POST /devices/{id}/phone/` – assign a Bangladeshi phone number (device must be online; pushes `{device_id, phoneNumber, soundOff=0}` to MQTT)
 - `DELETE /devices/{id}/` – soft delete
 - `GET /devices/{id}/telemetry/?since=&until=` – device telemetry
 - `GET /devices/{id}/alerts/?status=` – device alerts
@@ -200,9 +202,20 @@ GET /devices/tree/
 
 ## MQTT ingestion
 
-- Topic: `MQTT_TOPIC` (default `aps/fire/data`)
+- Telemetry topic: `MQTT_TOPIC` (default `aps/fire/data`)
+- Device registration/config topic: `MQTT_DEVICE_REG_TOPIC` (default `aps/fire/reg`)
 - The MQTT client runs in-process and forwards accepted telemetry to the API layer and WebSocket broadcaster.
 - Only registered devices are accepted; unknown devices are ignored.
+
+Device phone provisioning payload (published by `POST /devices/{id}/phone/`):
+
+```json
+{
+	"device_id": "aPsF1001",
+	"phoneNumber": "+8801778043119",
+	"soundOff": 0
+}
+```
 
 Composite ingestion rules:
 - The master device (by `masterID` or `deviceID`) must be registered; otherwise the whole payload is ignored.

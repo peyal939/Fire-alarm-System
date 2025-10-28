@@ -59,6 +59,8 @@ class Device(AuditSoftDeleteModel):
     longitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
+    phone_number = models.CharField(max_length=16, null=True, blank=True)
+    phone_number_updated_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, blank=True)
     registered_at = models.DateTimeField(default=timezone.now)
     last_seen = models.DateTimeField(null=True, blank=True, db_index=True)

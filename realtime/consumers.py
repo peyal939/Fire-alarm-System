@@ -59,7 +59,15 @@ class DeviceConsumer(AsyncWebsocketConsumer):
             return
 
     async def device_update(self, event):
-        await self.send(text_data=json.dumps(event["device"]))
+        """Handle device update messages from the channel layer.
+
+        Includes error handling to prevent channel overflow from crashing consumers.
+        """
+        try:
+            await self.send(text_data=json.dumps(event["device"]))
+        except Exception as e:
+            # Non-fatal: if sending fails, log but keep connection alive
+            logger.warning(f"Failed to send device update to WebSocket: {e}")
 
     async def _heartbeat(self, interval: int):
         try:

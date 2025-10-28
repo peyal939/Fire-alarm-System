@@ -76,6 +76,17 @@ class InvalidMasterSlaveRelationshipError(DeviceError):
         )
 
 
+class DeviceConfigurationPublishError(DeviceError):
+    """Raised when pushing configuration (e.g., phone number) to hardware fails."""
+
+    def __init__(self, hardware_identifier: str, reason: str):
+        self.hardware_identifier = hardware_identifier
+        self.reason = reason
+        super().__init__(
+            f"Failed to publish configuration for device '{hardware_identifier}': {reason}"
+        )
+
+
 class TelemetryIngestionError(Exception):
     """Base exception for telemetry ingestion errors."""
 

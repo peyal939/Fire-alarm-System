@@ -1,26 +1,86 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 from typing import Optional
 
-from django.utils import timezone
-from django.conf import settings
-from django.db import models
-from django.db import DatabaseError
-
-from .models import Device, Telemetry, Alert
-from .constants import (
-    AlertType,
-    DeviceStatus,
-    normalize_device_status,
-    MeshAlertError,
-    WebSocketBroadcastError,
-)
+import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
+from django.db import DatabaseError, models
+from django.utils import timezone
+
+from .constants import (
+    AlertType,
+    DeviceConfigurationPublishError,
+    DeviceStatus,
+    MeshAlertError,
+    WebSocketBroadcastError,
+    normalize_device_status,
+)
+from .models import Alert, Device, Telemetry
 
 logger = logging.getLogger(__name__)
+
+
+def publish_device_phone_assignment(device: Device, *, phone_number: str) -> None:
+    """Publish phone assignment to the IoT device via MQTT.
+
+    Raises DeviceConfigurationPublishError when the publish attempt fails.
+    """
+
+    payload = {
+        "device_id": device.hardware_identifier,
+        "phoneNumber": phone_number,
+        "soundOff": 0,
+    }
+
+    client: Optional[mqtt.Client] = None
+    try:
+        client = mqtt.Client()
+        if settings.MQTT_USER:
+            client.username_pw_set(settings.MQTT_USER, settings.MQTT_PASS)
+
+        client.connect(settings.MQTT_BROKER, settings.MQTT_PORT, 60)
+        client.loop_start()
+
+        info = client.publish(
+            settings.MQTT_DEVICE_REG_TOPIC,
+            json.dumps(payload),
+            qos=1,
+            retain=False,
+        )
+        info.wait_for_publish(timeout=5)
+
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            raise DeviceConfigurationPublishError(
+                device.hardware_identifier, f"Publish failed with code {info.rc}"
+            )
+
+        logger.info(
+            "Published phone number for %s to topic %s",
+            device.hardware_identifier,
+            settings.MQTT_DEVICE_REG_TOPIC,
+        )
+
+    except DeviceConfigurationPublishError:
+        raise
+    except Exception as exc:  # pragma: no cover - network errors mocked in tests
+        raise DeviceConfigurationPublishError(
+            device.hardware_identifier, str(exc)
+        ) from exc
+    finally:
+        if client is not None:
+            try:
+                client.loop_stop()
+            except Exception:
+                pass
+            try:
+                client.disconnect()
+            except Exception:
+                pass
 
 
 def ingest_by_hardware_identifier(
