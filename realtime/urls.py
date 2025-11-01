@@ -11,5 +11,6 @@ urlpatterns = [
     path("app/telemetry/", views.telemetry_page, name="telemetry_page"),
     path("app/alerts/", views.alerts_page, name="alerts_page"),
     path("app/products/", views.products_page, name="products_page"),
+    path("app/firestations/", views.firestations_page, name="firestations_page"),
     path("app/admin-panel/", views.admin_panel, name="admin_panel"),
 ]

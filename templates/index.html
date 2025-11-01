@@ -278,6 +278,20 @@
         } catch {}
         return;
       }
+      if (data && data.type === 'device_removed') {
+        const removedId = String(data.deviceID || '').trim();
+        if (!removedId) return;
+        delete allDevices[removedId];
+        delete lastSeenAt[removedId];
+        const marker = deviceMarkers[removedId];
+        if (marker) {
+          try { map.removeLayer(marker); } catch {}
+        }
+        delete deviceMarkers[removedId];
+        renderSidebarDevices();
+        updateNotificationBell();
+        return;
+      }
       const id = data.deviceID;
       if (!id) return;
       // Preserve known metadata (role/master/owner) while updating live fields

@@ -1,0 +1,13 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    <li>
+        <form action="{% url 'admin:firestations_firestation_import' %}" method="post" enctype="multipart/form-data" style="display:flex; gap:0.75rem; align-items:center;">
+            {% csrf_token %}
+            <input id="id_csv_file" type="file" name="csv_file" accept=".csv" aria-label="{% translate "CSV file" %}">
+            <button type="submit" class="button">{% translate "Import fire stations from CSV" %}</button>
+        </form>
+    </li>
+    {{ block.super }}
+{% endblock %}

@@ -27,6 +27,7 @@ urlpatterns = [
     path("metrics/summary", views.metrics_summary),
     path("auth/", include("accounts.urls")),
     path("", include("devices.urls")),
+    path("", include("firestations.urls")),
     # OpenAPI schema and docs
     path(
         "schema/",

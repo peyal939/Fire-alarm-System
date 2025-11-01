@@ -14,6 +14,7 @@
         <option value="">All devices</option>
       </select>
       <button id="refreshAlertsBtn" class="btn btn-outline-secondary">Refresh</button>
+      <button id="openFireDeptModalBtn" class="btn btn-danger">Find Fire Department</button>
     </div>
   </div>
 
@@ -34,6 +35,48 @@
   </div>
   <div id="alertsEmpty" class="text-muted" style="display:none">No alerts found.</div>
 </div>
+
+<div class="modal fade" id="fireDepartmentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Contact nearby fire department</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">Notify the fire service immediately. Search in বাংলা or English to find the right office and call them without delay.</p>
+        <form id="fireDeptSearchForm" class="row gy-2 gx-2 mb-3" role="search">
+          <div class="col-sm-8 col-md-6">
+            <label for="fireDeptSearch" class="visually-hidden">Search fire station</label>
+            <input type="search" class="form-control" id="fireDeptSearch" placeholder="Search division, district or office" autocomplete="off" />
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-danger">Search</button>
+            <button type="button" id="fireDeptReset" class="btn btn-outline-secondary">Reset</button>
+          </div>
+        </form>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle" id="fireDeptResults">
+            <thead>
+              <tr>
+                <th>Division</th>
+                <th>District</th>
+                <th>Office</th>
+                <th>Contact</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div id="fireDeptEmpty" class="text-muted" style="display:none">No fire station matched your search.</div>
+        </div>
+        <div class="mt-2 text-muted" id="fireDeptSummary" aria-live="polite"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -53,6 +96,20 @@
       open: { text: 'Open', badge: 'bg-danger' },
       resolved: { text: 'Resolved', badge: 'bg-success' },
     };
+
+    const FIRE_ALERT_TYPES = ['smoke_high', 'fire_detected', 'fire_alarm'];
+    const fireDeptModalElement = document.getElementById('fireDepartmentModal');
+    const fireDeptModal = fireDeptModalElement ? new bootstrap.Modal(fireDeptModalElement) : null;
+    const openFireDeptModalBtn = document.getElementById('openFireDeptModalBtn');
+    const fireDeptResultsBody = document.querySelector('#fireDeptResults tbody');
+    const fireDeptEmpty = document.getElementById('fireDeptEmpty');
+    const fireDeptSummary = document.getElementById('fireDeptSummary');
+    const fireDeptSearchInput = document.getElementById('fireDeptSearch');
+    const fireDeptSearchForm = document.getElementById('fireDeptSearchForm');
+    const fireDeptResetBtn = document.getElementById('fireDeptReset');
+    let fireDeptHasPrompted = false;
+    let fireDeptLastQuery = '';
+    let fireDeptLoading = false;
 
     function formatDate(value) {
       if (!value) return '—';
@@ -145,6 +202,7 @@
         tbody.appendChild(tr);
       });
       empty.style.display = items.length ? 'none' : '';
+      maybePromptFireDepartment(items);
     }
 
     tbody.addEventListener('click', async (e) => {
@@ -166,6 +224,90 @@
     statusFilter.addEventListener('change', fetchAlerts);
     deviceFilter.addEventListener('change', fetchAlerts);
     refreshBtn.addEventListener('click', fetchAlerts);
+
+    async function ensureFireDeptResults(query = '') {
+      if (!fireDeptModal) return;
+      fireDeptLoading = true;
+      fireDeptResultsBody.innerHTML = '<tr><td colspan="4" class="text-center py-3">Loading…</td></tr>';
+      fireDeptEmpty.style.display = 'none';
+      fireDeptSummary.textContent = '';
+      try {
+        const params = new URLSearchParams({ limit: '50' });
+        if (query.trim()) {
+          params.set('search', query.trim());
+        }
+        const data = await apiGet(`/firestations/?${params.toString()}`);
+        const items = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        renderFireDeptResults(items);
+      } catch (err) {
+        console.error('Failed to fetch fire station data', err);
+        fireDeptResultsBody.innerHTML = '<tr><td colspan="4" class="text-danger">Unable to load fire station contacts.</td></tr>';
+      } finally {
+        fireDeptLoading = false;
+      }
+    }
+
+    function renderFireDeptResults(items) {
+      fireDeptResultsBody.innerHTML = '';
+      items.forEach((station) => {
+        const numbers = (station.contact_number_list || []).map((num) => `<a href="tel:${num}">${num}</a>`).join('<br>') || station.contact_numbers || station.contact_text || '—';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${station.division_en}<br><small class="text-muted">${station.division_bn}</small></td>
+          <td>${station.district_en}<br><small class="text-muted">${station.district_bn}</small></td>
+          <td>${station.name_en}<br><small class="text-muted">${station.name_bn}</small></td>
+          <td>${numbers}</td>
+        `;
+        fireDeptResultsBody.appendChild(row);
+      });
+      fireDeptEmpty.style.display = items.length ? 'none' : '';
+      fireDeptSummary.textContent = items.length ? `${items.length} contact${items.length !== 1 ? 's' : ''} shown` : 'No contacts available.';
+    }
+
+    function maybePromptFireDepartment(alerts) {
+      if (!fireDeptModal || fireDeptHasPrompted) return;
+      const shouldPrompt = alerts.some((alert) => alert.status === 'open' && FIRE_ALERT_TYPES.includes(alert.alert_type));
+      if (shouldPrompt) {
+        fireDeptHasPrompted = true;
+        ensureFireDeptResults('').finally(() => fireDeptModal.show());
+      }
+    }
+
+    function debouncedFireDeptSearch() {
+      if (fireDeptLoading) return;
+      const query = fireDeptSearchInput.value;
+      if (query === fireDeptLastQuery) return;
+      fireDeptLastQuery = query;
+      ensureFireDeptResults(query);
+    }
+
+    const debouncedFireDeptSearchHandler = (function debounce(fn, wait) {
+      let timeout;
+      return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), wait);
+      };
+    })(debouncedFireDeptSearch, 350);
+
+    if (fireDeptSearchInput) {
+      fireDeptSearchForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        fireDeptLastQuery = fireDeptSearchInput.value;
+        ensureFireDeptResults(fireDeptLastQuery);
+      });
+      fireDeptResetBtn.addEventListener('click', () => {
+        fireDeptSearchInput.value = '';
+        fireDeptLastQuery = '';
+        ensureFireDeptResults('');
+      });
+      fireDeptSearchInput.addEventListener('input', debouncedFireDeptSearchHandler);
+    }
+
+    if (openFireDeptModalBtn && fireDeptModal) {
+      openFireDeptModalBtn.addEventListener('click', () => {
+        ensureFireDeptResults(fireDeptSearchInput ? fireDeptSearchInput.value : '').finally(() => fireDeptModal.show());
+      });
+    }
 
     loadDevices().finally(fetchAlerts);
   </script>

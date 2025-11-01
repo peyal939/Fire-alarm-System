@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Fire Departments · apS Fire Alarm{% endblock %}
+{% block content %}
+<div class="py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h1 class="h4 mb-0">Fire Departments</h1>
+      <small class="text-muted">Authoritative contact list for Bangladesh Fire Service offices.</small>
+    </div>
+    <div class="text-muted" id="firestationsResultCount" aria-live="polite"></div>
+  </div>
+
+  <form id="firestationSearchForm" class="row gy-2 gx-2 align-items-center" role="search">
+    <div class="col-sm-8 col-md-6 col-lg-5">
+      <label class="visually-hidden" for="firestationSearch">Search fire station</label>
+      <input
+        type="search"
+        class="form-control"
+        id="firestationSearch"
+        name="search"
+        placeholder="Search by division, district or station (বাংলা / English)"
+        autocomplete="off"
+      />
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-success">Search</button>
+      <button type="button" class="btn btn-outline-secondary" id="firestationReset">Reset</button>
+    </div>
+  </form>
+
+  <div class="table-responsive mt-3">
+    <table class="table table-striped align-middle" id="firestationsTable">
+      <thead>
+        <tr>
+          <th scope="col">Division</th>
+          <th scope="col">District</th>
+          <th scope="col">Office (English)</th>
+          <th scope="col">Office (বাংলা)</th>
+          <th scope="col">Contact Numbers</th>
+          <th scope="col">Notes</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="firestationsEmptyState" class="text-muted" style="display:none">No fire stations matched your search.</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function() {
+    const tableBody = document.querySelector('#firestationsTable tbody');
+    const emptyState = document.getElementById('firestationsEmptyState');
+    const searchInput = document.getElementById('firestationSearch');
+    const resultCount = document.getElementById('firestationsResultCount');
+    const searchForm = document.getElementById('firestationSearchForm');
+    const resetButton = document.getElementById('firestationReset');
+
+    let lastQuery = '';
+    let isLoading = false;
+
+    function formatNumbers(station) {
+      const numbers = Array.isArray(station.contact_number_list) ? station.contact_number_list : [];
+      if (numbers.length) {
+        return numbers
+          .map((num) => `<a href="tel:${num}" class="link-underline link-underline-opacity-0">${num}</a>`)
+          .join('<br>');
+      }
+      if (station.contact_numbers) {
+        return station.contact_numbers;
+      }
+      if (station.contact_text) {
+        return station.contact_text;
+      }
+      return '—';
+    }
+
+    function renderRows(items) {
+      tableBody.innerHTML = '';
+      items.forEach((station) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${station.division_en}<br><small class="text-muted">${station.division_bn}</small></td>
+          <td>${station.district_en}<br><small class="text-muted">${station.district_bn}</small></td>
+          <td>${station.name_en}</td>
+          <td>${station.name_bn}</td>
+          <td>${formatNumbers(station)}</td>
+          <td>${station.contact_text || '—'}</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+      emptyState.style.display = items.length ? 'none' : '';
+      resultCount.textContent = items.length ? `${items.length} station${items.length !== 1 ? 's' : ''} shown` : '';
+    }
+
+    async function fetchStations(query = '') {
+      if (isLoading) return;
+      isLoading = true;
+      tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-3">Loading…</td></tr>';
+      emptyState.style.display = 'none';
+      try {
+        const params = new URLSearchParams({ limit: '200' });
+        if (query.trim()) {
+          params.set('search', query.trim());
+        }
+        const data = await apiGet(`/firestations/?${params.toString()}`);
+        const items = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        renderRows(items);
+      } catch (err) {
+        console.error('Failed to load fire stations', err);
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-danger">Failed to load fire stations. Please try again.</td></tr>';
+        resultCount.textContent = '';
+      } finally {
+        isLoading = false;
+      }
+    }
+
+    function handleSearch(event) {
+      event.preventDefault();
+      const query = searchInput.value;
+      lastQuery = query;
+      fetchStations(query);
+    }
+
+    function handleReset() {
+      searchInput.value = '';
+      lastQuery = '';
+      fetchStations('');
+    }
+
+    const debouncedInput = (function debounce(fn, wait) {
+      let timeout;
+      return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), wait);
+      };
+    })(function() {
+      const query = searchInput.value;
+      if (query === lastQuery) return;
+      lastQuery = query;
+      fetchStations(query);
+    }, 350);
+
+    searchForm.addEventListener('submit', handleSearch);
+    resetButton.addEventListener('click', handleReset);
+    searchInput.addEventListener('input', debouncedInput);
+
+    fetchStations('');
+  })();
+</script>
+{% endblock %}
