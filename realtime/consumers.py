@@ -69,6 +69,17 @@ class DeviceConsumer(AsyncWebsocketConsumer):
             # Non-fatal: if sending fails, log but keep connection alive
             logger.warning(f"Failed to send device update to WebSocket: {e}")
 
+    async def device_removed(self, event):
+        payload = event.get("payload", {}) or {}
+        if "type" not in payload:
+            payload["type"] = "device_removed"
+        if "deviceID" not in payload:
+            payload["deviceID"] = event.get("device_id")
+        try:
+            await self.send(text_data=json.dumps(payload))
+        except Exception as e:
+            logger.warning(f"Failed to send device removal to WebSocket: {e}")
+
     async def _heartbeat(self, interval: int):
         try:
             while True:

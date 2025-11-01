@@ -11,3 +11,6 @@ drf-spectacular==0.27.2
 drf-spectacular-sidecar==2024.7.1
 shurjopay-plugin==0.1.8
 firebase-admin==6.5.0
+pdfplumber==0.11.7
+bijoy2unicode==0.1.1
+bangla==0.0.5

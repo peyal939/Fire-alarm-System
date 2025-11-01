@@ -265,6 +265,35 @@ def _broadcast_device_update(
         logger.warning(f"Failed to broadcast update for device {device_id}: {e}")
 
 
+def broadcast_device_removed(device_obj: Device) -> None:
+    """Remove device from cache and broadcast deletion to WebSocket clients."""
+
+    device_id = getattr(device_obj, "hardware_identifier", None)
+    if not device_id:
+        return
+
+    DEVICES.pop(device_id, None)
+
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            payload = {"type": "device_removed", "deviceID": device_id}
+            async_to_sync(channel_layer.group_send)(
+                "devices",
+                {
+                    "type": "device.removed",
+                    "payload": payload,
+                    "device_id": device_id,
+                },
+            )
+    except Exception as exc:  # pragma: no cover - best-effort broadcast
+        logger.warning(
+            "Failed to broadcast removal for device %s: %s",
+            device_id,
+            exc,
+        )
+
+
 def process_payload(payload: dict) -> None:
     """Process an already-parsed MQTT payload dict.
 

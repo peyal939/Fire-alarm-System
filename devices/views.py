@@ -69,6 +69,21 @@ def _broadcast_new_device(device: Device) -> None:
         )
 
 
+def _broadcast_device_removed(device: Device) -> None:
+    """Notify subscribers that a device has been removed."""
+
+    try:
+        from realtime.mqtt import broadcast_device_removed
+
+        broadcast_device_removed(device)
+    except Exception as exc:  # pragma: no cover - removal broadcast is best-effort
+        logger.warning(
+            "Failed to broadcast device %s removal: %s",
+            device.hardware_identifier,
+            exc,
+        )
+
+
 class DeviceViewSet(viewsets.ModelViewSet):
     serializer_class = DeviceSerializer
     # Require authentication first to avoid AnonymousUser reaching queryset resolution
@@ -120,9 +135,8 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance: Device = self.get_object()
-        instance.deleted_at = timezone.now()
-        instance.deleted_by = request.user
-        instance.save(update_fields=["deleted_at", "deleted_by"])
+        instance.soft_delete(acting_user=request.user)
+        _broadcast_device_removed(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(

@@ -28,6 +28,29 @@ class AuditSoftDeleteModel(models.Model):
     class Meta:
         abstract = True
 
+    def soft_delete(self, *, acting_user=None, using=None, timestamp=None):
+        """Mark the record as deleted without triggering model validation."""
+        if self.pk is None:
+            raise ValueError("Cannot soft delete an unsaved instance")
+
+        ts = timestamp or timezone.now()
+        deleted_by_id = getattr(acting_user, "pk", None)
+
+        manager = self.__class__._default_manager
+        if using:
+            manager = manager.using(using)
+        elif self._state.db:
+            manager = manager.using(self._state.db)
+
+        manager.filter(pk=self.pk).update(
+            deleted_at=ts,
+            deleted_by_id=deleted_by_id,
+        )
+
+        self.deleted_at = ts
+        self.deleted_by = acting_user
+        return ts
+
 
 class Device(AuditSoftDeleteModel):
     user = models.ForeignKey(
@@ -163,8 +186,30 @@ class Device(AuditSoftDeleteModel):
             raise ValidationError({"device_role": "Invalid device role."})
 
     def save(self, *args, **kwargs):
-        # Ensure validations apply across all save paths (including programmatic saves)
-        self.full_clean()
+        validate = kwargs.pop("validate", None)
+        update_fields = kwargs.get("update_fields")
+
+        if validate is None:
+            if update_fields:
+                safe_fields = {
+                    "status",
+                    "last_seen",
+                    "phone_number",
+                    "phone_number_updated_at",
+                    "deleted_at",
+                    "deleted_by",
+                }
+                try:
+                    fields_set = {str(field) for field in update_fields}
+                except TypeError:
+                    fields_set = {str(update_fields)}
+                validate = not fields_set.issubset(safe_fields)
+            else:
+                validate = True
+
+        if validate:
+            # Ensure validations apply across all save paths (including programmatic saves)
+            self.full_clean()
         return super().save(*args, **kwargs)
 
 

@@ -288,7 +288,7 @@ class DeviceTreeSerializer(DeviceNodeSerializer):
         """Return slaves ordered by online status (online first)."""
         # Order slaves by last_seen descending (most recent first)
         # This puts online slaves at the top
-        slaves = obj.slaves.all().order_by(
+        slaves = obj.slaves.filter(deleted_at__isnull=True).order_by(
             models.F("last_seen").desc(nulls_last=True), "-registered_at"
         )
         return DeviceNodeSerializer(slaves, many=True).data

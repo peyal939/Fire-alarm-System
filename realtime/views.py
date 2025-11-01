@@ -72,6 +72,11 @@ def products_page(request):
     return render(request, "products_page.html")
 
 
+@login_required(login_url="/login")
+def firestations_page(request):
+    return render(request, "firestations_page.html")
+
+
 @superadmin_required
 def admin_panel(request):
     return render(request, "admin_panel.html")
