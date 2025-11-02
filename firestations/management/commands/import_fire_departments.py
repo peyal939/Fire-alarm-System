@@ -186,7 +186,7 @@ class Command(BaseCommand):
     def _deduplicate_by_phone(
         self, numbers_seen: dict[str, int], station: FireStation
     ) -> int:
-    numbers = collect_candidate_numbers(station)
+        numbers = collect_candidate_numbers(station)
         if not numbers:
             return 0
 
@@ -214,8 +214,3 @@ class Command(BaseCommand):
             numbers_seen[number] = station.id
 
         return len(removed_ids)
-
-    def _collect_candidate_numbers(self, station: FireStation) -> set[str]:
-        numbers: set[str] = set()
-
-        return numbers
