@@ -182,7 +182,7 @@ class FCMService:
         Returns:
             Dictionary with send results
         """
-        title = "🚨 Fire Alert!"
+        title = "Fire Alert!"
         body = f"High smoke detected on {device_name}!"
 
         data = {
@@ -215,7 +215,7 @@ class FCMService:
         Returns:
             Dictionary with send results
         """
-        title = "⚠️ Device Offline"
+        title = "Device Offline"
         body = f"{device_name} is now offline"
 
         data = {
