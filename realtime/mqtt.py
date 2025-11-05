@@ -684,6 +684,15 @@ def ensure_mqtt_thread():
                 f"✅ MQTT connected to {settings.MQTT_BROKER}:{settings.MQTT_PORT} "
                 f"on topic '{settings.MQTT_TOPIC}'"
             )
+            try:
+                result, _ = client.subscribe(settings.MQTT_TOPIC)
+                if result != mqtt.MQTT_ERR_SUCCESS:
+                    raise RuntimeError(f"Subscribe failed with rc={result}")
+                logger.debug("Re-subscribed to telemetry topic after connect")
+            except Exception as exc:
+                # If we fail the subscription the client keeps running but we'll
+                # reconnect on the next retry loop.
+                logger.error(f"Failed to subscribe to telemetry topic: {exc}")
         else:
             _mqtt_status["connected"] = False
             error_msgs = {
@@ -743,12 +752,14 @@ def ensure_mqtt_thread():
                 client.on_disconnect = on_disconnect
                 client.on_message = on_message
 
+                # Make reconnects less aggressive in case of broker issues.
+                client.reconnect_delay_set(min_delay=1, max_delay=60)
+
                 # Connect and subscribe
                 client.connect(settings.MQTT_BROKER, settings.MQTT_PORT, 60)
-                client.subscribe(settings.MQTT_TOPIC)
 
                 # Blocking loop - will exit on disconnect
-                client.loop_forever()
+                client.loop_forever(retry_first_connection=True)
 
             except Exception as e:
                 _mqtt_status["connected"] = False

@@ -15,10 +15,17 @@ class FCMDevice(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="fcm_devices"
     )
+    # Token can be lengthy; store as varchar(1024) without direct indexing
+    # and rely on the hashed companion field for uniqueness.
     registration_token = models.CharField(
-        max_length=255,
-        unique=True,
+        max_length=1024,
         help_text="FCM registration token from the mobile app",
+    )
+    registration_token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+        help_text="Hash of the FCM registration token (ensures uniqueness)",
     )
     device_name = models.CharField(
         max_length=100,
@@ -46,15 +53,20 @@ class FCMDevice(models.Model):
     )
 
     class Meta:
-        indexes = [
-            models.Index(fields=["user", "active"]),
-            models.Index(fields=["registration_token"]),
-        ]
+        indexes = [models.Index(fields=["user", "active"])]
         ordering = ["-created_at"]
 
     def __str__(self):
         device_info = self.device_name or f"{self.device_type} device"
         return f"{self.user.email} - {device_info}"
+
+    def save(self, *args, **kwargs):
+        import hashlib
+
+        if self.registration_token:
+            token_bytes = self.registration_token.encode("utf-8")
+            self.registration_token_hash = hashlib.sha256(token_bytes).hexdigest()
+        super().save(*args, **kwargs)
 
 
 class NotificationLog(models.Model):

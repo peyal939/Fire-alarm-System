@@ -17,12 +17,25 @@ class FCMDeviceAdmin(admin.ModelAdmin):
     ]
     list_filter = ["active", "device_type", "created_at"]
     search_fields = ["user__email", "device_name", "registration_token"]
-    readonly_fields = ["created_at", "updated_at", "last_used_at"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "last_used_at",
+        "registration_token_hash",
+    ]
 
     fieldsets = (
         (
             "Device Information",
-            {"fields": ("user", "registration_token", "device_name", "device_type")},
+            {
+                "fields": (
+                    "user",
+                    "registration_token",
+                    "registration_token_hash",
+                    "device_name",
+                    "device_type",
+                )
+            },
         ),
         ("Status", {"fields": ("active",)}),
         (

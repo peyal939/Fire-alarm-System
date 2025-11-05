@@ -31,9 +31,12 @@ class FCMDeviceSerializer(serializers.ModelSerializer):
         """Create or update FCM device token for the user."""
         user = self.context["request"].user
         token = validated_data["registration_token"]
+        import hashlib
+
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
 
         # Check if this token already exists
-        existing = FCMDevice.objects.filter(registration_token=token).first()
+        existing = FCMDevice.objects.filter(registration_token_hash=token_hash).first()
 
         if existing:
             # Update existing token (in case user changed)
@@ -45,6 +48,7 @@ class FCMDeviceSerializer(serializers.ModelSerializer):
                 "device_type", existing.device_type
             )
             existing.active = True  # Reactivate if it was deactivated
+            existing.registration_token = token
             existing.save()
             return existing
 
