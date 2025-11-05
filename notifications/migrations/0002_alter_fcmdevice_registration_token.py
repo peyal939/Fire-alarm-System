@@ -65,6 +65,9 @@ class Migration(migrations.Migration):
         ("notifications", "0001_initial"),
     ]
 
+    # MySQL cannot run the required DDL inside an atomic transaction
+    atomic = False
+
     operations = [
         migrations.RunPython(
             drop_registration_token_hash_column,
