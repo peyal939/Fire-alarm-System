@@ -34,6 +34,16 @@ MQTT_PASS = os.getenv("MQTT_PASS", "")
 
 # Alert rules
 SMOKE_ALERT_THRESHOLD = int(os.getenv("SMOKE_ALERT_THRESHOLD", "50"))
+# Number of consecutive safe readings (<= threshold) required to auto-clear an alert
+ALERT_AUTO_CLEAR_NORMAL_READINGS = int(
+    os.getenv("ALERT_AUTO_CLEAR_NORMAL_READINGS", "1")
+)
+# Reminder cadence for unresolved & unacknowledged alerts (seconds). Set to 0 to disable.
+ALERT_REMINDER_INTERVAL_SECONDS = int(
+    os.getenv("ALERT_REMINDER_INTERVAL_SECONDS", "600")
+)
+# Maximum reminder pushes per alert incident (set 0 for unlimited)
+ALERT_REMINDER_MAX_COUNT = int(os.getenv("ALERT_REMINDER_MAX_COUNT", "3"))
 # Device online freshness window (seconds). If a device hasn't sent a message
 # within this window, it's considered offline.
 # Default to 180 seconds (3 minutes); override via env if needed.
@@ -162,6 +172,22 @@ else:
         }
     }
 
+# Celery/Redis configuration (used for alert reminder scheduling)
+_default_broker = os.getenv("CELERY_BROKER_URL", "").strip()
+if not _default_broker:
+    _default_broker = REDIS_URL or "redis://localhost:6379/0"
+
+CELERY_BROKER_URL = _default_broker
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "default")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_ALWAYS_EAGER = (
+    os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
+)
+
 """Static & media configuration.
 
 In development Django can serve from STATICFILES_DIRS; in production we
@@ -208,6 +234,16 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": False,
     "ALGORITHM": "HS256",
 }
+
+if ALERT_REMINDER_INTERVAL_SECONDS > 0:
+    CELERY_BEAT_SCHEDULE = {
+        "send_alert_reminders": {
+            "task": "devices.tasks.send_alert_reminders_task",
+            "schedule": timedelta(seconds=ALERT_REMINDER_INTERVAL_SECONDS),
+        }
+    }
+else:
+    CELERY_BEAT_SCHEDULE = {}
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {

@@ -82,6 +82,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Alert'
           description: ''
+  /alerts/{id}/acknowledge/:
+    post:
+      operationId: alerts_acknowledge_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this alert.
+        required: true
+      tags:
+      - Alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Alert'
+        required: true
+      security:
+      - cookieAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
   /api/fcm/devices/:
     get:
       operationId: api_fcm_devices_list
@@ -2067,11 +2101,37 @@ components:
           type: string
           format: date-time
           readOnly: true
+        last_triggered_at:
+          type: string
+          format: date-time
+          readOnly: true
         resolved_at:
           type: string
           format: date-time
           readOnly: true
           nullable: true
+        acknowledged_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        acknowledged_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        acknowledged_by_email:
+          type: string
+          format: email
+          readOnly: true
+          nullable: true
+        last_reminder_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        reminder_count:
+          type: integer
+          readOnly: true
         owner_id:
           type: integer
           readOnly: true
@@ -2087,9 +2147,11 @@ components:
       - device
       - device_hardware_identifier
       - id
+  - last_triggered_at
       - owner_email
       - owner_id
       - owner_phone
+  - reminder_count
       - resolved_at
       - triggered_at
     AlertStatusEnum:

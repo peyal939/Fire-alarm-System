@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -38,6 +39,7 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         )
         self.device_id = r.data["id"]
         self.device = Device.objects.get(id=self.device_id)
+        self.user = get_user_model().objects.get(email="filters@example.com")
 
     def test_alert_resolve_action(self):
         # Trigger only smoke_high alert (device_status is healthy)
@@ -77,6 +79,23 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         self.assertEqual(r_res.status_code, 200)
         res_ids = [a["id"] for a in get_items(r_res.data)]
         self.assertIn(alert_id, res_ids)
+
+    def test_alert_acknowledge_action(self):
+        ts = timezone.now()
+        services.ingest_telemetry(
+            self.device, smoke_level=999, device_status="alive", timestamp=ts
+        )
+
+        r = self.client.get(f"/alerts/?device={self.device_id}&status=open")
+        self.assertEqual(r.status_code, 200)
+        alert = get_items(r.data)[0]
+        alert_id = alert["id"]
+
+        ack_response = self.client.post(f"/alerts/{alert_id}/acknowledge/")
+        self.assertEqual(ack_response.status_code, 200)
+        self.assertEqual(ack_response.data.get("status"), Alert.Status.OPEN)
+        self.assertIsNotNone(ack_response.data.get("acknowledged_at"))
+        self.assertEqual(ack_response.data.get("acknowledged_by"), self.user.id)
 
     def test_telemetry_filters_since_until(self):
         # Create two telemetry points (persisted only when smoke > threshold)

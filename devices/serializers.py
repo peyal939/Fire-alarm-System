@@ -335,6 +335,10 @@ class AlertSerializer(serializers.ModelSerializer):
     owner_phone = serializers.CharField(
         source="device.user.phone_number", read_only=True
     )
+    acknowledged_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    acknowledged_by_email = serializers.EmailField(
+        source="acknowledged_by.email", read_only=True
+    )
 
     class Meta:
         model = Alert
@@ -345,9 +349,25 @@ class AlertSerializer(serializers.ModelSerializer):
             "alert_type",
             "status",
             "triggered_at",
+            "last_triggered_at",
             "resolved_at",
+            "acknowledged_at",
+            "acknowledged_by",
+            "acknowledged_by_email",
+            "last_reminder_at",
+            "reminder_count",
             "owner_id",
             "owner_email",
             "owner_phone",
         )
-        read_only_fields = ("id", "triggered_at", "resolved_at")
+        read_only_fields = (
+            "id",
+            "triggered_at",
+            "last_triggered_at",
+            "resolved_at",
+            "acknowledged_at",
+            "acknowledged_by",
+            "acknowledged_by_email",
+            "last_reminder_at",
+            "reminder_count",
+        )

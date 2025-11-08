@@ -169,7 +169,12 @@ class FCMService:
 
     @staticmethod
     def send_alert_notification(
-        user, device_name: str, alert_type: str, alert_id: int
+        user,
+        device_name: str,
+        alert_type: str,
+        alert_id: int,
+        *,
+        is_reminder: bool = False,
     ) -> Dict[str, Any]:
         """Send a fire alert notification to user's devices.
 
@@ -178,12 +183,17 @@ class FCMService:
             device_name: Name of the device that triggered the alert
             alert_type: Type of alert (e.g., 'smoke_high')
             alert_id: ID of the alert record
+            is_reminder: Whether this push is a reminder for an ongoing alert
 
         Returns:
             Dictionary with send results
         """
-        title = "Fire Alert!"
-        body = f"High smoke detected on {device_name}!"
+        if is_reminder:
+            title = "Fire Alert Reminder"
+            body = f"Ongoing smoke alert on {device_name}!"
+        else:
+            title = "Fire Alert!"
+            body = f"High smoke detected on {device_name}!"
 
         data = {
             "type": "fire_alert",
@@ -191,6 +201,7 @@ class FCMService:
             "alert_type": alert_type,
             "device_name": device_name,
             "priority": "high",
+            "is_reminder": "true" if is_reminder else "false",
         }
 
         return FCMService.send_to_user(

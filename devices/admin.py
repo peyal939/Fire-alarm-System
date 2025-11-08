@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Device, Telemetry, Alert
+from .models import Device, Telemetry, Alert, DeviceAlarmState
 
 
 class SlaveInline(admin.TabularInline):
@@ -52,7 +52,28 @@ class TelemetryAdmin(admin.ModelAdmin):
 
 @admin.register(Alert)
 class AlertAdmin(admin.ModelAdmin):
-    list_display = ("device", "alert_type", "status", "triggered_at", "resolved_at")
+    list_display = (
+        "device",
+        "alert_type",
+        "status",
+        "triggered_at",
+        "last_triggered_at",
+        "resolved_at",
+        "acknowledged_at",
+    )
     list_filter = ("status", "alert_type")
     search_fields = ("device__hardware_identifier",)
     autocomplete_fields = ("device",)
+
+
+@admin.register(DeviceAlarmState)
+class DeviceAlarmStateAdmin(admin.ModelAdmin):
+    list_display = (
+        "device",
+        "active_alert",
+        "safe_reading_streak",
+        "next_reminder_at",
+        "updated_at",
+    )
+    search_fields = ("device__hardware_identifier",)
+    autocomplete_fields = ("device", "active_alert")
