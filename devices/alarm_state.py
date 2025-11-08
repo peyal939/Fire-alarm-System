@@ -44,12 +44,21 @@ def _compute_next_reminder(alert: Alert) -> Optional[datetime]:
     )
     if interval_seconds <= 0:
         return None
-    if alert.acknowledged_at:
-        return None
     max_count = max(int(getattr(settings, "ALERT_REMINDER_MAX_COUNT", 0)), 0)
     if max_count and alert.reminder_count >= max_count:
         return None
-    return timezone.now() + timedelta(seconds=interval_seconds)
+    now = timezone.now()
+    ack_escalation_seconds = max(
+        int(getattr(settings, "ALERT_ACK_ESCALATION_SECONDS", 0)), 0
+    )
+    if alert.acknowledged_at:
+        if ack_escalation_seconds <= 0:
+            return None
+        ack_due = alert.acknowledged_at + timedelta(seconds=ack_escalation_seconds)
+        if alert.last_reminder_at and alert.last_reminder_at >= ack_due:
+            return now + timedelta(seconds=interval_seconds)
+        return max(ack_due, now)
+    return now + timedelta(seconds=interval_seconds)
 
 
 def record_high_smoke(

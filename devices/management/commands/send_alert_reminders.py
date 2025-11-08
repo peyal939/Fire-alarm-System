@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -32,6 +33,9 @@ class Command(BaseCommand):
 
         sent = 0
         skipped = 0
+        ack_escalation_seconds = max(
+            int(getattr(settings, "ALERT_ACK_ESCALATION_SECONDS", 0)), 0
+        )
 
         try:
             from notifications.services import FCMService
@@ -41,14 +45,8 @@ class Command(BaseCommand):
         for state in reminder_states:
             alert = state.active_alert
             if not alert or alert.status != Alert.Status.OPEN:
-                # Alert already resolved; clear reminder window
                 state.next_reminder_at = None
                 state.save(update_fields=["next_reminder_at", "updated_at"])
-                skipped += 1
-                continue
-
-            if alert.acknowledged_at:
-                schedule_next_reminder(alert)
                 skipped += 1
                 continue
 
@@ -69,10 +67,18 @@ class Command(BaseCommand):
                     locked_state.save(update_fields=["next_reminder_at", "updated_at"])
                     skipped += 1
                     continue
+
+                now = timezone.now()
                 if alert.acknowledged_at:
-                    schedule_next_reminder(alert)
-                    skipped += 1
-                    continue
+                    if ack_escalation_seconds <= 0:
+                        schedule_next_reminder(alert)
+                        skipped += 1
+                        continue
+                    ack_age = (now - alert.acknowledged_at).total_seconds()
+                    if ack_age < ack_escalation_seconds:
+                        schedule_next_reminder(alert)
+                        skipped += 1
+                        continue
 
                 try:
                     FCMService.send_alert_notification(

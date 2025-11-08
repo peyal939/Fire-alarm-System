@@ -44,6 +44,8 @@ ALERT_REMINDER_INTERVAL_SECONDS = int(
 )
 # Maximum reminder pushes per alert incident (set 0 for unlimited)
 ALERT_REMINDER_MAX_COUNT = int(os.getenv("ALERT_REMINDER_MAX_COUNT", "3"))
+# Escalation window for acknowledged-but-unresolved alerts (seconds). Set to 0 to disable.
+ALERT_ACK_ESCALATION_SECONDS = int(os.getenv("ALERT_ACK_ESCALATION_SECONDS", "600"))
 # Device online freshness window (seconds). If a device hasn't sent a message
 # within this window, it's considered offline.
 # Default to 180 seconds (3 minutes); override via env if needed.

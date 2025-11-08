@@ -1,9 +1,16 @@
+from datetime import timedelta
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from devices.models import Device, Alert
 from devices import services
+from devices.alarm_state import schedule_next_reminder
+from devices.constants import AlertType
+from devices.models import Device, Alert
 
 
 def get_items(data):
@@ -140,3 +147,59 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         self.assertEqual(r_epoch.status_code, 200)
         epoch_items = get_items(r_epoch.data)
         self.assertGreaterEqual(len(epoch_items), 1)
+
+
+class AlertReminderEscalationTests(TestCase):
+    @override_settings(
+        ALERT_REMINDER_INTERVAL_SECONDS=60,
+        ALERT_ACK_ESCALATION_SECONDS=120,
+        ALERT_REMINDER_MAX_COUNT=5,
+    )
+    def test_acknowledged_alert_triggers_escalation_reminder(self):
+        user = get_user_model().objects.create_user(
+            email="escalation@example.com", password="Passw0rd!"
+        )
+        device = Device.objects.create(
+            user=user,
+            hardware_identifier="ESCALATE-01",
+            device_name="Escalate Device",
+        )
+
+        now = timezone.now()
+        alert = Alert.objects.create(
+            device=device,
+            alert_type=AlertType.SMOKE_HIGH,
+            status=Alert.Status.OPEN,
+            triggered_at=now - timedelta(minutes=1),
+            last_triggered_at=now - timedelta(minutes=1),
+        )
+
+        # Simulate acknowledgement that happened two minutes ago
+        alert.acknowledged_at = now - timedelta(seconds=120)
+        alert.acknowledged_by = user
+        alert.save(update_fields=["acknowledged_at", "acknowledged_by"])
+
+        schedule_next_reminder(alert)
+        state = device.alarm_state
+        self.assertIsNotNone(state.next_reminder_at)
+        self.assertLessEqual(state.next_reminder_at, timezone.now())
+
+        with patch(
+            "devices.management.commands.send_alert_reminders.FCMService.send_alert_notification"
+        ) as mock_send:
+            mock_send.return_value = {
+                "success": 1,
+                "failure": 0,
+                "invalid_tokens": [],
+            }
+            call_command("send_alert_reminders")
+            mock_send.assert_called_once()
+            self.assertTrue(mock_send.call_args.kwargs.get("is_reminder"))
+
+        alert.refresh_from_db()
+        state.refresh_from_db()
+
+        self.assertEqual(alert.reminder_count, 1)
+        self.assertIsNotNone(alert.last_reminder_at)
+        # Next reminder should be scheduled in the future (interval seconds)
+        self.assertGreater(state.next_reminder_at, alert.last_reminder_at)
