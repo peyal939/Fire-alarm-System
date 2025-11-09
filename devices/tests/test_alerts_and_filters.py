@@ -185,7 +185,7 @@ class AlertReminderEscalationTests(TestCase):
         self.assertLessEqual(state.next_reminder_at, timezone.now())
 
         with patch(
-            "devices.management.commands.send_alert_reminders.FCMService.send_alert_notification"
+            "notifications.services.FCMService.send_alert_notification"
         ) as mock_send:
             mock_send.return_value = {
                 "success": 1,

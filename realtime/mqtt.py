@@ -36,7 +36,7 @@ from devices.constants import (
     UnregisteredDeviceError,
     MQTTProcessingError,
 )
-from .consumers import DEVICES
+from . import device_cache
 
 logger = logging.getLogger(__name__)
 _thread_started = False
@@ -181,7 +181,7 @@ def _broadcast_device_update(
     - Mesh alert status (group-wide alert state)
 
     The payload is:
-    1. Stored in the in-memory DEVICES cache for snapshot delivery to new WebSocket connections
+    1. Persisted to the shared device cache (Redis when available, in-memory fallback)
     2. Broadcast to all connected WebSocket clients via Channels layer
 
     Args:
@@ -245,7 +245,7 @@ def _broadcast_device_update(
         device_payload["longitude"] = pos["longitude"]
 
     # Update in-memory cache for snapshot delivery to new WebSocket connections
-    DEVICES[device_id] = device_payload
+    device_cache.set_device_state(device_id, device_payload)
 
     # Always broadcast MQTT messages for real-time updates (removed throttling)
     # The channel capacity increase (1000) and message expiry (60s) handle burst traffic
@@ -272,7 +272,7 @@ def broadcast_device_removed(device_obj: Device) -> None:
     if not device_id:
         return
 
-    DEVICES.pop(device_id, None)
+    device_cache.remove_device(device_id)
 
     try:
         channel_layer = get_channel_layer()
@@ -562,7 +562,7 @@ def process_payload(payload: dict) -> None:
 
 
 def _populate_devices_cache():
-    """Populate the DEVICES cache with all registered devices on startup.
+    """Populate the shared device cache with all registered devices on startup.
 
     This ensures that devices already running and sending telemetry before
     the server starts will be visible on the dashboard immediately when
@@ -571,6 +571,7 @@ def _populate_devices_cache():
     try:
         close_old_connections()
         devices = Device.objects.filter(deleted_at__isnull=True).select_related("user")
+        seed_map: Dict[str, Dict[str, Any]] = {}
 
         for device in devices:
             try:
@@ -624,8 +625,8 @@ def _populate_devices_cache():
                     except (TypeError, ValueError, Decimal.InvalidOperation):
                         pass
 
-                # Update the in-memory cache
-                DEVICES[device.hardware_identifier] = device_payload
+                # Stage for cache population
+                seed_map[device.hardware_identifier] = device_payload
                 logger.debug(
                     f"Pre-loaded device {device.hardware_identifier} into cache"
                 )
@@ -636,7 +637,8 @@ def _populate_devices_cache():
                 )
                 continue
 
-        logger.info(f"✅ Pre-loaded {len(DEVICES)} registered devices into cache")
+        device_cache.replace_all(seed_map)
+        logger.info(f"✅ Pre-loaded {len(seed_map)} registered devices into cache")
 
     except Exception as e:
         logger.error(f"Failed to populate devices cache: {e}", exc_info=True)
@@ -657,7 +659,7 @@ def ensure_mqtt_thread():
         return
     _thread_started = True
 
-    # Populate the DEVICES cache with all registered devices on startup
+    # Populate the shared device cache with all registered devices on startup
     _populate_devices_cache()
 
     def get_position(device: Device):

@@ -3,11 +3,12 @@ import json
 import logging
 from contextlib import suppress
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-# In-memory store for device state
-DEVICES = {}
+from . import device_cache
+
 WEBSOCKETS = set()
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,9 @@ class DeviceConsumer(AsyncWebsocketConsumer):
         await self.accept()
         WEBSOCKETS.add(self)
         await self.channel_layer.group_add("devices", self.channel_name)
-        for d in DEVICES.values():
-            await self.send(text_data=json.dumps(d))
+        initial_states = await sync_to_async(device_cache.get_all_states)()
+        for payload in initial_states:
+            await self.send(text_data=json.dumps(payload))
         interval = _heartbeat_interval()
         if interval > 0:
             self.heartbeat_task = asyncio.create_task(self._heartbeat(interval))
