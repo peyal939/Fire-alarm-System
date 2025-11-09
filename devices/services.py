@@ -12,6 +12,7 @@ from django.conf import settings
 from django.db import DatabaseError, models
 from django.utils import timezone
 
+from .alarm_state import record_high_smoke, record_safe_smoke, reset_state_for_alert
 from .constants import (
     AlertType,
     DeviceConfigurationPublishError,
@@ -23,71 +24,6 @@ from .constants import (
 from .models import Alert, Device, Telemetry
 
 logger = logging.getLogger(__name__)
-
-
-def _send_alert_notifications(devices):
-    """Send push notifications for new alerts.
-
-    Args:
-        devices: List of Device objects that have new alerts
-    """
-    try:
-        from notifications.services import FCMService
-
-        # Group devices by user to avoid duplicate notifications
-        user_devices = {}
-        for device in devices:
-            user_id = device.user_id
-            if user_id not in user_devices:
-                user_devices[user_id] = []
-            user_devices[user_id].append(device)
-
-        # Send one notification per user with info about all their affected devices
-        for user_id, user_device_list in user_devices.items():
-            try:
-                # Get the first device's user object
-                user = user_device_list[0].user
-
-                # If multiple devices, list them all
-                if len(user_device_list) > 1:
-                    device_names = ", ".join(
-                        [
-                            d.device_name or d.hardware_identifier
-                            for d in user_device_list
-                        ]
-                    )
-                    device_name = f"{len(user_device_list)} devices: {device_names}"
-                else:
-                    device = user_device_list[0]
-                    device_name = device.device_name or device.hardware_identifier
-
-                # Send the alert notification
-                FCMService.send_alert_notification(
-                    user=user,
-                    device_name=device_name,
-                    alert_type=AlertType.SMOKE_HIGH,
-                    alert_id=0,  # Bulk alert doesn't have single ID
-                )
-
-                logger.info(
-                    f"Sent alert notification to user {user_id} for {len(user_device_list)} device(s)"
-                )
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to send notification to user {user_id}: {e}", exc_info=True
-                )
-                # Continue with other users even if one fails
-
-    except ImportError:
-        # Notifications app not available (shouldn't happen but handle gracefully)
-        logger.warning(
-            "Notifications service not available, skipping push notifications"
-        )
-    except Exception as e:
-        logger.error(
-            f"Unexpected error sending alert notifications: {e}", exc_info=True
-        )
 
 
 def publish_device_phone_assignment(device: Device, *, phone_number: str) -> None:
@@ -249,45 +185,68 @@ def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
                 )
                 return
 
-            # Check which online devices already have open alerts
-            open_map = {
-                d.id: Alert.objects.filter(
-                    device=d, alert_type=AlertType.SMOKE_HIGH, status=Alert.Status.OPEN
-                ).exists()
-                for d in online_members
-            }
+            created_alerts = []
+            now = timezone.now()
+            for member in online_members:
+                result = record_high_smoke(device=member, observed_at=now)
+                if result.created and result.alert:
+                    created_alerts.append(result.alert)
 
-            # Create alerts only for devices that don't have one
-            to_create = [d for d in online_members if not open_map.get(d.id)]
-            if to_create:
-                Alert.objects.bulk_create(
-                    [
-                        Alert(
-                            device=d,
-                            alert_type=AlertType.SMOKE_HIGH,
-                            status=Alert.Status.OPEN,
-                        )
-                        for d in to_create
-                    ]
-                )
+            if created_alerts:
                 logger.info(
-                    f"Created {len(to_create)} mesh alerts for master {master.id}"
+                    "Created %s mesh alerts for master %s",
+                    len(created_alerts),
+                    master.id,
                 )
 
-                # Send push notifications to affected users
-                _send_alert_notifications(to_create)
+                try:
+                    from notifications.services import FCMService
+
+                    for alert in created_alerts:
+                        device_obj = alert.device
+                        device_name = (
+                            device_obj.device_name or device_obj.hardware_identifier
+                        )
+                        try:
+                            FCMService.send_alert_notification(
+                                user=device_obj.user,
+                                device_name=device_name,
+                                alert_type=alert.alert_type,
+                                alert_id=alert.id,
+                            )
+                        except Exception as send_exc:
+                            logger.error(
+                                "Failed to send mesh notification for alert %s: %s",
+                                alert.id,
+                                send_exc,
+                            )
+                except ImportError:
+                    logger.warning(
+                        "Notifications service not available, skipping mesh pushes"
+                    )
         else:
             # Group alarm is cleared - resolve ALL alerts (online and offline)
             # This ensures clean slate when smoke normalizes
-            resolved_count = Alert.objects.filter(
-                device__in=[d.id for d in members],
-                alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
-            ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+            alerts = list(
+                Alert.objects.filter(
+                    device__in=[d.id for d in members],
+                    alert_type=AlertType.SMOKE_HIGH,
+                    status=Alert.Status.OPEN,
+                )
+            )
 
-            if resolved_count:
+            if alerts:
+                resolved_at = timezone.now()
+                for alert in alerts:
+                    alert.status = Alert.Status.RESOLVED
+                    alert.resolved_at = resolved_at
+                    alert.save(update_fields=["status", "resolved_at"])
+                    reset_state_for_alert(alert)
+
                 logger.info(
-                    f"Resolved {resolved_count} mesh alerts for master {master.id}"
+                    "Resolved %s mesh alerts for master %s",
+                    len(alerts),
+                    master.id,
                 )
 
     except DatabaseError as e:
@@ -367,31 +326,42 @@ def recompute_mesh_after_change(device: Device) -> None:
             # Propagate alert to all other online members
             to_open = [m for m in online_members if m.id not in open_online_ids]
             if to_open:
-                Alert.objects.bulk_create(
-                    [
-                        Alert(
-                            device=m,
-                            alert_type=AlertType.SMOKE_HIGH,
-                            status=Alert.Status.OPEN,
-                        )
-                        for m in to_open
-                    ]
-                )
-                logger.info(
-                    f"Propagated mesh alert to {len(to_open)} devices in mesh for device {device.id}"
-                )
+                now = timezone.now()
+                created = 0
+                for member in to_open:
+                    result = record_high_smoke(device=member, observed_at=now)
+                    if result.created:
+                        created += 1
+
+                if created:
+                    logger.info(
+                        "Propagated mesh alert to %s devices in mesh for device %s",
+                        created,
+                        device.id,
+                    )
         else:
             # Step 5b: No online device has high smoke
             # Clear all alerts to ensure mesh is clean
-            resolved_count = Alert.objects.filter(
-                device__in=[d.id for d in members],
-                alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
-            ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+            alerts = list(
+                Alert.objects.filter(
+                    device__in=[d.id for d in members],
+                    alert_type=AlertType.SMOKE_HIGH,
+                    status=Alert.Status.OPEN,
+                )
+            )
 
-            if resolved_count:
+            if alerts:
+                resolved_at = timezone.now()
+                for alert in alerts:
+                    alert.status = Alert.Status.RESOLVED
+                    alert.resolved_at = resolved_at
+                    alert.save(update_fields=["status", "resolved_at"])
+                    reset_state_for_alert(alert)
+
                 logger.info(
-                    f"Cleared {resolved_count} mesh alerts for device {device.id}"
+                    "Cleared %s mesh alerts for device %s",
+                    len(alerts),
+                    device.id,
                 )
 
     except DatabaseError as e:
@@ -465,21 +435,15 @@ def ingest_telemetry(
     # Trigger alert when smoke EXCEEDS threshold (not equals)
     # This aligns with telemetry persistence logic and UI expectations
     try:
+        observed_at = timezone.now()
         if smoke_level > int(threshold):
-            # Check if device already has an open smoke alert
-            has_open = Alert.objects.filter(
-                device=device, alert_type=AlertType.SMOKE_HIGH, status=Alert.Status.OPEN
-            ).exists()
-
-            if not has_open:
-                # Create new alert for this device
-                alert = Alert.objects.create(
-                    device=device,
-                    alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
-                )
+            result = record_high_smoke(device=device, observed_at=observed_at)
+            alert = result.alert
+            if result.created and alert:
                 logger.info(
-                    f"Created smoke_high alert for device {device.id} (smoke: {smoke_level})"
+                    "Created smoke_high alert for device %s (smoke: %s)",
+                    device.id,
+                    smoke_level,
                 )
 
                 # Send push notification for this single device alert
@@ -495,21 +459,21 @@ def ingest_telemetry(
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to send notification for alert {alert.id}: {e}"
+                        "Failed to send notification for alert %s: %s",
+                        alert.id,
+                        e,
                     )
 
                 # Propagate alert to all online members in the mesh
                 # This ensures coordinated group alerting across master/slave networks
                 recompute_mesh_after_change(device)
         else:
-            # Smoke is back to normal - resolve any open alerts
-            qs = Alert.objects.filter(
-                device=device, alert_type=AlertType.SMOKE_HIGH, status=Alert.Status.OPEN
-            )
-            if qs.exists():
-                qs.update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+            result = record_safe_smoke(device=device, observed_at=observed_at)
+            if result.resolved and result.alert:
                 logger.info(
-                    f"Resolved smoke_high alert for device {device.id} (smoke: {smoke_level})"
+                    "Resolved smoke_high alert for device %s (smoke: %s)",
+                    device.id,
+                    smoke_level,
                 )
 
                 # Recompute mesh to potentially clear alerts on other devices
@@ -522,11 +486,15 @@ def ingest_telemetry(
 
     except DatabaseError as e:
         logger.error(
-            f"Database error processing smoke alerts for device {device.id}: {e}"
+            "Database error processing smoke alerts for device %s: %s",
+            device.id,
+            e,
         )
     except Exception as e:
         logger.error(
-            f"Unexpected error processing smoke alerts for device {device.id}: {e}",
+            "Unexpected error processing smoke alerts for device %s: %s",
+            device.id,
+            e,
             exc_info=True,
         )
 

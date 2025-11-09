@@ -47,15 +47,15 @@
 				</div>
 				<div class="card-body p-0">
 					<div class="table-responsive">
-						<table class="table table-hover mb-0" id="latestAlertsTable">
+						<table class="table table-hover align-middle mb-0" id="latestAlertsTable">
 							<thead>
 								<tr>
-									<th>ID</th>
-									<th>Device</th>
-									<th>Type</th>
+									<th>Alert</th>
 									<th>Status</th>
-									<th>Time</th>
-									<th></th>
+									<th>Acknowledgement</th>
+									<th>Timeline</th>
+									<th>Reminders</th>
+									<th class="text-end">Actions</th>
 								</tr>
 							</thead>
 							<tbody></tbody>
@@ -141,6 +141,72 @@
 			}
 		}
 
+	function formatTimestamp(value) {
+		if (!value) {
+			return "—";
+		}
+		try {
+			return new Date(value).toLocaleString();
+		} catch (err) {
+			console.warn("Failed to format timestamp", value, err);
+			return value;
+		}
+	}
+
+	function buildAlertStatusCell(alert) {
+		const status = (alert.status || "").toLowerCase();
+		let badgeClass = "bg-secondary";
+		if (status === "open") {
+			badgeClass = alert.acknowledged_at ? "bg-warning text-dark" : "bg-danger";
+		} else if (status === "resolved") {
+			badgeClass = "bg-success";
+		}
+		const statusLabel = status ? status.toUpperCase() : "UNKNOWN";
+		const ackBadge = alert.acknowledged_at
+			? '<span class="badge bg-info text-dark ms-2">ACKNOWLEDGED</span>'
+			: "";
+		return `<span class="badge ${badgeClass}">${statusLabel}</span>${ackBadge}`;
+	}
+
+	function buildAcknowledgementCell(alert) {
+		if (!alert.acknowledged_at) {
+			return '<span class="text-muted">Pending acknowledgement</span>';
+		}
+		const who = alert.acknowledged_by_email || `User #${alert.acknowledged_by}`;
+		const when = formatTimestamp(alert.acknowledged_at);
+		return `<div><strong>${who}</strong></div><div class="text-muted small">at ${when}</div>`;
+	}
+
+	function buildTimelineCell(alert) {
+		const triggered = formatTimestamp(alert.triggered_at);
+		const lastTrigger = formatTimestamp(alert.last_triggered_at);
+		const lastReminder = formatTimestamp(alert.last_reminder_at);
+		return `
+			<div><span class="text-muted small">Triggered:</span> ${triggered}</div>
+			<div><span class="text-muted small">Last activity:</span> ${lastTrigger}</div>
+			<div><span class="text-muted small">Last reminder:</span> ${lastReminder}</div>
+		`;
+	}
+
+	function buildReminderCell(alert) {
+		const count = Number.isFinite(alert.reminder_count)
+			? alert.reminder_count
+			: 0;
+		return `
+			<div class="fw-semibold">${count}</div>
+			<div class="text-muted small">reminders sent</div>
+		`;
+	}
+
+	function buildAlertIdentityCell(alert) {
+		const deviceId = alert.device ?? "—";
+		const hardwareId = alert.device_hardware_identifier || "";
+		return `
+			<div class="fw-semibold">${alert.alert_type || ""}</div>
+			<div class="text-muted small">Device #${deviceId}${hardwareId ? ` · ${hardwareId}` : ""}</div>
+		`;
+	}
+
 	async function loadLatestAlerts() {
 		// First page only (latest by default ordering)
 		let items = await fetchAllPages('/alerts/?status=open', 1);
@@ -148,14 +214,21 @@
 		alertsTbody.innerHTML = '';
 		take.forEach(a => {
 			const tr = document.createElement('tr');
-			const t = a.triggered_at ? new Date(a.triggered_at).toLocaleString() : '—';
+			const actions = [];
+			if (!a.acknowledged_at && (a.status || '').toLowerCase() === 'open') {
+				actions.push(`<button class="btn btn-sm btn-outline-primary" data-action="acknowledge" data-id="${a.id}">Acknowledge</button>`);
+			}
+			if ((a.status || '').toLowerCase() === 'open') {
+				actions.push(`<button class="btn btn-sm btn-outline-success ms-2" data-action="resolve" data-id="${a.id}">Resolve</button>`);
+			}
+
 			tr.innerHTML = `
-				<td>${a.id}</td>
-				<td>${a.device || ''}</td>
-				<td><code>${a.alert_type || ''}</code></td>
-				<td class="text-danger">${a.status || ''}</td>
-				<td>${t}</td>
-				<td><button class="btn btn-sm btn-outline-success" data-action="resolve" data-id="${a.id}">Resolve</button></td>
+				<td>${buildAlertIdentityCell(a)}</td>
+				<td>${buildAlertStatusCell(a)}</td>
+				<td>${buildAcknowledgementCell(a)}</td>
+				<td>${buildTimelineCell(a)}</td>
+				<td>${buildReminderCell(a)}</td>
+				<td class="text-end">${actions.join('') || '<span class="text-muted">—</span>'}</td>
 			`;
 			alertsTbody.appendChild(tr);
 		});
@@ -164,18 +237,28 @@
 
 	alertsTbody.addEventListener('click', async (e) => {
 		const btn = e.target.closest('button[data-action="resolve"]');
-		if (!btn) return;
-		const id = btn.getAttribute('data-id');
+		const ackBtn = e.target.closest('button[data-action="acknowledge"]');
+		if (!btn && !ackBtn) return;
+		const targetBtn = btn || ackBtn;
+		const id = targetBtn.getAttribute('data-id');
+		const action = targetBtn.getAttribute('data-action');
+		const endpoint = action === 'acknowledge'
+			? `/alerts/${id}/acknowledge/`
+			: `/alerts/${id}/resolve/`;
+
 		try {
-			btn.disabled = true;
-			await apiPost(`/alerts/${id}/resolve/`, {});
+			targetBtn.disabled = true;
+			await apiPost(endpoint, {});
 			await loadKPIs();
 			await loadLatestAlerts();
 		} catch (err) {
 			console.error(err);
-			alert('Failed to resolve alert.');
+			const msg = action === 'acknowledge'
+				? 'Failed to acknowledge alert.'
+				: 'Failed to resolve alert.';
+			alert(msg);
 		} finally {
-			btn.disabled = false;
+			targetBtn.disabled = false;
 		}
 	});
 

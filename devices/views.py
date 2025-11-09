@@ -31,6 +31,7 @@ from .serializers import (
     DevicePhoneUpdateSerializer,
 )
 from .constants import DeviceConfigurationPublishError
+from .alarm_state import reset_state_for_alert, schedule_next_reminder
 
 logger = logging.getLogger(__name__)
 
@@ -877,15 +878,47 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(status=status_param)
         return qs
 
+    @action(detail=True, methods=["post"], url_path="acknowledge")
+    @extend_schema(tags=["Alerts"], summary="Acknowledge an alert")
+    def acknowledge(self, request, pk=None):
+        alert: Alert = self.get_object()
+        if alert.status == Alert.Status.RESOLVED:
+            return Response(AlertSerializer(alert).data)
+
+        now = timezone.now()
+        update_fields = ["acknowledged_at"]
+        alert.acknowledged_at = now
+
+        if getattr(request.user, "is_authenticated", False):
+            alert.acknowledged_by = request.user
+            update_fields.append("acknowledged_by")
+
+        alert.save(update_fields=update_fields)
+        schedule_next_reminder(alert)
+        return Response(AlertSerializer(alert).data)
+
     @action(detail=True, methods=["post"], url_path="resolve")
     @extend_schema(tags=["Alerts"], summary="Resolve an alert")
     def resolve(self, request, pk=None):
         alert: Alert = self.get_object()
         if alert.status == Alert.Status.RESOLVED:
             return Response(AlertSerializer(alert).data)
-        from django.utils import timezone
 
+        now = timezone.now()
         alert.status = Alert.Status.RESOLVED
-        alert.resolved_at = timezone.now()
-        alert.save(update_fields=["status", "resolved_at"])
+        alert.resolved_at = now
+
+        update_fields = ["status", "resolved_at"]
+
+        if not alert.acknowledged_at:
+            alert.acknowledged_at = now
+            update_fields.append("acknowledged_at")
+        if not alert.acknowledged_by and getattr(
+            request.user, "is_authenticated", False
+        ):
+            alert.acknowledged_by = request.user
+            update_fields.append("acknowledged_by")
+
+        alert.save(update_fields=update_fields)
+        reset_state_for_alert(alert)
         return Response(AlertSerializer(alert).data)

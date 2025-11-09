@@ -241,7 +241,18 @@ class Alert(AuditSoftDeleteModel):
         max_length=16, choices=Status.choices, default=Status.OPEN
     )
     triggered_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_triggered_at = models.DateTimeField(default=timezone.now, db_index=True)
     resolved_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="acknowledged_alerts",
+    )
+    last_reminder_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    reminder_count = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         indexes = [
@@ -250,3 +261,33 @@ class Alert(AuditSoftDeleteModel):
         ]
         # Ensure stable pagination ordering
         ordering = ["-triggered_at"]
+
+
+class DeviceAlarmState(models.Model):
+    """Tracks the active alarm/notification state for a device."""
+
+    device = models.OneToOneField(
+        Device,
+        on_delete=models.CASCADE,
+        related_name="alarm_state",
+    )
+    active_alert = models.ForeignKey(
+        Alert,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="alarm_states",
+    )
+    safe_reading_streak = models.PositiveSmallIntegerField(default=0)
+    next_reminder_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["next_reminder_at"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        alert_id = getattr(self.active_alert, "id", None)
+        return f"DeviceAlarmState(device={self.device_id}, alert={alert_id})"
