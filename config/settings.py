@@ -53,6 +53,12 @@ DEVICE_ONLINE_FRESHNESS_SECONDS = int(
     os.getenv("DEVICE_ONLINE_FRESHNESS_SECONDS", "180")
 )
 
+# Allow JWT lifetimes to be overridden without code changes
+JWT_ACCESS_TOKEN_LIFETIME_MINUTES = int(
+    os.getenv("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", "60")
+)
+JWT_REFRESH_TOKEN_LIFETIME_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_LIFETIME_DAYS", "7"))
+
 # If True, a slave entry in a composite MQTT payload must contain its OWN
 # timestamp field (distinct from the master's) to be treated as a fresh
 # telemetry update. This prevents a master from continually marking slaves
@@ -230,8 +236,8 @@ REST_FRAMEWORK = {
 from datetime import timedelta  # noqa: E402
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=JWT_ACCESS_TOKEN_LIFETIME_MINUTES),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=JWT_REFRESH_TOKEN_LIFETIME_DAYS),
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     "ALGORITHM": "HS256",
