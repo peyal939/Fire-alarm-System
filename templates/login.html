@@ -1,49 +1,172 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Login · apS{% endblock %}
-{% block head_extra %}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-{% endblock %}
 {% block navbar %}{% endblock %}
 {% block content %}
-<div class="d-flex align-items-center" style="min-height: calc(100vh - 120px);">
-    <div class="container">
-      <div class="row justify-content-center mt-5">
-        <div class="col-12 col-md-6 col-lg-4">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="text-center mb-3">
-                    <img src="/static/apSLogo.png" alt="logo" width="72" height="72" style="background: white; border-radius: 50%; padding: 5px;">
-                    <h5 class="mt-2">Account Login</h5>
-                </div>
-                <form method="POST" action="/login/">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ next|default:'/' }}" />
-                    {% if error %}
-                    <div class="alert alert-danger" role="alert">{{ error }}</div>
-                    {% endif %}
-                    <div class="mb-3">
-                        <label class="form-label">Email address</label>
-                        <input type="email" name="email" required class="form-control" placeholder="name@example.com" value="{{ email|default:'' }}" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" required class="form-control" placeholder="••••••••" />
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="remember">
-                            <label class="form-check-label" for="remember">Remember me</label>
+<div class="auth-wrapper">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-12 col-md-8 col-lg-6">
+                    <div class="card shadow-sm auth-card">
+                        <div class="card-body p-4 p-lg-5">
+                            <div class="text-center mb-4">
+                                <div class="brand-circle mx-auto mb-3">
+                                    <img src="/static/apSLogo.png" alt="apS Fire Alarm" width="64" height="64">
+                                </div>
+                                <h1 class="h4 text-success mb-1">apS Fire Alarm</h1>
+                                <p class="text-muted small mb-0">Secure access for operators and administrators.</p>
+                            </div>
+
+                            <ul class="nav nav-pills nav-fill mb-4" id="authTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="login-tab" data-bs-toggle="tab" data-bs-target="#loginPane" type="button" role="tab" aria-controls="loginPane" aria-selected="true">
+                                        <i class="fa fa-sign-in-alt me-2"></i>Login
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="register-tab" data-bs-toggle="tab" data-bs-target="#registerPane" type="button" role="tab" aria-controls="registerPane" aria-selected="false">
+                                        <i class="fa fa-user-plus me-2"></i>Register
+                                    </button>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content">
+                                <div class="tab-pane fade show active" id="loginPane" role="tabpanel" aria-labelledby="login-tab">
+                                    <form method="POST" action="/login/" autocomplete="on" class="auth-form">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+                                        {% if error %}
+                                        <div class="alert alert-danger" role="alert">{{ error }}</div>
+                                        {% endif %}
+                                        <div class="mb-3">
+                                                <label class="form-label">Email address</label>
+                                                <input type="email" name="email" required class="form-control" placeholder="name@example.com" value="{{ email|default:'' }}" autocomplete="email" />
+                                        </div>
+                                        <div class="mb-3">
+                                                <label class="form-label">Password</label>
+                                                <input type="password" name="password" required class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="remember">
+                                                        <label class="form-check-label" for="remember">Remember me</label>
+                                                </div>
+                                                <a href="#" class="small link-success">Forgot password?</a>
+                                        </div>
+                                        <div class="d-grid">
+                                                <button type="submit" class="btn btn-success btn-lg">Login</button>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <div class="tab-pane fade" id="registerPane" role="tabpanel" aria-labelledby="register-tab">
+                                    <div id="registerAlert" class="mb-3"></div>
+                                    <form id="registerForm" novalidate class="auth-form">
+                                        <div class="mb-3">
+                                            <label class="form-label" for="registerEmail">Email address</label>
+                                            <input type="email" class="form-control" id="registerEmail" name="email" placeholder="operator@example.com" required autocomplete="email" />
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="registerPhone">Phone number (optional)</label>
+                                            <input type="tel" class="form-control" id="registerPhone" name="phone_number" placeholder="+8801XXXXXXXXX" autocomplete="tel" />
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="registerPassword">Password</label>
+                                            <input type="password" class="form-control" id="registerPassword" name="password" placeholder="At least 6 characters" required autocomplete="new-password" />
+                                            <div class="form-text">Use at least six characters and include mixed case, numbers, or symbols where possible.</div>
+                                        </div>
+                                        <div class="mb-4">
+                                            <label class="form-label" for="registerConfirm">Confirm password</label>
+                                            <input type="password" class="form-control" id="registerConfirm" name="confirm_password" placeholder="Re-type the password" required autocomplete="new-password" />
+                                        </div>
+                                        <div class="d-grid">
+                                            <button type="submit" class="btn btn-outline-success btn-lg" id="registerSubmit">Create account</button>
+                                        </div>
+                                    </form>
+                                    <p class="small text-muted mt-3 mb-0 text-center">After registration, sign in right away with your new credentials.</p>
+                                </div>
+                            </div>
                         </div>
-                        <a href="#" class="small">Forgot password?</a>
                     </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-success">Login</button>
-                    </div>
-                </form>
-            </div>
-        </div>
                 </div>
             </div>
         </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/login.js' %}"></script>
+{% endblock %}
+
+{% block head_extra %}
+    {{ block.super }}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+            body.auth-page {
+                background: linear-gradient(135deg, rgba(46, 125, 50, 0.12), rgba(56, 142, 60, 0.28));
+            }
+            .auth-wrapper {
+                min-height: calc(100vh - 120px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 2rem 0;
+            }
+            .auth-card {
+                border: none;
+                border-radius: 20px;
+                background: #ffffff;
+            }
+            .brand-circle {
+                width: 84px;
+                height: 84px;
+                border-radius: 50%;
+                background: rgba(46, 125, 50, 0.1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .nav-pills .nav-link {
+                border-radius: 50px;
+                font-weight: 500;
+                color: #2e7d32;
+            }
+            .nav-pills .nav-link.active {
+                background-color: #2e7d32;
+            }
+            .auth-form .form-control {
+                border-radius: 12px;
+                border-color: rgba(46, 125, 50, 0.2);
+            }
+            .auth-form .form-control:focus {
+                border-color: rgba(46, 125, 50, 0.6);
+                box-shadow: 0 0 0 .2rem rgba(46, 125, 50, 0.15);
+            }
+            .auth-form .btn-success {
+                border-radius: 12px;
+            }
+            .auth-form .btn-outline-success {
+                border-radius: 12px;
+            }
+            @media (max-width: 576px) {
+                .auth-card {
+                    border-radius: 16px;
+                }
+                .auth-wrapper {
+                    padding: 1.5rem 0;
+                }
+            }
+        </style>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                document.body.classList.add('auth-page');
+            });
+            window.addEventListener('pageshow', function () {
+                document.body.classList.add('auth-page');
+            });
+            window.addEventListener('pagehide', function () {
+                document.body.classList.remove('auth-page');
+            });
+        </script>
 {% endblock %}

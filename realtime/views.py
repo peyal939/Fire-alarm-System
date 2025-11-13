@@ -80,3 +80,8 @@ def firestations_page(request):
 @superadmin_required
 def admin_panel(request):
     return render(request, "admin_panel.html")
+
+
+@login_required(login_url="/login")
+def account_settings_page(request):
+    return render(request, "account_settings.html")
