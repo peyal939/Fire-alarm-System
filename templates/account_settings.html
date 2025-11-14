@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Account Settings · apS Fire Alarm{% endblock %}
+{% block content %}
+<div class="py-3">
+  <h1 class="h4 mb-4">Account Settings</h1>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white border-0 pb-0">
+          <h2 class="h5 mb-0">Change Password</h2>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">Choose a new password to keep your account secure. You will remain signed in after the update.</p>
+          <form data-change-password-form data-endpoint="/auth/change-password" novalidate>
+            <div class="mb-3" data-change-password-alerts></div>
+            <div class="mb-3">
+              <label for="currentPasswordAccount" class="form-label">Current password</label>
+              <input type="password" class="form-control" id="currentPasswordAccount" name="current_password" autocomplete="current-password" required />
+            </div>
+            <div class="mb-3">
+              <label for="newPasswordAccount" class="form-label">New password</label>
+              <input type="password" class="form-control" id="newPasswordAccount" name="new_password" autocomplete="new-password" required />
+              <div class="form-text">Use at least six characters and mix letters, numbers, or symbols.</div>
+            </div>
+            <div class="mb-4">
+              <label for="confirmPasswordAccount" class="form-label">Confirm new password</label>
+              <input type="password" class="form-control" id="confirmPasswordAccount" name="confirm_new_password" autocomplete="new-password" required />
+            </div>
+            <button type="submit" class="btn btn-success" data-change-password-submit>Save new password</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 bg-light h-100">
+        <div class="card-body">
+          <h2 class="h5">Need to update profile info?</h2>
+          <p class="mb-2">Use the mobile app or contact your administrator to change phone numbers and addresses.</p>
+          <p class="text-muted small mb-0">For security issues, email <a href="mailto:support@pranisheba.com">support@pranisheba.com</a>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/change-password.js' %}"></script>
+{% endblock %}

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -13,6 +13,7 @@ from .serializers import (
     UserDetailSerializer,
     UserUpdateSerializer,
     AdminUserUpdateSerializer,
+    ChangePasswordSerializer,
 )
 
 User = get_user_model()
@@ -169,6 +170,40 @@ def me(request):
             return Response(UserDetailSerializer(user).data)
         return Response(serializer.errors, status=400)
     return Response(UserDetailSerializer(user).data)
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Change current user password",
+    description=(
+        "Allows an authenticated user to update their password by providing the current "
+        "password along with a new password (entered twice for confirmation)."
+    ),
+    request=ChangePasswordSerializer,
+    responses={204: None, 400: None, 401: None},
+    examples=[
+        OpenApiExample(
+            "ChangePasswordRequest",
+            value={
+                "current_password": "Passw0rd!",
+                "new_password": "N3wPassw0rd!",
+                "confirm_new_password": "N3wPassw0rd!",
+            },
+            request_only=True,
+        )
+    ],
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    serializer = ChangePasswordSerializer(
+        data=request.data, context={"request": request}
+    )
+    if serializer.is_valid():
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save(update_fields=["password"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(

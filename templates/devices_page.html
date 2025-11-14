@@ -427,6 +427,41 @@
       return Number.isFinite(n) ? n : null;
     }
 
+    function extractApiError(error, fallback) {
+      if (!error) {
+        return fallback;
+      }
+      if (typeof error === 'string' && error.trim()) {
+        return error;
+      }
+      if (error.body) {
+        const body = error.body;
+        if (typeof body === 'string' && body.trim()) {
+          return body;
+        }
+        if (body.detail) {
+          return body.detail;
+        }
+        if (typeof body === 'object') {
+          const parts = [];
+          Object.entries(body).forEach(([key, value]) => {
+            if (Array.isArray(value)) {
+              parts.push(`${key}: ${value.join(' ')}`);
+            } else if (value) {
+              parts.push(`${key}: ${value}`);
+            }
+          });
+          if (parts.length) {
+            return parts.join('\n');
+          }
+        }
+      }
+      if (error.message) {
+        return error.message;
+      }
+      return fallback;
+    }
+
     function normalizePhoneForInput(phone) {
       if (!phone) return '';
       let cleaned = phone.trim();
@@ -543,7 +578,7 @@
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert('Failed to register master device.');
+        alert(extractApiError(err, 'Failed to register master device.'));
       } finally {
         submitRegisterMasterBtn.disabled = false;
       }
@@ -568,7 +603,7 @@
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert('Failed to register slave device. Ensure master ownership and inputs.');
+        alert(extractApiError(err, 'Failed to register slave device. Ensure master ownership and inputs.'));
       } finally {
         submitRegisterSlaveBtn.disabled = false;
       }

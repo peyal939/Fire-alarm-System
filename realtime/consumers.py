@@ -8,6 +8,7 @@ from django.conf import settings
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from . import device_cache
+from devices.models import Device
 
 WEBSOCKETS = set()
 logger = logging.getLogger(__name__)
@@ -27,13 +28,23 @@ def _heartbeat_interval() -> int:
 class DeviceConsumer(AsyncWebsocketConsumer):
     heartbeat_task: asyncio.Task | None = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._owner_cache: dict[str, int | None] = {}
+
     async def connect(self):
+        user = self.scope.get("user")
+        if not getattr(user, "is_authenticated", False):
+            await self.close(code=4401)
+            return
+
         await self.accept()
         WEBSOCKETS.add(self)
         await self.channel_layer.group_add("devices", self.channel_name)
         initial_states = await sync_to_async(device_cache.get_all_states)()
         for payload in initial_states:
-            await self.send(text_data=json.dumps(payload))
+            if await self._can_view_payload(payload):
+                await self.send(text_data=json.dumps(payload))
         interval = _heartbeat_interval()
         if interval > 0:
             self.heartbeat_task = asyncio.create_task(self._heartbeat(interval))
@@ -65,8 +76,11 @@ class DeviceConsumer(AsyncWebsocketConsumer):
 
         Includes error handling to prevent channel overflow from crashing consumers.
         """
+        payload = event.get("device") or {}
+        if not await self._can_view_payload(payload):
+            return
         try:
-            await self.send(text_data=json.dumps(event["device"]))
+            await self.send(text_data=json.dumps(payload))
         except Exception as e:
             # Non-fatal: if sending fails, log but keep connection alive
             logger.warning(f"Failed to send device update to WebSocket: {e}")
@@ -77,6 +91,9 @@ class DeviceConsumer(AsyncWebsocketConsumer):
             payload["type"] = "device_removed"
         if "deviceID" not in payload:
             payload["deviceID"] = event.get("device_id")
+        device_id = payload.get("deviceID")
+        if device_id and not await self._can_view_device_id(device_id):
+            return
         try:
             await self.send(text_data=json.dumps(payload))
         except Exception as e:
@@ -91,3 +108,63 @@ class DeviceConsumer(AsyncWebsocketConsumer):
             raise
         except Exception as exc:  # pragma: no cover
             logger.debug("DeviceConsumer heartbeat send failed: %s", exc)
+
+    def _user_has_admin_scope(self) -> bool:
+        user = self.scope.get("user")
+        if not user:
+            return False
+        role = (getattr(user, "role", "") or "").lower()
+        return bool(getattr(user, "is_superuser", False) or role == "superadmin")
+
+    async def _get_owner_id_for_payload(self, payload: dict) -> int | None:
+        owner_id = payload.get("owner_id")
+        device_id = payload.get("deviceID")
+        if owner_id is not None:
+            if device_id:
+                self._owner_cache[device_id] = owner_id
+            return owner_id
+        if not device_id:
+            return None
+        cached = self._owner_cache.get(device_id)
+        if cached is not None:
+            return cached
+
+        owner_id = await sync_to_async(
+            lambda: Device.objects.filter(
+                hardware_identifier=device_id,
+                deleted_at__isnull=True,
+            )
+            .values_list("user_id", flat=True)
+            .first()
+        )()
+        if owner_id is not None:
+            self._owner_cache[device_id] = owner_id
+            payload["owner_id"] = owner_id
+            if len(payload.keys()) > 1:
+                await sync_to_async(device_cache.set_device_state)(device_id, payload)
+        return owner_id
+
+    async def _can_view_payload(self, payload: dict) -> bool:
+        user = self.scope.get("user")
+        if not getattr(user, "is_authenticated", False):
+            return False
+        if self._user_has_admin_scope():
+            device_id = payload.get("deviceID")
+            if device_id and payload.get("owner_id") is not None:
+                self._owner_cache[device_id] = payload["owner_id"]
+            return True
+        owner_id = await self._get_owner_id_for_payload(payload)
+        return owner_id == getattr(user, "id", None)
+
+    async def _can_view_device_id(self, device_id: str | None) -> bool:
+        if not device_id:
+            return False
+        user = self.scope.get("user")
+        if not getattr(user, "is_authenticated", False):
+            return False
+        if self._user_has_admin_scope():
+            return True
+        owner_id = self._owner_cache.get(device_id)
+        if owner_id is None:
+            owner_id = await self._get_owner_id_for_payload({"deviceID": device_id})
+        return owner_id == getattr(user, "id", None)

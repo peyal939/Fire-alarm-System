@@ -1,6 +1,7 @@
 import os
 import django
 from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
 from django.core.asgi import get_asgi_application
 from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
 from django.conf import settings
@@ -18,6 +19,6 @@ if settings.DEBUG:
 application = ProtocolTypeRouter(
     {
         "http": http_app,
-        "websocket": URLRouter(websocket_urlpatterns),
+        "websocket": AuthMiddlewareStack(URLRouter(websocket_urlpatterns)),
     }
 )

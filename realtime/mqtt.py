@@ -225,6 +225,13 @@ def _broadcast_device_update(
     except Exception as e:
         logger.error(f"Failed to compute mesh alert for device {device_id}: {e}")
 
+    owner_id = getattr(device_obj, "user_id", None)
+    owner_email = None
+    try:
+        owner_email = getattr(getattr(device_obj, "user", None), "email", None)
+    except Exception:
+        owner_email = None
+
     # Build the complete device state payload
     device_payload = {
         MQTTPayloadKeys.DEVICE_ID: device_id,
@@ -237,7 +244,11 @@ def _broadcast_device_update(
         # This allows frontend to show real-time offline transitions without API polling
         "online": bool(getattr(device_obj, "is_online", False)),
         "mesh_alert": mesh_alert,
+        "owner_id": owner_id,
     }
+
+    if owner_email:
+        device_payload["owner_email"] = owner_email
 
     # Include GPS coordinates if available
     if pos is not None:

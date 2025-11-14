@@ -25,6 +25,8 @@ urlpatterns = [
     path("healthz", views.healthz),
     path("readyz", views.readyz),
     path("metrics/summary", views.metrics_summary),
+    path("content/faq/", views.faq_content, name="content-faq"),
+    path("content/about/", views.about_content, name="content-about"),
     path("auth/", include("accounts.urls")),
     path("", include("devices.urls")),
     path("", include("firestations.urls")),
