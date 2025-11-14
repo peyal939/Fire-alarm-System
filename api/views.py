@@ -9,6 +9,197 @@ from django.conf import settings
 from devices.models import Device, Alert
 
 
+FAQ_CONTENT = {
+    "categories": [
+        {
+            "id": "device_setup",
+            "title": "Device & Setup",
+            "order": 1,
+            "questions": [
+                {
+                    "id": "register-device",
+                    "question": "How do I register my fire alarm device?",
+                    "answer": "Follow these steps to onboard a new device.",
+                    "answer_steps": [
+                        "Open the app and select 'Add Device'.",
+                        "Enter the unique hardware ID printed on the device or packaging.",
+                        "Allow the app to link through the device's built-in GPRS SIM connection.",
+                        "Set the device location manually or tap 'Detect My Location'.",
+                        "Tap 'Register' to finish the process.",
+                    ],
+                },
+                {
+                    "id": "multiple-devices",
+                    "question": "Can I connect multiple devices to one account?",
+                    "answer": (
+                        "Yes. You can pair any number of master and slave devices with your account. "
+                        "Master units operate independently, while slave units extend coverage as part of a mesh network."
+                    ),
+                },
+                {
+                    "id": "master-vs-slave",
+                    "question": "What's the difference between master and slave devices?",
+                    "answer": (
+                        "Master devices function on their own and coordinate a device group. "
+                        "Slave devices attach to a master to broaden protection through mesh networking."
+                    ),
+                },
+                {
+                    "id": "device-online",
+                    "question": "How do I know if my device is online?",
+                    "answer": (
+                        "Any device that has reported data in the last three minutes is treated as online. "
+                        "In the app, online devices display a green status indicator."
+                    ),
+                },
+            ],
+        },
+        {
+            "id": "alerts_notifications",
+            "title": "Alerts & Notifications",
+            "order": 2,
+            "questions": [
+                {
+                    "id": "alert-timing",
+                    "question": "When will I receive fire alerts?",
+                    "answer": (
+                        "Push notifications are issued immediately whenever smoke levels exceed the configured threshold "
+                        "(50 by default). Alerts are generated the moment elevated readings are detected."
+                    ),
+                },
+                {
+                    "id": "unacknowledged-alert",
+                    "question": "What happens if I don't acknowledge an alert?",
+                    "answer": (
+                        "If an alert remains unacknowledged, the system sends reminder notifications every 10 minutes, "
+                        "up to three times, until you acknowledge it or the alert resolves."
+                    ),
+                },
+                {
+                    "id": "stop-reminders",
+                    "question": "How do I stop receiving reminders?",
+                    "answer": (
+                        "Tap the alert to acknowledge it. Once smoke levels return to normal, the alert auto-resolves "
+                        "and reminder notifications stop."
+                    ),
+                },
+            ],
+        },
+        {
+            "id": "account_security",
+            "title": "Account & Security",
+            "order": 3,
+            "questions": [
+                {
+                    "id": "update-contact",
+                    "question": "Can I change my email or phone number?",
+                    "answer": "Yes. Open the Settings screen in the app to update your profile details at any time.",
+                },
+                {
+                    "id": "relocate-device",
+                    "question": "Can I relocate my device to a different room?",
+                    "answer": (
+                        "Yes. Update the device name and GPS coordinates in device settings so the dashboard reflects the new location."
+                    ),
+                },
+                {
+                    "id": "device-offline",
+                    "question": "What should I do if my device shows offline?",
+                    "answer": (
+                        "Confirm the device has power and network connectivity. If it stays offline for more than five minutes, "
+                        "restart the unit and check again."
+                    ),
+                },
+                {
+                    "id": "delete-device",
+                    "question": "How do I delete a device from my account?",
+                    "answer": (
+                        "Open the device settings and choose 'Delete Device'. This action is permanent—re-adding the device "
+                        "requires a fresh registration."
+                    ),
+                },
+            ],
+        },
+        {
+            "id": "billing_packages",
+            "title": "Billing & Packages",
+            "order": 4,
+            "questions": [
+                {
+                    "id": "service-cost",
+                    "question": "How much does the service cost?",
+                    "answer": (
+                        "We offer multiple packages tailored to different device counts. Visit the app's 'Packages' section "
+                        "for current pricing and monthly fees."
+                    ),
+                },
+                {
+                    "id": "payment-methods",
+                    "question": "What payment methods are accepted?",
+                    "answer": (
+                        "Payments are processed through ShurjoPay, supporting bKash, Nagad, major credit/debit cards, and mobile banking."
+                    ),
+                },
+                {
+                    "id": "cancel-order",
+                    "question": "Can I cancel my order?",
+                    "answer": (
+                        "Orders can be cancelled before payment is completed. If payment has already been made, contact support for assistance."
+                    ),
+                },
+            ],
+        },
+        {
+            "id": "technical",
+            "title": "Technical",
+            "order": 5,
+            "questions": [
+                {
+                    "id": "smoke-threshold",
+                    "question": "What is the smoke threshold for alerts?",
+                    "answer": (
+                        "The default threshold is 50 on a 0–100 scale. Readings above this value trigger a fire alert, "
+                        "though you can adjust the threshold based on device calibration."
+                    ),
+                },
+                {
+                    "id": "telemetry-frequency",
+                    "question": "How often does my device send data?",
+                    "answer": (
+                        "Devices typically transmit telemetry every 30 to 60 seconds when active and may reduce frequency during normal conditions to conserve power."
+                    ),
+                },
+                {
+                    "id": "offline-behavior",
+                    "question": "Does the app work without internet?",
+                    "answer": (
+                        "The app needs an internet connection for real-time alerts and updates. Devices continue monitoring offline and deliver pending alerts once connectivity returns."
+                    ),
+                },
+            ],
+        },
+    ]
+}
+
+
+ABOUT_CONTENT = {
+    "company": "adorsho praniSheba Limited",
+    "overview": (
+        "adorsho praniSheba Limited is an AgriTech company using IoT-enabled livestock monitoring, "
+        "digital animal identification, and smart data insights to support farmers across Bangladesh. "
+        "Our connected devices track health, movement, and shed conditions in real time—helping farmers protect their animals, "
+        "reduce losses, and improve productivity."
+    ),
+    "contact": {
+        "address": "Haque Tower, Mohakhali, Dhaka",
+        "phone": "+8809643207003",
+        "website": "https://pranisheba.com.bd",
+        "facebook": "https://facebook.com/adorshopranisheba",
+        "linkedin": "https://linkedin.com/company/adorsho-pranisheba-ltd",
+    },
+}
+
+
 @extend_schema(
     tags=["System"],
     summary="Liveness probe",
@@ -179,3 +370,47 @@ def metrics_summary(request):
             "offline": offline,
         }
     )
+
+
+@extend_schema(
+    tags=["Content"],
+    summary="FAQ content",
+    responses={
+        200: OpenApiResponse(
+            response=OpenApiTypes.OBJECT,
+            description="Frequently asked questions grouped by category",
+            examples=[
+                OpenApiExample(
+                    "faq",
+                    value=FAQ_CONTENT,
+                    response_only=True,
+                )
+            ],
+        )
+    },
+)
+@api_view(["GET"])
+def faq_content(request):
+    return Response(FAQ_CONTENT)
+
+
+@extend_schema(
+    tags=["Content"],
+    summary="About us content",
+    responses={
+        200: OpenApiResponse(
+            response=OpenApiTypes.OBJECT,
+            description="Company overview, mission, and focus areas",
+            examples=[
+                OpenApiExample(
+                    "about",
+                    value=ABOUT_CONTENT,
+                    response_only=True,
+                )
+            ],
+        )
+    },
+)
+@api_view(["GET"])
+def about_content(request):
+    return Response(ABOUT_CONTENT)
