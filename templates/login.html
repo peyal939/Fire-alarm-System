@@ -32,58 +32,202 @@
 
                             <div class="tab-content">
                                 <div class="tab-pane fade show active" id="loginPane" role="tabpanel" aria-labelledby="login-tab">
-                                    <form method="POST" action="/login/" autocomplete="on" class="auth-form">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+                                    <div id="loginFlow"
+                                         data-otp-pending="{{ otp_pending|default_if_none:False|yesno:'true,false' }}"
+                                         data-resend-cooldown="{{ otp_resend_cooldown|default:60 }}"
+                                 data-last-sent="{{ otp_last_sent|date:'c' }}"
+                                 data-resend-ready-at="{{ otp_next_resend_at|date:'c' }}">
                                         {% if error %}
-                                        <div class="alert alert-danger" role="alert">{{ error }}</div>
+                                            <div class="alert alert-danger" role="alert">{{ error }}</div>
                                         {% endif %}
-                                        <div class="mb-3">
-                                                <label class="form-label">Email address</label>
-                                                <input type="email" name="email" required class="form-control" placeholder="name@example.com" value="{{ email|default:'' }}" autocomplete="email" />
-                                        </div>
-                                        <div class="mb-3">
-                                                <label class="form-label">Password</label>
-                                                <input type="password" name="password" required class="form-control" placeholder="••••••••" autocomplete="current-password" />
-                                        </div>
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                                <div class="form-check">
+                                        {% if otp_notice %}
+                                            <div class="alert alert-success" role="alert">{{ otp_notice }}</div>
+                                        {% endif %}
+                                        {% if otp_error and not otp_pending %}
+                                            <div class="alert alert-danger" role="alert">{{ otp_error }}</div>
+                                        {% endif %}
+
+                                        <div id="loginCredentialsStep" class="{% if otp_pending %}d-none{% endif %}">
+                                            <form method="POST" action="/login/" autocomplete="on" class="auth-form" id="loginCredentialsForm">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="loginIdentifier">Email or phone number</label>
+                                                    <input type="text" name="identifier" id="loginIdentifier" required class="form-control" placeholder="name@example.com or +8801XXXXXXXXX" value="{{ email|default:'' }}" autocomplete="username" />
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="loginPassword">Password</label>
+                                                    <input type="password" name="password" id="loginPassword" required class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                                                </div>
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" id="remember">
                                                         <label class="form-check-label" for="remember">Remember me</label>
+                                                    </div>
+                                                    <button type="button" class="btn btn-link link-success p-0" id="forgotPasswordLink">Forgot password?</button>
                                                 </div>
-                                                <a href="#" class="small link-success">Forgot password?</a>
+                                                <div class="d-grid">
+                                                    <button type="submit" class="btn btn-success btn-lg">Send OTP</button>
+                                                </div>
+                                            </form>
                                         </div>
-                                        <div class="d-grid">
-                                                <button type="submit" class="btn btn-success btn-lg">Login</button>
+
+                                        <div id="loginOtpStep" class="{% if not otp_pending %}d-none{% endif %}">
+                                            {% if otp_pending %}
+                                                <div class="alert alert-success" role="alert">
+                                                    We've sent a verification code to <strong>{{ masked_phone }}</strong>. Enter it below to finish signing in.
+                                                </div>
+                                            {% endif %}
+                                            {% if otp_error and otp_pending %}
+                                                <div class="alert alert-danger" role="alert">{{ otp_error }}</div>
+                                            {% endif %}
+                                            <form method="POST" action="/login/" class="auth-form" id="loginOtpForm">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+                                                <input type="hidden" name="otp_session_id" value="{{ otp_session_id }}" />
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="loginOtpCode">One-time password</label>
+                                                    <input type="text" name="otp_code" id="loginOtpCode" class="form-control" placeholder="Enter 6-digit code" autocomplete="one-time-code" required />
+                                                </div>
+                                                <div class="d-grid mb-3">
+                                                    <button type="submit" class="btn btn-success btn-lg">Verify &amp; Login</button>
+                                                </div>
+                                            </form>
+                                            <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                                                <form method="POST" action="/login/" id="loginResendForm" class="d-flex flex-column">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="otp_session_id" value="{{ otp_session_id }}" />
+                                                    <input type="hidden" name="resend_otp" value="1" />
+                                                    <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+                                                    <button type="submit" id="loginResendBtn" class="btn btn-link p-0" {% if not otp_pending %}disabled{% endif %}>Resend code</button>
+                                                    <small class="text-muted" id="loginResendTimer"></small>
+                                                </form>
+                                                <a href="/login/" class="btn btn-outline-secondary btn-sm">Use different account</a>
+                                            </div>
                                         </div>
-                                    </form>
+                                    </div>
+
+                                    <div id="forgotPasswordFlow" class="d-none mt-4" data-resend-cooldown="{{ otp_resend_cooldown|default:60 }}">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <div>
+                                                <h2 class="h5 mb-0">Reset password</h2>
+                                                <p class="text-muted small mb-0">We'll send a code to your verified phone.</p>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="forgotBackToLogin">Back to login</button>
+                                        </div>
+
+                                        <div id="forgotStepIdentifier">
+                                            <div id="forgotAlert" class="mb-3"></div>
+                                            <form id="forgotIdentifierForm" class="auth-form" novalidate>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="forgotIdentifier">Email or phone number</label>
+                                                    <input type="text" class="form-control" id="forgotIdentifier" name="identifier" placeholder="name@example.com or +8801XXXXXXXXX" autocomplete="username" required />
+                                                </div>
+                                                <div class="d-grid">
+                                                    <button type="submit" class="btn btn-outline-success" id="forgotIdentifierSubmit">Send OTP</button>
+                                                </div>
+                                            </form>
+                                        </div>
+
+                                        <div id="forgotStepOtp" class="d-none">
+                                            <div id="forgotOtpAlert" class="mb-3"></div>
+                                            <div class="alert alert-success" role="alert">
+                                                We've sent a password reset code to <strong id="forgotMaskedPhone"></strong>. Enter the code and choose a new password.
+                                            </div>
+                                            <form id="forgotOtpForm" class="auth-form" novalidate>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="forgotOtpCode">One-time password</label>
+                                                    <input type="text" class="form-control" id="forgotOtpCode" name="otp_code" placeholder="Enter 6-digit code" autocomplete="one-time-code" required />
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="forgotNewPassword">New password</label>
+                                                    <input type="password" class="form-control" id="forgotNewPassword" name="new_password" placeholder="At least 6 characters" autocomplete="new-password" required />
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="forgotConfirmPassword">Confirm new password</label>
+                                                    <input type="password" class="form-control" id="forgotConfirmPassword" name="confirm_password" placeholder="Re-type the password" autocomplete="new-password" required />
+                                                </div>
+                                                <div class="d-grid mb-3">
+                                                    <button type="submit" class="btn btn-success" id="forgotOtpSubmit">Reset password</button>
+                                                </div>
+                                            </form>
+                                            <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                                                <div>
+                                                    <button type="button" class="btn btn-link p-0" id="forgotResendBtn" disabled>Resend code</button>
+                                                    <small class="text-muted d-block" id="forgotResendTimer"></small>
+                                                </div>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="forgotEditIdentifierBtn">Use different account</button>
+                                            </div>
+                                        </div>
+
+                                        <div id="forgotStepSuccess" class="d-none text-center">
+                                            <div class="alert alert-success" role="alert">
+                                                Your password has been updated. You can now sign in with your new credentials.
+                                            </div>
+                                            <button type="button" class="btn btn-success" id="forgotGoToLoginBtn">Go to Login</button>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="tab-pane fade" id="registerPane" role="tabpanel" aria-labelledby="register-tab">
-                                    <div id="registerAlert" class="mb-3"></div>
-                                    <form id="registerForm" novalidate class="auth-form">
-                                        <div class="mb-3">
-                                            <label class="form-label" for="registerEmail">Email address</label>
-                                            <input type="email" class="form-control" id="registerEmail" name="email" placeholder="operator@example.com" required autocomplete="email" />
+                                    <div id="registerFlow" data-resend-cooldown="{{ otp_resend_cooldown|default:60 }}">
+                                        <div id="registerStepCredentials">
+                                            <div id="registerAlert" class="mb-3"></div>
+                                            <form id="registerForm" novalidate class="auth-form">
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="registerEmail">Email address</label>
+                                                    <input type="email" class="form-control" id="registerEmail" name="email" placeholder="operator@example.com" required autocomplete="email" />
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="registerPhone">Phone number</label>
+                                                    <input type="tel" class="form-control" id="registerPhone" name="phone_number" placeholder="+8801XXXXXXXXX" required autocomplete="tel" />
+                                                    <div class="form-text">We'll send OTPs to this verified number.</div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="registerPassword">Password</label>
+                                                    <input type="password" class="form-control" id="registerPassword" name="password" placeholder="At least 6 characters" required autocomplete="new-password" />
+                                                    <div class="form-text">Use at least six characters and include mixed case, numbers, or symbols where possible.</div>
+                                                </div>
+                                                <div class="mb-4">
+                                                    <label class="form-label" for="registerConfirm">Confirm password</label>
+                                                    <input type="password" class="form-control" id="registerConfirm" name="confirm_password" placeholder="Re-type the password" required autocomplete="new-password" />
+                                                </div>
+                                                <div class="d-grid">
+                                                    <button type="submit" class="btn btn-outline-success btn-lg" id="registerSubmit">Send OTP</button>
+                                                </div>
+                                            </form>
                                         </div>
-                                        <div class="mb-3">
-                                            <label class="form-label" for="registerPhone">Phone number (optional)</label>
-                                            <input type="tel" class="form-control" id="registerPhone" name="phone_number" placeholder="+8801XXXXXXXXX" autocomplete="tel" />
+
+                                        <div id="registerStepOtp" class="d-none">
+                                            <div id="registerOtpAlert" class="mb-3"></div>
+                                            <div class="alert alert-success" role="alert">
+                                                We've sent a verification code to <strong id="registerMaskedPhone"></strong>. Enter it below to finish creating your account.
+                                            </div>
+                                            <form id="registerOtpForm" class="auth-form">
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="registerOtpCode">One-time password</label>
+                                                    <input type="text" class="form-control" id="registerOtpCode" name="otp_code" placeholder="Enter 6-digit code" autocomplete="one-time-code" required />
+                                                </div>
+                                                <div class="d-grid mb-3">
+                                                    <button type="submit" class="btn btn-success btn-lg" id="registerOtpSubmit">Verify &amp; Create Account</button>
+                                                </div>
+                                            </form>
+                                            <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                                                <div>
+                                                    <button type="button" class="btn btn-link p-0" id="registerResendBtn" disabled>Resend code</button>
+                                                    <small class="text-muted d-block" id="registerResendTimer"></small>
+                                                </div>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="registerEditInfoBtn">Edit email or phone</button>
+                                            </div>
                                         </div>
-                                        <div class="mb-3">
-                                            <label class="form-label" for="registerPassword">Password</label>
-                                            <input type="password" class="form-control" id="registerPassword" name="password" placeholder="At least 6 characters" required autocomplete="new-password" />
-                                            <div class="form-text">Use at least six characters and include mixed case, numbers, or symbols where possible.</div>
+
+                                        <div id="registerSuccess" class="d-none text-center">
+                                            <div class="alert alert-success" role="alert">
+                                                Account created successfully! You can sign in with your new credentials.
+                                            </div>
+                                            <button type="button" class="btn btn-success" id="registerGoToLoginBtn">Go to Login</button>
                                         </div>
-                                        <div class="mb-4">
-                                            <label class="form-label" for="registerConfirm">Confirm password</label>
-                                            <input type="password" class="form-control" id="registerConfirm" name="confirm_password" placeholder="Re-type the password" required autocomplete="new-password" />
-                                        </div>
-                                        <div class="d-grid">
-                                            <button type="submit" class="btn btn-outline-success btn-lg" id="registerSubmit">Create account</button>
-                                        </div>
-                                    </form>
-                                    <p class="small text-muted mt-3 mb-0 text-center">After registration, sign in right away with your new credentials.</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -95,7 +239,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'js/login.js' %}"></script>
+<script src="{% static 'js/login.js' %}?v=20251117"></script>
 {% endblock %}
 
 {% block head_extra %}

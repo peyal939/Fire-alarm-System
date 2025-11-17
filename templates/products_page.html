@@ -129,6 +129,13 @@
 
   let packages = [];
   let pkgMap = {};
+  const statusBadgeClass = {
+    pending: 'bg-warning text-dark',
+    paid: 'bg-info text-dark',
+    delivered: 'bg-success',
+    cancelled: 'bg-secondary',
+    failed: 'bg-danger'
+  };
 
   async function fetchPackages() {
     pkgLoading.style.display = '';
@@ -174,7 +181,7 @@
         <td class="text-end">${p.min_quantity}</td>
         <td class="text-end">${p.max_quantity}</td>
         <td class="text-end">${formatMoney(p.price_per_device)}</td>
-        <td class="text-end">${formatMoney(p.mrt)}</td>
+        <td class="text-end">${formatMoney(p.mrf)}</td>
         <td>${p.description ? escapeHtml(p.description) : ''}</td>
       </tr>
     `).join('');
@@ -244,12 +251,15 @@
     const created = order.ordered_at || order.created_at || '';
     const nMaster = order.number_of_master_devices;
     const nSlave = order.number_of_slave_devices;
+    const statusNorm = (order.order_status || '').toLowerCase();
+    const canMarkDelivered = statusNorm === 'paid';
+    const badgeClass = statusBadgeClass[statusNorm] || 'bg-secondary';
     const card = document.createElement('div');
     card.className = 'card border-success-subtle';
     card.innerHTML = `
       <div class="card-body py-2">
         <div class="small">
-          <div><span class="text-muted">Status:</span> <span class="badge bg-secondary">${escapeHtml(order.order_status || 'created')}</span></div>
+          <div><span class="text-muted">Status:</span> <span class="badge ${badgeClass} order-status-badge" data-status="${statusNorm}">${escapeHtml(order.order_status || 'created')}</span></div>
           <div><span class="text-muted">Package:</span> ${escapeHtml(pkgName)}</div>
           <div><span class="text-muted">Quantity:</span> ${order.quantity}</div>
           ${Number.isFinite(nMaster) ? `<div><span class="text-muted">Master devices:</span> ${nMaster}</div>` : ''}
@@ -260,9 +270,50 @@
           ${order.shipping_address ? `<div><span class="text-muted">Address:</span> ${escapeHtml(order.shipping_address)}</div>` : ''}
           ${created ? `<div class="text-muted">Time: ${escapeHtml(created)}</div>` : ''}
         </div>
+        ${canMarkDelivered ? `
+          <div class="text-end mt-2">
+            <button class="btn btn-sm btn-outline-success" data-action="mark-delivered" data-order-id="${order.id}">Mark delivered</button>
+          </div>
+        ` : ''}
+        <div class="text-danger small order-card-error" style="display:none;"></div>
       </div>
     `;
+    const badgeEl = card.querySelector('.order-status-badge');
+    const errorEl = card.querySelector('.order-card-error');
+    const actionBtn = card.querySelector('[data-action="mark-delivered"]');
+    if (actionBtn) {
+      actionBtn.addEventListener('click', () => {
+        markOrderDelivered(order, actionBtn, badgeEl, errorEl);
+      });
+    }
     ordersPlaced.prepend(card);
+  }
+
+  async function markOrderDelivered(order, button, badgeEl, errorEl) {
+    if (!order || !order.id) return;
+    if (button.disabled) return;
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Updating…';
+    try {
+      const updated = await apiPost(`/orders/update_status/${userId}/${order.id}/`, {
+        order_status: 'delivered'
+      });
+      const newStatus = (updated && updated.order_status) || 'delivered';
+      order.order_status = newStatus;
+      const statusNorm = (newStatus || '').toLowerCase();
+      badgeEl.textContent = newStatus;
+      badgeEl.className = `badge ${statusBadgeClass[statusNorm] || 'bg-success'}`;
+      badgeEl.dataset.status = statusNorm;
+      button.remove();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = originalText;
+      errorEl.textContent = (err && err.detail) ? err.detail : 'Failed to update order status.';
+      errorEl.style.display = '';
+    }
   }
 
   orderPackage.addEventListener('change', validateForm);

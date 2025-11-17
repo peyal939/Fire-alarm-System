@@ -32,6 +32,35 @@ MQTT_DEVICE_REG_TOPIC = os.getenv("MQTT_DEVICE_REG_TOPIC", "aps/fire/reg")
 MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASS = os.getenv("MQTT_PASS", "")
 
+# SMS / OTP configuration
+SMS_GATEWAY = {
+    "url": os.getenv("SMS_GATEWAY_URL", "").strip(),
+    "api_key": os.getenv("SMS_GATEWAY_API_KEY", "").strip(),
+    "secret_key": os.getenv("SMS_GATEWAY_SECRET_KEY", "").strip(),
+    "caller_id": os.getenv("SMS_GATEWAY_CALLER_ID", "praniSheba"),
+    "timeout": int(os.getenv("SMS_GATEWAY_TIMEOUT_SECONDS", "10") or "10"),
+    "enabled": os.getenv("SMS_GATEWAY_ENABLED", "false").lower() == "true",
+}
+if not SMS_GATEWAY["url"]:
+    SMS_GATEWAY["enabled"] = False
+if not SMS_GATEWAY["api_key"] or not SMS_GATEWAY["secret_key"]:
+    SMS_GATEWAY["enabled"] = False
+
+OTP_SETTINGS = {
+    "code_length": int(os.getenv("OTP_CODE_LENGTH", "6")),
+    "ttl_seconds": int(os.getenv("OTP_TTL_SECONDS", "300")),
+    "resend_cooldown_seconds": int(os.getenv("OTP_RESEND_COOLDOWN_SECONDS", "60")),
+    "max_attempts": int(os.getenv("OTP_MAX_VERIFY_ATTEMPTS", "5")),
+    "max_daily_sends": int(os.getenv("OTP_MAX_DAILY_SENDS", "10")),
+    "send_async": os.getenv("OTP_SEND_ASYNC", "false").lower() == "true",
+    "sms_template": os.getenv(
+        "OTP_SMS_TEMPLATE",
+        "Your praniSheba {purpose} code is {code}. It expires in {minutes} minutes.",
+    ),
+    "test_bypass_code": os.getenv("OTP_TEST_BYPASS_CODE", "").strip() or None,
+    "login_enforced": os.getenv("OTP_LOGIN_ENFORCED", "true").lower() == "true",
+}
+
 # Alert rules
 SMOKE_ALERT_THRESHOLD = int(os.getenv("SMOKE_ALERT_THRESHOLD", "50"))
 # Number of consecutive safe readings (<= threshold) required to auto-clear an alert
@@ -83,6 +112,7 @@ INSTALLED_APPS = [
     "api",
     "realtime",
     "notifications",
+    "otp",
     "firestations",
     "drf_spectacular",
     "drf_spectacular_sidecar",
