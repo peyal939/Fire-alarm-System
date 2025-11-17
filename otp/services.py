@@ -98,7 +98,11 @@ class OTPSessionManager:
 
         if settings.OTP_SETTINGS["send_async"]:
             session.mark_pending_send()
-            send_otp_sms_task.delay(str(session.session_id), message)
+
+            def enqueue_sms():
+                send_otp_sms_task.delay(str(session.session_id), message)
+
+            transaction.on_commit(enqueue_sms)
         else:
             self.sms_client.send_text(
                 phone_number,
@@ -148,7 +152,11 @@ class OTPSessionManager:
 
         if settings.OTP_SETTINGS["send_async"]:
             session.mark_pending_send()
-            send_otp_sms_task.delay(str(session.session_id), message)
+
+            def enqueue_sms():
+                send_otp_sms_task.delay(str(session.session_id), message)
+
+            transaction.on_commit(enqueue_sms)
         else:
             self.sms_client.send_text(
                 session.phone_number,
