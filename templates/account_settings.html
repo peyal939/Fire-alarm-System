@@ -1,18 +1,363 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Account Settings · apS Fire Alarm{% endblock %}
+
+{% block head_extra %}
+  {{ block.super }}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <style>
+    .account-hero {
+      position: relative;
+      background: linear-gradient(120deg, #0c3d28, #0f5132 45%, #1faa59);
+      overflow: hidden;
+      border-radius: 1.75rem;
+      padding: clamp(1.75rem, 3vw, 3.25rem);
+      color: #eefcf4;
+      box-shadow: 0 25px 55px rgba(11, 40, 26, 0.45);
+    }
+    .account-hero::before,
+    .account-hero::after {
+      content: "";
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      filter: blur(0px);
+      z-index: 0;
+    }
+    .account-hero::before {
+      top: -80px;
+      right: -60px;
+    }
+    .account-hero::after {
+      bottom: -120px;
+      left: -70px;
+      background: rgba(255,255,255,0.08);
+    }
+    .account-hero .badge {
+      letter-spacing: 0.08em;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.35);
+      backdrop-filter: blur(6px);
+    }
+    .account-hero-content {
+      position: relative;
+      z-index: 1;
+    }
+    .profile-avatar {
+      width: 76px;
+      height: 76px;
+      border-radius: 1.6rem;
+      background: linear-gradient(135deg, rgba(25, 135, 84, 0.25), rgba(25, 135, 84, 0.65));
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 1.4rem;
+      box-shadow: 0 18px 35px rgba(20, 108, 67, 0.45);
+    }
+    .profile-loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      border-radius: 1rem;
+      z-index: 2;
+    }
+    .account-checklist .check-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(25, 135, 84, 0.1);
+      color: #157347;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+    .account-card-title {
+      letter-spacing: 0.08em;
+      font-size: 0.78rem;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .card-module {
+      border-radius: 1.5rem;
+      padding: 1.5rem;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(20, 108, 67, 0.08);
+      box-shadow: 0 20px 45px rgba(15, 81, 50, 0.08);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .card-module::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at top right, rgba(25, 135, 84, 0.08), transparent 55%);
+    }
+    .card-module:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 25px 50px rgba(15, 81, 50, 0.12);
+    }
+    .card-module__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: rgba(25, 135, 84, 0.12);
+      color: #1b8a55;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 1.25rem;
+    }
+    .card-module--primary {
+      background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(236, 249, 243, 0.98));
+    }
+    .card-module--accent {
+      background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(238, 250, 246, 0.96));
+    }
+    .inline-chip {
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      background: rgba(15, 81, 50, 0.08);
+      color: #146c43;
+      font-weight: 600;
+    }
+    .field-form {
+      border-radius: 1.35rem;
+      border: 1px solid rgba(20, 108, 67, 0.08);
+      background: rgba(255,255,255,0.92);
+      box-shadow: inset 0 0 0 rgba(0,0,0,0);
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .field-form::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at top left, rgba(25, 135, 84, 0.08), transparent 60%);
+    }
+    .field-form:hover {
+      border-color: rgba(20, 108, 67, 0.25);
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px rgba(20, 108, 67, 0.08);
+    }
+    .field-form .form-label {
+      text-transform: none;
+      letter-spacing: 0.01em;
+    }
+    .field-form .btn.btn-success {
+      background: linear-gradient(135deg, #198754, #239b6b);
+      border: none;
+      box-shadow: 0 10px 20px rgba(25, 135, 84, 0.35);
+    }
+    .field-form .btn.btn-outline-secondary {
+      border-color: rgba(20, 108, 67, 0.3);
+      color: #146c43;
+    }
+    .status-pill {
+      padding: 0.15rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      background: rgba(20, 108, 67, 0.1);
+      color: #146c43;
+      font-weight: 600;
+    }
+    .status-pill[data-state="pending"] {
+      background: rgba(255,193,7,0.15);
+      color: #9a6700;
+    }
+    .status-pill[data-state="error"] {
+      background: rgba(220,53,69,0.12);
+      color: #b02a37;
+    }
+    .security-card {
+      background: linear-gradient(135deg, rgba(255,255,255,0.97), rgba(232, 249, 241, 0.97));
+      border-radius: 1.75rem;
+      border: 1px solid rgba(15, 81, 50, 0.08);
+      box-shadow: 0 30px 60px rgba(15, 81, 50, 0.12);
+    }
+    .account-checklist li {
+      background: rgba(20, 108, 67, 0.07);
+      border-radius: 1.2rem;
+      padding: 1.1rem 1.25rem;
+    }
+    .account-checklist .check-icon {
+      background: rgba(25, 135, 84, 0.18);
+    }
+    @media (max-width: 575.98px) {
+      .account-hero {
+        border-radius: 1rem;
+      }
+      .field-form {
+        border-radius: 1rem;
+      }
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
-<div class="py-3">
-  <h1 class="h4 mb-4">Account Settings</h1>
+{% with request.user.full_name|default:request.user.email as display_name %}
+<div class="account-page" data-account-page>
+  <section class="account-hero mb-4">
+    <div class="account-hero-content">
+      <p class="text-uppercase text-white-50 small mb-1">Your account</p>
+      <h1 class="display-6 fw-semibold mb-2" data-profile-display-name>{{ display_name|default:"Your account" }}</h1>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="badge bg-white text-success text-uppercase" data-profile-role>{{ request.user.role|default:"user" }}</span>
+        <span class="text-white-50" data-profile-email>{{ request.user.email }}</span>
+      </div>
+    </div>
+    <div class="text-end">
+      <p class="text-white-50 text-uppercase small mb-1">Last synced</p>
+      <p class="mb-0" data-profile-sync-state>Loading profile…</p>
+    </div>
+  </section>
+
+  <div class="row g-4 align-items-stretch mb-1">
+    <div class="col-12 col-lg-8">
+      <div class="card border-0 shadow-sm position-relative h-100 card-module card-module--primary">
+        <div class="card-module__icon">
+          <span class="bi bi-person-lines-fill"></span>
+        </div>
+        <div class="profile-loading-overlay d-none" data-profile-loading>
+          <div class="spinner-border text-success mb-2" role="status" aria-hidden="true"></div>
+          <div class="text-muted small">Syncing secure profile…</div>
+        </div>
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+            <div>
+              <p class="account-card-title text-muted mb-1">Contact & Address</p>
+              <h2 class="h4 mb-0">Update your profile</h2>
+            </div>
+            <span class="badge bg-success-subtle text-success">Visible to response teams</span>
+          </div>
+          <p class="text-muted mb-3 small">Update each section individually. Each change syncs securely with your profile.</p>
+          <div class="mb-3" data-profile-alerts></div>
+          <div class="row g-3">
+            <div class="col-12">
+              <form class="field-form p-3" data-profile-field-form="full_name">
+                <div class="d-flex flex-column flex-md-row gap-3 align-items-md-center">
+                  <div class="flex-grow-1 w-100">
+                    <label class="form-label fw-semibold" for="profileFullName">Full name</label>
+                    <input type="text" class="form-control" id="profileFullName" name="full_name" placeholder="e.g. Jane Firewatch" data-profile-field-input />
+                    <div class="form-text">Shown to monitoring staff and emergency responders.</div>
+                  </div>
+                  <div class="d-flex flex-md-column gap-2">
+                    <button type="submit" class="btn btn-success btn-sm px-3" data-profile-field-submit>Save</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-profile-field-reset>Reset</button>
+                  </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 justify-content-between mt-2">
+                  <small class="status-pill" data-profile-field-status>Loading…</small>
+                  <small class="text-muted" data-profile-field-alert></small>
+                </div>
+              </form>
+            </div>
+            <div class="col-12">
+              <form class="field-form p-3" data-profile-field-form="phone_number">
+                <div class="d-flex flex-column flex-md-row gap-3 align-items-md-center">
+                  <div class="flex-grow-1 w-100">
+                    <label class="form-label fw-semibold" for="profilePhone">Phone number</label>
+                    <input type="tel" class="form-control" id="profilePhone" name="phone_number" placeholder="+8801XXXXXXXXX" data-profile-field-input />
+                    <div class="form-text">Must be able to receive OTP codes and emergency SMS.</div>
+                  </div>
+                  <div class="d-flex flex-md-column gap-2">
+                    <button type="submit" class="btn btn-success btn-sm px-3" data-profile-field-submit>Save</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-profile-field-reset>Reset</button>
+                  </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 justify-content-between mt-2">
+                  <small class="status-pill" data-profile-field-status>Loading…</small>
+                  <small class="text-muted" data-profile-field-alert></small>
+                </div>
+              </form>
+            </div>
+            <div class="col-12">
+              <form class="field-form p-3" data-profile-field-form="address">
+                <div class="d-flex flex-column flex-md-row gap-3">
+                  <div class="flex-grow-1 w-100">
+                    <label class="form-label fw-semibold" for="profileAddress">Address</label>
+                    <textarea class="form-control" id="profileAddress" name="address" rows="3" placeholder="Street, city, and any landmark" data-profile-field-input></textarea>
+                    <div class="form-text">Include floor numbers, landmarks, or gate codes for faster dispatch.</div>
+                  </div>
+                  <div class="d-flex flex-md-column gap-2 align-self-start">
+                    <button type="submit" class="btn btn-success btn-sm px-3" data-profile-field-submit>Save</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-profile-field-reset>Reset</button>
+                  </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 justify-content-between mt-2">
+                  <small class="status-pill" data-profile-field-status>Loading…</small>
+                  <small class="text-muted" data-profile-field-alert></small>
+                </div>
+              </form>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="profileEmail">Email</label>
+              <input type="email" id="profileEmail" class="form-control" value="{{ request.user.email }}" disabled>
+              <div class="form-text">Email changes are handled by the support team.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-4">
+      <div class="card border-0 shadow-sm h-100 card-module card-module--accent">
+        <div class="card-module__icon">
+          <span class="bi bi-person-badge"></span>
+        </div>
+        <div class="card-body p-4">
+          <div class="profile-avatar mb-3" data-profile-initials>--</div>
+          <h2 class="h5 mb-1" data-profile-display-name>{{ display_name|default:"Your account" }}</h2>
+          <p class="text-muted small mb-4" data-profile-email>{{ request.user.email }}</p>
+          <dl class="row gy-2 small mb-0">
+            <dt class="col-5 text-muted">Role</dt>
+            <dd class="col-7 fw-semibold text-capitalize" data-profile-role>{{ request.user.role|default:"user" }}</dd>
+            <dt class="col-5 text-muted">Phone</dt>
+            <dd class="col-7 text-break" data-profile-phone>—</dd>
+            <dt class="col-5 text-muted">Devices</dt>
+            <dd class="col-7" data-profile-devices>—</dd>
+            <dt class="col-12 text-muted mt-2">Address</dt>
+            <dd class="col-12 text-break" data-profile-address>—</dd>
+          </dl>
+          <div class="mt-4 pt-3 border-top small text-muted">
+            <strong>Need help?</strong> Email <a href="mailto:support@pranisheba.com">support@pranisheba.com</a> for account ownership changes.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="row g-4">
     <div class="col-12 col-lg-6">
-      <div class="card shadow-sm">
-        <div class="card-header bg-white border-0 pb-0">
-          <h2 class="h5 mb-0">Change Password</h2>
-        </div>
-        <div class="card-body">
-          <p class="text-muted">Choose a new password to keep your account secure. You will remain signed in after the update.</p>
+      <div class="card border-0 shadow-sm h-100 security-card">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+            <div>
+              <p class="account-card-title text-muted mb-1">Security</p>
+              <h2 class="h5 mb-0">Change password</h2>
+            </div>
+            <span class="badge bg-success-subtle text-success">Recommended monthly</span>
+          </div>
+          <p class="text-muted small mb-4">Choose a strong passphrase to keep your monitoring data secure. You will remain signed in after updating.</p>
           <form data-change-password-form data-endpoint="/auth/change-password" novalidate>
             <div class="mb-3" data-change-password-alerts></div>
             <div class="mb-3">
@@ -35,18 +380,45 @@
     </div>
 
     <div class="col-12 col-lg-6">
-      <div class="card border-0 bg-light h-100">
-        <div class="card-body">
-          <h2 class="h5">Need to update profile info?</h2>
-          <p class="mb-2">Use the mobile app or contact your administrator to change phone numbers and addresses.</p>
-          <p class="text-muted small mb-0">For security issues, email <a href="mailto:support@pranisheba.com">support@pranisheba.com</a>.</p>
+      <div class="card border-0 shadow-sm h-100 card-module">
+        <div class="card-module__icon">
+          <span class="bi bi-clipboard2-check"></span>
+        </div>
+        <div class="card-body p-4 account-checklist">
+          <p class="account-card-title text-muted mb-1">Security checklist</p>
+          <h2 class="h5 mb-3">Stay in control</h2>
+          <ul class="list-unstyled mb-0">
+            <li class="d-flex gap-3 align-items-start mb-3">
+              <span class="check-icon">✓</span>
+              <div>
+                <strong>Verify your phone</strong>
+                <p class="text-muted small mb-0">OTP codes and emergency SMS updates rely on the phone number above.</p>
+              </div>
+            </li>
+            <li class="d-flex gap-3 align-items-start mb-3">
+              <span class="check-icon">✓</span>
+              <div>
+                <strong>Share the right address</strong>
+                <p class="text-muted small mb-0">Include floor or landmark details so responders arrive at the exact spot.</p>
+              </div>
+            </li>
+            <li class="d-flex gap-3 align-items-start">
+              <span class="check-icon">✓</span>
+              <div>
+                <strong>Review device owners</strong>
+                <p class="text-muted small mb-0">Remove unused devices from your profile to avoid noise in alert routing.</p>
+              </div>
+            </li>
+          </ul>
         </div>
       </div>
     </div>
   </div>
 </div>
+{% endwith %}
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'js/account-settings.js' %}"></script>
 <script src="{% static 'js/change-password.js' %}"></script>
 {% endblock %}

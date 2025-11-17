@@ -70,5 +70,8 @@
 
   window.apiGet = (url) => apiFetch(url, { method: 'GET' });
   window.apiPost = (url, body) => apiFetch(url, { method: 'POST', body: JSON.stringify(body || {}) });
+  window.apiPatch = (url, body) => apiFetch(url, { method: 'PATCH', body: JSON.stringify(body || {}) });
+  window.apiPut = (url, body) => apiFetch(url, { method: 'PUT', body: JSON.stringify(body || {}) });
   window.apiDelete = (url) => apiFetch(url, { method: 'DELETE' });
+  window.apiFetch = apiFetch;
 })();
