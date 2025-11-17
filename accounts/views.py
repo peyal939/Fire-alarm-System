@@ -1,22 +1,54 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
+from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from drf_spectacular.utils import extend_schema, OpenApiExample
 
+from otp.models import PhoneOTP
+from otp.services import OTPSessionManager
+
 from .serializers import (
     UserSerializer,
     RegisterSerializer,
+    RegistrationInitSerializer,
+    RegistrationVerifySerializer,
+    LoginOTPVerifySerializer,
+    PasswordResetInitSerializer,
+    PasswordResetCompleteSerializer,
     UserDetailSerializer,
     UserUpdateSerializer,
     AdminUserUpdateSerializer,
     ChangePasswordSerializer,
 )
+from .phone_utils import phone_variants
 
 User = get_user_model()
+
+
+def _mask_phone(phone: str) -> str:
+    phone = phone or ""
+    if len(phone) <= 4:
+        return phone
+    return "*" * (len(phone) - 4) + phone[-4:]
+
+
+def _resolve_user(identifier: str):
+    identifier = (identifier or "").strip()
+    if not identifier:
+        return None
+    if "@" in identifier:
+        return User.objects.filter(email=identifier.lower()).first()
+    variants = phone_variants(identifier) or [identifier]
+    return User.objects.filter(phone_number__in=variants).first()
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -30,18 +62,25 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 @extend_schema(
     tags=["Auth"],
-    summary="Login with email & password",
+    summary="Login with email or phone plus password",
     examples=[
         OpenApiExample(
-            name="LoginRequest",
+            name="LoginRequestEmail",
             value={"email": "user@example.com", "password": "Passw0rd!"},
             request_only=True,
         ),
         OpenApiExample(
-            name="LoginResponse",
+            name="LoginRequestPhone",
+            value={"phone_number": "+8801700000000", "password": "Passw0rd!"},
+            request_only=True,
+        ),
+        OpenApiExample(
+            name="LoginOTPChallenge",
             value={
-                "refresh": "<jwt-refresh>",
-                "access": "<jwt-access>",
+                "session_id": "7f9d19f8-2c4f-4d28-8bd6-1e7ee7d9f5d0",
+                "otp_sent_to": "********0000",
+                "expires_in": 300,
+                "resend_cooldown": 60,
             },
             response_only=True,
         ),
@@ -49,6 +88,325 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 )
 class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        data = request.data.copy()
+        identifier = (
+            data.get("identifier")
+            or data.get("email")
+            or data.get("phone_number")
+            or ""
+        )
+        identifier = identifier.strip()
+
+        if identifier and "@" not in identifier:
+            variants = phone_variants(identifier) or [identifier]
+            user = User.objects.filter(phone_number__in=variants).first()
+            if user:
+                data["email"] = user.email
+        elif identifier:
+            data["email"] = identifier.lower()
+
+        serializer = self.get_serializer(data=data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as e:
+            raise InvalidToken(e.args[0])
+
+        if not settings.OTP_SETTINGS.get("login_enforced", False):
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+        user = serializer.user
+        phone_number = user.phone_number or ""
+        if not phone_number:
+            return Response(
+                {"detail": "Phone number is required for OTP login."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        manager = OTPSessionManager(purpose=PhoneOTP.Purpose.LOGIN)
+        metadata = {
+            "email": user.email,
+            "user_id": user.id,
+            "client_ip": request.META.get("REMOTE_ADDR"),
+        }
+        try:
+            session = manager.create_session(
+                phone_number=phone_number,
+                user=user,
+                metadata=metadata,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        masked = _mask_phone(phone_number)
+        payload = {
+            "session_id": str(session.session_id),
+            "otp_sent_to": masked,
+            "expires_in": settings.OTP_SETTINGS["ttl_seconds"],
+            "resend_cooldown": settings.OTP_SETTINGS["resend_cooldown_seconds"],
+        }
+        return Response(payload, status=status.HTTP_202_ACCEPTED)
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Begin registration (send OTP)",
+    request=RegistrationInitSerializer,
+    responses={201: None, 400: None, 409: None, 429: None},
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([AnonRateThrottle])
+def register_init(request):
+    serializer = RegistrationInitSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+    email = data["email"].strip().lower()
+    phone_number = data["phone_number"].strip()
+
+    if User.objects.filter(email=email).exists():
+        return Response({"detail": "Email already registered"}, status=409)
+
+    metadata = {
+        "email": email,
+        "phone_number": phone_number,
+        "full_name": data.get("full_name", ""),
+        "address": data.get("address", ""),
+        "password_hash": make_password(data["password"]),
+        "client_ip": request.META.get("REMOTE_ADDR"),
+        "user_agent": request.META.get("HTTP_USER_AGENT"),
+    }
+
+    manager = OTPSessionManager(purpose=PhoneOTP.Purpose.REGISTER)
+    try:
+        session = manager.create_session(
+            phone_number=phone_number,
+            metadata=metadata,
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    payload = {
+        "session_id": str(session.session_id),
+        "expires_at": session.expires_at,
+        "expires_in": settings.OTP_SETTINGS["ttl_seconds"],
+        "resend_cooldown": settings.OTP_SETTINGS["resend_cooldown_seconds"],
+    }
+    return Response(payload, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Complete registration with OTP",
+    request=RegistrationVerifySerializer,
+    responses={201: UserSerializer, 400: None, 404: None},
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_verify(request):
+    serializer = RegistrationVerifySerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    session = get_object_or_404(
+        PhoneOTP,
+        session_id=serializer.validated_data["session_id"],
+        purpose=PhoneOTP.Purpose.REGISTER,
+    )
+
+    manager = OTPSessionManager(purpose=PhoneOTP.Purpose.REGISTER)
+    if not session.is_verified:
+        is_valid_code = manager.verify_code(session, serializer.validated_data["code"])
+        if not is_valid_code:
+            return Response(
+                {"detail": "Invalid or expired OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    metadata = session.metadata or {}
+    completed_before = bool(metadata.get("completed"))
+    user = None
+    if metadata.get("completed") and metadata.get("user_id"):
+        user = User.objects.filter(id=metadata["user_id"]).first()
+    if user is None:
+        email = metadata.get("email")
+        password_hash = metadata.get("password_hash")
+        if not email or not password_hash:
+            return Response(
+                {"detail": "Registration session no longer valid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if User.objects.filter(email=email).exists():
+            return Response({"detail": "Email already registered"}, status=409)
+
+        user = User(
+            email=email,
+            phone_number=metadata.get("phone_number", ""),
+            full_name=metadata.get("full_name", ""),
+            address=metadata.get("address", ""),
+        )
+        user.password = password_hash
+        user.save()
+
+        metadata.pop("password_hash", None)
+        metadata["completed"] = True
+        metadata["user_id"] = user.id
+        session.metadata = metadata
+        session.save(update_fields=["metadata"])
+
+    refresh = RefreshToken.for_user(user)
+    response_payload = {
+        "user": UserSerializer(user).data,
+        "tokens": {"refresh": str(refresh), "access": str(refresh.access_token)},
+    }
+    status_code = status.HTTP_200_OK if completed_before else status.HTTP_201_CREATED
+    return Response(response_payload, status=status_code)
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Complete login with OTP",
+    request=LoginOTPVerifySerializer,
+    responses={200: None, 400: None, 404: None},
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def login_verify(request):
+    serializer = LoginOTPVerifySerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    if not settings.OTP_SETTINGS.get("login_enforced", False):
+        return Response(
+            {"detail": "OTP login not enforced."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    session = get_object_or_404(
+        PhoneOTP,
+        session_id=serializer.validated_data["session_id"],
+        purpose=PhoneOTP.Purpose.LOGIN,
+    )
+
+    manager = OTPSessionManager(purpose=PhoneOTP.Purpose.LOGIN)
+    if not manager.verify_code(session, serializer.validated_data["code"]):
+        return Response(
+            {"detail": "Invalid or expired OTP."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = session.user
+    if user is None:
+        user_id = (session.metadata or {}).get("user_id")
+        user = User.objects.filter(id=user_id).first()
+    if user is None:
+        return Response(
+            {"detail": "Login session no longer valid."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    refresh = RefreshToken.for_user(user)
+    payload = {"refresh": str(refresh), "access": str(refresh.access_token)}
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Start forgot-password flow (send OTP)",
+    request=PasswordResetInitSerializer,
+    responses={201: None, 400: None, 404: None, 429: None},
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([AnonRateThrottle])
+def password_reset_init(request):
+    serializer = PasswordResetInitSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    identifier = serializer.validated_data["identifier"]
+    user = _resolve_user(identifier)
+    if not user:
+        return Response(
+            {"detail": "No account matches that email or phone number."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not user.phone_number:
+        return Response(
+            {"detail": "This account is missing a verified phone number."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    manager = OTPSessionManager(purpose=PhoneOTP.Purpose.PASSWORD_RESET)
+    metadata = {
+        "user_id": user.id,
+        "email": user.email,
+        "identifier": identifier,
+        "purpose": "password_reset",
+    }
+    try:
+        session = manager.create_session(
+            phone_number=user.phone_number,
+            user=user,
+            metadata=metadata,
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    payload = {
+        "session_id": str(session.session_id),
+        "otp_sent_to": _mask_phone(user.phone_number),
+        "expires_in": settings.OTP_SETTINGS["ttl_seconds"],
+        "resend_cooldown": settings.OTP_SETTINGS["resend_cooldown_seconds"],
+    }
+    return Response(payload, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Complete forgot-password with OTP",
+    request=PasswordResetCompleteSerializer,
+    responses={200: None, 400: None, 404: None},
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def password_reset_complete(request):
+    serializer = PasswordResetCompleteSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    session = get_object_or_404(
+        PhoneOTP,
+        session_id=serializer.validated_data["session_id"],
+        purpose=PhoneOTP.Purpose.PASSWORD_RESET,
+    )
+
+    manager = OTPSessionManager(purpose=PhoneOTP.Purpose.PASSWORD_RESET)
+    if not manager.verify_code(session, serializer.validated_data["code"]):
+        return Response(
+            {"detail": "Invalid or expired OTP."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = session.user
+    if user is None:
+        user_id = (session.metadata or {}).get("user_id")
+        user = User.objects.filter(id=user_id).first()
+    if user is None:
+        return Response(
+            {"detail": "Password reset session is no longer valid."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    new_password = serializer.validated_data["new_password"]
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    return Response(
+        {"detail": "Password updated successfully."}, status=status.HTTP_200_OK
+    )
 
 
 @extend_schema(
