@@ -76,6 +76,14 @@ class Device(AuditSoftDeleteModel):
         related_name="slaves",
         on_delete=models.PROTECT,
     )
+    originating_order = models.ForeignKey(
+        "products.Order",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="devices",
+        help_text="Order that supplied this physical device",
+    )
     latitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
@@ -117,6 +125,7 @@ class Device(AuditSoftDeleteModel):
             models.Index(fields=["hardware_identifier"]),
             models.Index(fields=["device_role"]),
             models.Index(fields=["master"]),
+            models.Index(fields=["originating_order"]),
         ]
         # Default ordering surfaces most recently active devices first while preserving stability
         ordering = ["-last_seen", "-registered_at"]

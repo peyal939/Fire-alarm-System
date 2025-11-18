@@ -92,13 +92,24 @@ class Order(AuditSoftDeleteModel):
     gateway_response = models.JSONField(null=True, blank=True)
     shipping_address = models.TextField(blank=True)
     ordered_at = models.DateTimeField(default=timezone.now, db_index=True)
+    assigned_devices = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of device registrations already linked to this order",
+    )
 
     class Meta:
         ordering = ["-ordered_at"]
         indexes = [
             models.Index(fields=["user", "ordered_at"]),
             models.Index(fields=["package", "ordered_at"]),
+            models.Index(fields=["assigned_devices"]),
         ]
 
     def __str__(self) -> str:  # pragma: no cover
         return f"Order {self.pk} ({self.order_status})"
+
+    @property
+    def remaining_device_slots(self) -> int:
+        """Return how many device registrations can still be linked to this order."""
+        remaining = (self.quantity or 0) - (self.assigned_devices or 0)
+        return remaining if remaining > 0 else 0

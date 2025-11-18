@@ -9,7 +9,7 @@ import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import DatabaseError, models
+from django.db import DatabaseError, models, transaction
 from django.utils import timezone
 
 from .alarm_state import record_high_smoke, record_safe_smoke, reset_state_for_alert
@@ -22,8 +22,95 @@ from .constants import (
     normalize_device_status,
 )
 from .models import Alert, Device, Telemetry
+from products.models import Order
 
 logger = logging.getLogger(__name__)
+
+
+def assign_device_to_order(device: Device) -> Optional[Order]:
+    """Assign the given device to the earliest paid order with remaining slots.
+
+    The helper increments the order's assigned_devices counter inside a
+    transaction to prevent race conditions. If no eligible order is found, the
+    device is left without an originating order and the function returns None.
+    """
+
+    if not device or not getattr(device, "pk", None):
+        logger.warning("assign_device_to_order called with unsaved device")
+        return None
+
+    if getattr(device, "originating_order_id", None):
+        return device.originating_order
+
+    user_id = getattr(device, "user_id", None)
+    if not user_id:
+        logger.warning(
+            "Device %s is missing user context for order assignment", device.pk
+        )
+        return None
+
+    try:
+        with transaction.atomic():
+            order = (
+                Order.objects.select_for_update()
+                .filter(
+                    user_id=user_id,
+                    order_status=Order.Status.PAID,
+                    deleted_at__isnull=True,
+                    package__deleted_at__isnull=True,
+                    assigned_devices__lt=models.F("quantity"),
+                )
+                .order_by("ordered_at", "id")
+                .first()
+            )
+
+            if not order:
+                logger.info(
+                    "No available paid orders with remaining slots for user %s (device %s)",
+                    user_id,
+                    device.pk,
+                )
+                return None
+
+            updated = Order.objects.filter(pk=order.pk).update(
+                assigned_devices=models.F("assigned_devices") + 1
+            )
+            if updated != 1:
+                logger.warning(
+                    "Failed to increment assigned_devices for order %s when assigning device %s",
+                    order.pk,
+                    device.pk,
+                )
+                return None
+
+            device.originating_order_id = order.pk
+            device.save(update_fields=["originating_order"])
+            try:
+                from subscriptions.services import ensure_device_subscription
+
+                ensure_device_subscription(device)
+            except Exception as sub_exc:  # pragma: no cover - best effort hook
+                logger.warning(
+                    "Failed to ensure subscription for device %s: %s",
+                    device.pk,
+                    sub_exc,
+                )
+            logger.info(
+                "Assigned device %s to order %s (assigned_devices now %s of %s)",
+                device.pk,
+                order.pk,
+                (order.assigned_devices or 0) + 1,
+                order.quantity,
+            )
+            return order
+    except Exception as exc:
+        logger.error(
+            "Unexpected error assigning device %s to order queue: %s",
+            device.pk,
+            exc,
+            exc_info=True,
+        )
+        return None
 
 
 def publish_device_phone_assignment(device: Device, *, phone_number: str) -> None:

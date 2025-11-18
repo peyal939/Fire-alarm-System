@@ -30,6 +30,7 @@ urlpatterns = [
     path("auth/", include("accounts.urls")),
     path("", include("devices.urls")),
     path("", include("firestations.urls")),
+    path("subscriptions/", include("subscriptions.api_urls")),
     # OpenAPI schema and docs
     path(
         "schema/",

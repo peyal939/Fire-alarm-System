@@ -1,6 +1,8 @@
 from rest_framework.test import APITestCase
 from rest_framework import status
 
+from subscriptions.models import DeviceSubscription
+
 
 class DeviceOwnershipTests(APITestCase):
     def setUp(self):
@@ -54,3 +56,20 @@ class DeviceOwnershipTests(APITestCase):
 
         r = self.client.get(f"/devices/{dev_id}/")
         self.assertEqual(r.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_device_registration_creates_subscription(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+        response = self.client.post(
+            "/devices/register/",
+            {
+                "hardware_identifier": "DEV-SUB-1",
+                "device_name": "Subscription Sensor",
+                "latitude": 23.79,
+                "longitude": 90.42,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        device_id = response.data["id"]
+        subscription = DeviceSubscription.objects.get(device_id=device_id)
+        self.assertEqual(subscription.status, DeviceSubscription.Status.ACTIVE)

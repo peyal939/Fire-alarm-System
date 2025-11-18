@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+from django.contrib import messages
 from django.db import transaction
 from django.http import HttpRequest
+from django.shortcuts import redirect
+from django.urls import reverse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -14,6 +18,81 @@ from drf_spectacular.types import OpenApiTypes
 from .models import PaymentTransaction
 from . import services
 from . import serializers as sz
+
+
+logger = logging.getLogger(__name__)
+
+
+def _sync_subscription_charge(txn: PaymentTransaction | None) -> None:
+    if not txn:
+        return
+    try:
+        from subscriptions.services import sync_charge_from_transaction
+    except Exception:
+        return
+    try:
+        sync_charge_from_transaction(txn)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning(
+            "Failed to sync subscription charge for transaction %s: %s",
+            txn.pk,
+            exc,
+        )
+
+
+def _get_transaction_for_order(order_id: str) -> PaymentTransaction | None:
+    if not order_id:
+        return None
+    return (
+        PaymentTransaction.objects.filter(sp_order_id=order_id).first()
+        or PaymentTransaction.objects.filter(customer_order_id=order_id).first()
+    )
+
+
+def _extract_payload(verified: Any) -> dict | None:
+    if not verified:
+        return None
+    if isinstance(verified, dict):
+        return verified
+    return getattr(verified, "__dict__", None)
+
+
+def _is_successful_verification(verified: Any) -> bool:
+    if not verified:
+        return False
+    status_str = (
+        str(
+            getattr(verified, "transaction_status", "")
+            or getattr(verified, "status", "")
+        )
+        .strip()
+        .lower()
+    )
+    sp_code = str(getattr(verified, "sp_code", "") or "").strip()
+    verification_flag = getattr(verified, "payment_verification_status", None)
+    return (
+        bool(verification_flag)
+        or status_str in {"success", "completed"}
+        or sp_code == "1000"
+    )
+
+
+def _update_transaction_from_verification(
+    order_id: str, verified: Any
+) -> tuple[PaymentTransaction | None, bool, dict | None]:
+    txn = _get_transaction_for_order(order_id)
+    payload = _extract_payload(verified)
+    success = _is_successful_verification(verified)
+    if txn:
+        txn.verification_payload = payload
+        txn.status = (
+            PaymentTransaction.Status.SUCCESS
+            if success
+            else PaymentTransaction.Status.FAILED
+        )
+        txn.save(update_fields=["status", "verification_payload", "updated_at"])
+        _sync_subscription_charge(txn)
+    return txn, success, payload
 
 
 class InitiatePaymentView(APIView):
@@ -96,6 +175,7 @@ class InitiatePaymentView(APIView):
             if details is None:
                 txn.status = PaymentTransaction.Status.FAILED
                 txn.save(update_fields=["status"])
+                _sync_subscription_charge(txn)
                 return Response({"detail": "Failed to obtain checkout URL"}, status=502)
 
             # Persist identifiers
@@ -109,6 +189,7 @@ class InitiatePaymentView(APIView):
             )
             txn.response_payload = details.__dict__
             txn.save()
+            _sync_subscription_charge(txn)
 
         return Response(
             {
@@ -143,46 +224,28 @@ class VerifyPaymentView(APIView):
         order_id = (
             (request.data or {}).get("order_id")
             if isinstance(request.data, dict)
-            else None
+            else request.data
         )
         if not order_id:
-            return Response({"detail": "order_id is required"}, status=400)
-        verified = services.verify_payment(order_id)
+            return Response(
+                {"detail": "order_id is required"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Best-effort: update matching transaction
-        txn = (
-            PaymentTransaction.objects.filter(sp_order_id=order_id).first()
-            or PaymentTransaction.objects.filter(customer_order_id=order_id).first()
-        )
-        if txn:
-            txn.verification_payload = getattr(verified, "__dict__", None)
-            if verified is None:
-                # No such order id
-                txn.status = PaymentTransaction.Status.FAILED
-            else:
-                # Null-safe status detection and support sp_code "1000"
-                status_raw = (
-                    getattr(verified, "transaction_status", None)
-                    or getattr(verified, "status", None)
-                    or ""
-                )
-                status_str = str(status_raw).lower()
-                sp_code_val = getattr(verified, "sp_code", None)
-                sp_code_str = str(sp_code_val) if sp_code_val is not None else None
-                is_success = (
-                    getattr(verified, "payment_verification_status", False)
-                    or status_str == "success"
-                    or status_str == "completed"
-                    or sp_code_str == "1000"
-                )
-                txn.status = (
-                    PaymentTransaction.Status.SUCCESS
-                    if is_success
-                    else PaymentTransaction.Status.FAILED
-                )
-            txn.save()
+        try:
+            verified = services.verify_payment(order_id)
+        except Exception as exc:  # pragma: no cover - SDK/network errors
+            logger.warning(
+                "shurjoPay verify failed for %s: %s", order_id, exc, exc_info=True
+            )
+            return Response(
+                {"detail": "Verification temporarily unavailable"},
+                status=http_status.HTTP_502_BAD_GATEWAY,
+            )
 
-        return Response(verified.__dict__ if verified else None)
+        _update_transaction_from_verification(order_id, verified)
+        payload = _extract_payload(verified)
+        return Response(payload)
 
 
 class ReturnView(APIView):
@@ -203,43 +266,53 @@ class ReturnView(APIView):
     )
     def get(self, request: HttpRequest):
         order_id = request.query_params.get("order_id", "").strip()
-        info: dict[str, Any] = {"message": "Return received"}
+        info: dict[str, Any] = {
+            "order_id": order_id or None,
+            "success": False,
+            "message": "Payment verification could not be completed.",
+        }
+        status_code = http_status.HTTP_400_BAD_REQUEST
+
         if order_id:
-            info["order_id"] = order_id
-            verified = services.verify_payment(order_id)
-            info["verified"] = bool(verified)
-            if verified:
-                info["details"] = getattr(verified, "__dict__", None)
-            # Update transaction best-effort
-            txn = (
-                PaymentTransaction.objects.filter(sp_order_id=order_id).first()
-                or PaymentTransaction.objects.filter(customer_order_id=order_id).first()
-            )
-            if txn:
-                payload = getattr(verified, "__dict__", None)
-                txn.verification_payload = payload
-                is_success = False
-                if verified:
-                    # Accept multiple success indicators from SDK or raw API
-                    status_str = (
-                        getattr(verified, "transaction_status", "")
-                        or getattr(verified, "status", "")
-                    ).lower()
-                    sp_code_val = getattr(verified, "sp_code", None)
-                    sp_code_str = str(sp_code_val) if sp_code_val is not None else None
-                    is_success = (
-                        getattr(verified, "payment_verification_status", False)
-                        or status_str == "success"
-                        or status_str == "completed"
-                        or sp_code_str == "1000"
-                    )
-                txn.status = (
-                    PaymentTransaction.Status.SUCCESS
-                    if is_success
-                    else PaymentTransaction.Status.FAILED
+            try:
+                verified = services.verify_payment(order_id)
+            except Exception as exc:  # pragma: no cover
+                logger.warning(
+                    "Return verify failed for %s: %s", order_id, exc, exc_info=True
                 )
-                txn.save()
-        return Response(info)
+                info["message"] = "We could not verify the payment at this time."
+                verified = None
+            txn, success, payload = _update_transaction_from_verification(
+                order_id, verified
+            )
+            info.update(
+                {
+                    "success": success,
+                    "verified": payload,
+                    "transaction_id": txn.id if txn else None,
+                }
+            )
+            if success:
+                info["message"] = (payload or {}).get("message") or "Payment successful"
+                status_code = http_status.HTTP_200_OK
+            elif payload:
+                info["message"] = payload.get("message") or info["message"]
+        else:
+            info["message"] = "order_id is required"
+
+        wants_json = (
+            getattr(getattr(request, "accepted_renderer", None), "format", None)
+            == "json"
+            or request.query_params.get("format") == "json"
+        )
+        if wants_json:
+            return Response(info, status=status_code)
+
+        if info["success"]:
+            messages.success(request, info["message"])
+        else:
+            messages.error(request, info["message"])
+        return redirect(reverse("subscriptions:user-dashboard"))
 
 
 class CancelView(APIView):
@@ -267,7 +340,17 @@ class CancelView(APIView):
         if txn:
             txn.status = PaymentTransaction.Status.CANCELLED
             txn.save(update_fields=["status"])
-        return Response({"message": "Payment cancelled", "order_id": order_id or None})
+            _sync_subscription_charge(txn)
+        info = {"message": "Payment cancelled", "order_id": order_id or None}
+        wants_json = (
+            getattr(getattr(request, "accepted_renderer", None), "format", None)
+            == "json"
+            or request.query_params.get("format") == "json"
+        )
+        if wants_json:
+            return Response(info)
+        messages.warning(request, "Payment was cancelled before completion.")
+        return redirect(reverse("subscriptions:user-dashboard"))
 
 
 class StatusView(APIView):

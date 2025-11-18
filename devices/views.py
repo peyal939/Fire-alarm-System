@@ -4,7 +4,9 @@ from decimal import Decimal, InvalidOperation
 import logging
 
 from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status, viewsets, filters
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
@@ -32,6 +34,8 @@ from .serializers import (
 )
 from .constants import DeviceConfigurationPublishError
 from .alarm_state import reset_state_for_alert, schedule_next_reminder
+from subscriptions.models import DeviceSubscription
+from subscriptions.services import ensure_device_subscription
 
 logger = logging.getLogger(__name__)
 
@@ -85,25 +89,64 @@ def _broadcast_device_removed(device: Device) -> None:
         )
 
 
+def _ensure_subscription(device: Device) -> None:
+    if not device or not getattr(device, "pk", None):
+        return
+    try:
+        ensure_device_subscription(device)
+    except Exception as exc:  # pragma: no cover - subscription sync is best-effort
+        logger.warning(
+            "Failed to ensure subscription for device %s: %s",
+            getattr(device, "pk", None),
+            exc,
+        )
+
+
+def _subscription_access_q(*, relation: str = "subscription", now=None) -> Q:
+    now = now or timezone.now()
+    prefix = f"{relation}__" if relation else ""
+
+    def field(name: str) -> str:
+        return f"{prefix}{name}"
+
+    return (
+        Q(**{field("isnull"): True})
+        | Q(**{field("status"): DeviceSubscription.Status.ACTIVE})
+        | (
+            Q(**{field("status"): DeviceSubscription.Status.GRACE})
+            & (
+                Q(**{field("grace_expires_at__isnull"): True})
+                | Q(**{field("grace_expires_at__gte"): now})
+            )
+        )
+        | Q(**{field("admin_override_until__gte"): now})
+    )
+
+
 class DeviceViewSet(viewsets.ModelViewSet):
     serializer_class = DeviceSerializer
     # Require authentication first to avoid AnonymousUser reaching queryset resolution
     permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get", "patch", "delete", "post"]
     # Provide a base queryset so schema generators can infer model/lookup types
-    queryset = Device.objects.select_related("user").filter(deleted_at__isnull=True)
+    queryset = Device.objects.select_related("user", "subscription").filter(
+        deleted_at__isnull=True
+    )
     # Constrain lookup to digits and document path param as integer
     lookup_value_regex = r"\d+"
 
     def get_queryset(self):
-        base = Device.objects.select_related("user").filter(deleted_at__isnull=True)
+        base = Device.objects.select_related("user", "subscription").filter(
+            deleted_at__isnull=True
+        )
         user = self.request.user
         # Safety guard: if somehow unauthenticated slips through, return empty set
         if not getattr(user, "is_authenticated", False):
             return Device.objects.none()
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
-        return base.filter(user=user)
+        now = timezone.now()
+        return base.filter(user=user).filter(_subscription_access_q(now=now))
 
     def list(self, request, *args, **kwargs):
         """List all devices with ordering: online devices first, then offline.
@@ -246,6 +289,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
             # Broadcast the updated device to WebSocket clients
             _broadcast_new_device(existing)
+            _ensure_subscription(existing)
 
             return Response(DeviceSerializer(existing).data, status=200)
 
@@ -275,7 +319,18 @@ class DeviceViewSet(viewsets.ModelViewSet):
             elif role == Device.DeviceRole.MASTER:
                 soft_deleted.master = None
 
+            # Clear originating order if device is moving to a different owner
+            if (
+                soft_deleted.originating_order_id
+                and soft_deleted.originating_order
+                and soft_deleted.originating_order.user_id != request.user.id
+            ):
+                soft_deleted.originating_order = None
+
             soft_deleted.save()
+            if soft_deleted.originating_order_id is None:
+                services.assign_device_to_order(soft_deleted)
+            _ensure_subscription(soft_deleted)
             _broadcast_new_device(soft_deleted)
             return Response(DeviceSerializer(soft_deleted).data, status=201)
 
@@ -291,6 +346,8 @@ class DeviceViewSet(viewsets.ModelViewSet):
         if role == Device.DeviceRole.SLAVE:
             device.master = master
         device.save()
+        services.assign_device_to_order(device)
+        _ensure_subscription(device)
 
         _broadcast_new_device(device)
         return Response(DeviceSerializer(device).data, status=201)
@@ -676,8 +733,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
         # time filters
         since = request.query_params.get("since")
         until = request.query_params.get("until")
-        from django.utils.dateparse import parse_datetime
-        from django.utils import timezone
 
         tz = timezone.get_current_timezone()
 
@@ -780,14 +835,19 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
         ],
     )
     def get_queryset(self):
-        qs = Telemetry.objects.select_related("device", "device__user").filter(
-            deleted_at__isnull=True, device__deleted_at__isnull=True
-        )
+        qs = Telemetry.objects.select_related(
+            "device",
+            "device__user",
+            "device__subscription",
+        ).filter(deleted_at__isnull=True, device__deleted_at__isnull=True)
         user = self.request.user
         if not getattr(user, "is_authenticated", False):
             return Telemetry.objects.none()
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
-            qs = qs.filter(device__user=user)
+            now = timezone.now()
+            qs = qs.filter(device__user=user).filter(
+                _subscription_access_q(relation="device__subscription", now=now)
+            )
 
         # Filters
         device_id = self.request.query_params.get("device")
@@ -798,9 +858,6 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(device_id=int(device_id))
             except Exception:
                 pass
-
-        from django.utils.dateparse import parse_datetime
-        from django.utils import timezone
 
         tz = timezone.get_current_timezone()
 
@@ -857,14 +914,19 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
         ],
     )
     def get_queryset(self):
-        qs = Alert.objects.select_related("device", "device__user").filter(
-            deleted_at__isnull=True, device__deleted_at__isnull=True
-        )
+        qs = Alert.objects.select_related(
+            "device",
+            "device__user",
+            "device__subscription",
+        ).filter(deleted_at__isnull=True, device__deleted_at__isnull=True)
         user = self.request.user
         if not getattr(user, "is_authenticated", False):
             return Alert.objects.none()
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
-            qs = qs.filter(device__user=user)
+            now = timezone.now()
+            qs = qs.filter(device__user=user).filter(
+                _subscription_access_q(relation="device__subscription", now=now)
+            )
 
         # Filters
         device_id = self.request.query_params.get("device")

@@ -21,6 +21,9 @@ from shurjopay_plugin import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class ShurjoEnv:
     username: str
@@ -31,6 +34,21 @@ class ShurjoEnv:
     prefix: str
     logdir: str | None
     verify_mode: str  # 'auto' (default), 'raw', or 'plugin'
+
+
+def _prepare_log_path(path: str | None) -> str:
+    if not path:
+        return ""
+    log = logging.getLogger(__name__)
+    try:
+        normalized = os.path.abspath(os.path.expanduser(str(path)))
+        directory = os.path.dirname(normalized)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        return normalized
+    except Exception as exc:  # pragma: no cover - best effort fallback
+        log.warning("Unable to prepare shurjoPay log path %s: %s", path, exc)
+        return ""
 
 
 def load_env() -> ShurjoEnv:
@@ -48,6 +66,7 @@ def load_env() -> ShurjoEnv:
 
 def build_plugin() -> ShurjopayPlugin:
     env = load_env()
+    log_path = _prepare_log_path(env.logdir)
     cfg = ShurjoPayConfigModel(
         SP_USERNAME=env.username,
         SP_PASSWORD=env.password,
@@ -55,7 +74,7 @@ def build_plugin() -> ShurjopayPlugin:
         SP_RETURN=env.ret_url,
         SP_CANCEL=env.cancel_url,
         SP_PREFIX=env.prefix,
-        SP_LOGDIR=env.logdir or "",
+        SP_LOGDIR=log_path,
     )
     return ShurjopayPlugin(cfg)
 
@@ -101,7 +120,27 @@ def initiate_payment(
             req = PaymentRequestModel(
                 amount=amount, order_id=order_id, currency=currency
             )
-    details = plugin.make_payment(req)
+    try:
+        details = plugin.make_payment(req)
+    except KeyError as exc:
+        logger.warning(
+            "shurjoPay plugin missing expected key during make_payment for %s: %s",
+            order_id,
+            exc,
+            exc_info=True,
+        )
+        return None
+    except (ShurjopayException, ShurjopayAuthException) as exc:
+        logger.warning(
+            "shurjoPay plugin error during make_payment for %s: %s",
+            order_id,
+            exc,
+            exc_info=True,
+        )
+        return None
+    except Exception:
+        logger.exception("Unexpected shurjoPay failure for order %s", order_id)
+        return None
     return details
 
 
