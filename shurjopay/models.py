@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .enums import PaymentTransactionStatus
+
 
 class PaymentTransaction(models.Model):
     """Minimal record linking our domain (user/order) to shurjoPay.
@@ -12,14 +14,6 @@ class PaymentTransaction(models.Model):
     by FK or store the ID in its own tables. It captures the flow:
     - created -> initiated -> redirected -> verified_(success|failed|cancelled)
     """
-
-    class Status(models.TextChoices):
-        CREATED = "created", "Created"
-        INITIATED = "initiated", "Initiated"
-        REDIRECTED = "redirected", "Redirected"
-        SUCCESS = "success", "Success"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
 
     # Optional linkage to a user; products app can use its own linkage
     user = models.ForeignKey(
@@ -42,7 +36,10 @@ class PaymentTransaction(models.Model):
     checkout_url = models.TextField(blank=True)
 
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.CREATED, db_index=True
+        max_length=16,
+        choices=PaymentTransactionStatus,
+        default=PaymentTransactionStatus.CREATED,
+        db_index=True,
     )
 
     # Audit

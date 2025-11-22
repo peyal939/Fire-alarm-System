@@ -83,10 +83,16 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-4) Run the app
+4) Run the app (Terminal 1)
 
 ```powershell
 daphne -b 0.0.0.0 -p 8000 config.asgi:application
+```
+
+5) Run the MQTT Ingestor (Terminal 2)
+
+```powershell
+python manage.py run_mqtt_ingestor
 ```
 
 Open http://localhost:8000

@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 
 from accounts.models import User
 from devices.models import Device
+from subscriptions.enums import DeviceSubscriptionStatus
 from subscriptions.models import DeviceSubscription
 
 
@@ -33,7 +34,7 @@ class SubscriptionApiTests(APITestCase):
         self.subscription = DeviceSubscription.objects.create(
             device=self.device,
             monthly_amount=Decimal("500.00"),
-            status=DeviceSubscription.Status.ACTIVE,
+            status=DeviceSubscriptionStatus.ACTIVE,
             billing_anchor=start,
             last_paid_through=cycle_end,
             next_due_at=cycle_end,
@@ -93,6 +94,6 @@ class SubscriptionApiTests(APITestCase):
         self.subscription.refresh_from_db()
         self.assertEqual(
             self.subscription.status,
-            DeviceSubscription.Status.ACTIVE,
+            DeviceSubscriptionStatus.ACTIVE,
         )
         self.assertIsNone(self.subscription.grace_expires_at)

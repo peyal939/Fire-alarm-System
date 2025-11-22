@@ -10,9 +10,12 @@ from django.utils import timezone
 
 from accounts.models import User
 from devices.models import Device
+from products.enums import OrderStatus
 from products.models import Order, Package
+from shurjopay.enums import PaymentTransactionStatus
 from shurjopay.models import PaymentTransaction
 from subscriptions import services
+from subscriptions.enums import DeviceSubscriptionStatus, SubscriptionChargeStatus
 from subscriptions.models import DeviceSubscription, SubscriptionCharge
 
 
@@ -33,7 +36,7 @@ class SubscriptionServiceTests(TestCase):
             number_of_slave_devices=0,
             quantity=1,
             amount=Decimal("2500.00"),
-            order_status=Order.Status.PAID,
+            order_status=OrderStatus.PAID,
         )
         self.device = Device.objects.create(
             user=self.user,
@@ -47,7 +50,7 @@ class SubscriptionServiceTests(TestCase):
             device=self.device,
             originating_order=self.order,
             monthly_amount=self.package.mrf,
-            status=DeviceSubscription.Status.ACTIVE,
+            status=DeviceSubscriptionStatus.ACTIVE,
             billing_anchor=activated,
             last_paid_through=cycle_end,
             next_due_at=cycle_end,
@@ -66,10 +69,10 @@ class SubscriptionServiceTests(TestCase):
 
         self.assertIsNotNone(charge)
         self.subscription.refresh_from_db()
-        self.assertEqual(self.subscription.status, DeviceSubscription.Status.GRACE)
+        self.assertEqual(self.subscription.status, DeviceSubscriptionStatus.GRACE)
         self.assertIsNotNone(charge.payment_transaction)
         self.assertEqual(
-            charge.payment_transaction.status, PaymentTransaction.Status.REDIRECTED
+            charge.payment_transaction.status, PaymentTransactionStatus.REDIRECTED
         )
         initiate_mock.assert_called_once()
 
@@ -79,7 +82,7 @@ class SubscriptionServiceTests(TestCase):
             reference="subscription:999",
             amount=self.subscription.monthly_amount,
             currency="BDT",
-            status=PaymentTransaction.Status.SUCCESS,
+            status=PaymentTransactionStatus.SUCCESS,
         )
         period_start = self.subscription.last_paid_through
         period_end = period_start + timedelta(days=30)
@@ -90,7 +93,7 @@ class SubscriptionServiceTests(TestCase):
             amount=self.subscription.monthly_amount,
             payment_transaction=txn,
         )
-        self.subscription.status = DeviceSubscription.Status.GRACE
+        self.subscription.status = DeviceSubscriptionStatus.GRACE
         self.subscription.grace_expires_at = timezone.now() - timedelta(days=1)
         self.subscription.save(update_fields=["status", "grace_expires_at"])
 
@@ -98,8 +101,8 @@ class SubscriptionServiceTests(TestCase):
 
         charge.refresh_from_db()
         self.subscription.refresh_from_db()
-        self.assertEqual(charge.status, SubscriptionCharge.Status.PAID)
-        self.assertEqual(self.subscription.status, DeviceSubscription.Status.ACTIVE)
+        self.assertEqual(charge.status, SubscriptionChargeStatus.PAID)
+        self.assertEqual(self.subscription.status, DeviceSubscriptionStatus.ACTIVE)
         self.assertEqual(self.subscription.last_paid_through, charge.period_end)
 
     def test_refresh_subscription_status_suspends_when_grace_expires(self):
@@ -111,14 +114,14 @@ class SubscriptionServiceTests(TestCase):
             period_end=period_end,
             amount=self.subscription.monthly_amount,
         )
-        self.subscription.status = DeviceSubscription.Status.GRACE
+        self.subscription.status = DeviceSubscriptionStatus.GRACE
         self.subscription.grace_expires_at = timezone.now() - timedelta(days=1)
         self.subscription.save(update_fields=["status", "grace_expires_at"])
 
         services.refresh_subscription_status(self.subscription, now=timezone.now())
 
         self.subscription.refresh_from_db()
-        self.assertEqual(self.subscription.status, DeviceSubscription.Status.SUSPENDED)
+        self.assertEqual(self.subscription.status, DeviceSubscriptionStatus.SUSPENDED)
 
     def test_customer_payload_fills_required_fields(self):
         self.user.full_name = ""

@@ -6,6 +6,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
+from .enums import DeviceSubscriptionStatus
 from .models import DeviceSubscription
 from . import services
 
@@ -38,8 +39,8 @@ def refresh_subscription_statuses(self):
     count = 0
     qs = DeviceSubscription.objects.filter(
         status__in=[
-            DeviceSubscription.Status.GRACE,
-            DeviceSubscription.Status.SUSPENDED,
+            DeviceSubscriptionStatus.GRACE,
+            DeviceSubscriptionStatus.SUSPENDED,
         ]
     ).only("id")
     for sub in qs.iterator():

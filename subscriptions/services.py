@@ -11,10 +11,11 @@ from django.db.models import F
 from django.utils import timezone
 
 from shurjopay import services as shurjopay_services
+from shurjopay.enums import PaymentTransactionStatus
 from shurjopay.models import PaymentTransaction
 
 from notifications.sms import SMSClient
-
+from .enums import DeviceSubscriptionStatus, SubscriptionChargeStatus
 from .models import DeviceSubscription, SubscriptionCharge
 
 
@@ -73,7 +74,7 @@ def ensure_device_subscription(
             defaults={
                 "originating_order": originating_order,
                 "monthly_amount": monthly_amount,
-                "status": DeviceSubscription.Status.ACTIVE,
+                "status": DeviceSubscriptionStatus.ACTIVE,
                 "billing_anchor": activation_time,
                 "last_paid_through": first_cycle_end,
                 "next_due_at": first_cycle_end,
@@ -220,7 +221,7 @@ def create_charge_for_subscription(
         if created:
             updates: list[str] = []
             if period_start <= as_of:
-                sub.status = DeviceSubscription.Status.GRACE
+                sub.status = DeviceSubscriptionStatus.GRACE
                 sub.grace_expires_at = period_start + _grace_delta()
                 updates.extend(["status", "grace_expires_at"])
             if updates:
@@ -261,7 +262,7 @@ def initiate_payment_for_charge(
             reference=_build_subscription_reference(charge.pk),
             amount=charge.amount,
             currency=currency,
-            status=PaymentTransaction.Status.INITIATED,
+            status=PaymentTransactionStatus.INITIATED,
             request_payload={
                 "subscription_id": subscription.pk,
                 "charge_id": charge.pk,
@@ -279,9 +280,9 @@ def initiate_payment_for_charge(
     )
 
     if not details:
-        txn.status = PaymentTransaction.Status.FAILED
+        txn.status = PaymentTransactionStatus.FAILED
         txn.save(update_fields=["status"])
-        charge.status = SubscriptionCharge.Status.FAILED
+        charge.status = SubscriptionChargeStatus.FAILED
         charge.failure_reason = "Unable to initiate payment with shurjoPay"
         charge.save(update_fields=["status", "failure_reason"])
         return None
@@ -290,9 +291,9 @@ def initiate_payment_for_charge(
     txn.sp_order_id = getattr(details, "sp_order_id", "")
     txn.customer_order_id = getattr(details, "customer_order_id", order_id)
     txn.status = (
-        PaymentTransaction.Status.REDIRECTED
+        PaymentTransactionStatus.REDIRECTED
         if txn.checkout_url
-        else PaymentTransaction.Status.INITIATED
+        else PaymentTransactionStatus.INITIATED
     )
     txn.response_payload = getattr(details, "__dict__", None)
     txn.save()
@@ -359,7 +360,7 @@ def apply_manual_payment(
             period_start=period_start,
             period_end=period_end,
             amount=sub.monthly_amount * months,
-            status=SubscriptionCharge.Status.PAID,
+            status=SubscriptionChargeStatus.PAID,
             provider_reference="manual-cash",
             cycles=months,
             is_manual=True,
@@ -368,11 +369,11 @@ def apply_manual_payment(
         )
 
         pending_qs = sub.charges.filter(
-            status=SubscriptionCharge.Status.PENDING
+            status=SubscriptionChargeStatus.PENDING
         ).exclude(pk=charge.pk)
         if pending_qs.exists():
             pending_qs.update(
-                status=SubscriptionCharge.Status.CANCELLED,
+                status=SubscriptionChargeStatus.CANCELLED,
                 failure_reason=(
                     f"Superseded by manual payment on {timezone.now():%Y-%m-%d}"
                 ),
@@ -381,7 +382,7 @@ def apply_manual_payment(
         sub.last_paid_through = period_end
         sub.next_due_at = period_end
         sub.grace_expires_at = None
-        sub.status = DeviceSubscription.Status.ACTIVE
+        sub.status = DeviceSubscriptionStatus.ACTIVE
         sub.save(
             update_fields=[
                 "last_paid_through",
@@ -403,19 +404,19 @@ def refresh_subscription_status(
     with transaction.atomic():
         sub = DeviceSubscription.objects.select_for_update().get(pk=subscription.pk)
         has_pending = sub.charges.filter(
-            status=SubscriptionCharge.Status.PENDING
+            status=SubscriptionChargeStatus.PENDING
         ).exists()
         new_status = sub.status
         fields: list[str] = []
         if has_pending:
             expired = sub.grace_expires_at and sub.grace_expires_at < now
             new_status = (
-                DeviceSubscription.Status.SUSPENDED
+                DeviceSubscriptionStatus.SUSPENDED
                 if expired
-                else DeviceSubscription.Status.GRACE
+                else DeviceSubscriptionStatus.GRACE
             )
         else:
-            new_status = DeviceSubscription.Status.ACTIVE
+            new_status = DeviceSubscriptionStatus.ACTIVE
             if sub.grace_expires_at is not None:
                 sub.grace_expires_at = None
                 fields.append("grace_expires_at")
@@ -431,11 +432,11 @@ def refresh_subscription_status(
 def suspend_overdue_subscriptions(now: Optional[timezone.datetime] = None) -> int:
     now = now or timezone.now()
     qs = DeviceSubscription.objects.filter(
-        status=DeviceSubscription.Status.GRACE,
+        status=DeviceSubscriptionStatus.GRACE,
         grace_expires_at__lt=now,
-        charges__status=SubscriptionCharge.Status.PENDING,
+        charges__status=SubscriptionChargeStatus.PENDING,
     )
-    updated = qs.update(status=DeviceSubscription.Status.SUSPENDED)
+    updated = qs.update(status=DeviceSubscriptionStatus.SUSPENDED)
     return updated
 
 
@@ -480,9 +481,9 @@ def sync_charge_from_transaction(
             or charge.provider_reference
         )
 
-        if status == PaymentTransaction.Status.SUCCESS:
-            if charge.status != SubscriptionCharge.Status.PAID:
-                charge.status = SubscriptionCharge.Status.PAID
+        if status == PaymentTransactionStatus.SUCCESS:
+            if charge.status != SubscriptionChargeStatus.PAID:
+                charge.status = SubscriptionChargeStatus.PAID
                 charge.failure_reason = ""
                 charge.provider_reference = provider_ref
                 charge.save(
@@ -491,7 +492,7 @@ def sync_charge_from_transaction(
                 subscription.last_paid_through = charge.period_end
                 subscription.next_due_at = charge.period_end
                 subscription.grace_expires_at = None
-                subscription.status = DeviceSubscription.Status.ACTIVE
+                subscription.status = DeviceSubscriptionStatus.ACTIVE
                 subscription.save(
                     update_fields=[
                         "last_paid_through",
@@ -502,17 +503,17 @@ def sync_charge_from_transaction(
                 )
             return charge
 
-        if status == PaymentTransaction.Status.CANCELLED:
-            if charge.status != SubscriptionCharge.Status.CANCELLED:
-                charge.status = SubscriptionCharge.Status.CANCELLED
+        if status == PaymentTransactionStatus.CANCELLED:
+            if charge.status != SubscriptionChargeStatus.CANCELLED:
+                charge.status = SubscriptionChargeStatus.CANCELLED
                 charge.failure_reason = "Payment cancelled"
                 charge.provider_reference = provider_ref
                 charge.save(
                     update_fields=["status", "failure_reason", "provider_reference"]
                 )
-        elif status == PaymentTransaction.Status.FAILED:
-            if charge.status != SubscriptionCharge.Status.FAILED:
-                charge.status = SubscriptionCharge.Status.FAILED
+        elif status == PaymentTransactionStatus.FAILED:
+            if charge.status != SubscriptionChargeStatus.FAILED:
+                charge.status = SubscriptionChargeStatus.FAILED
                 charge.failure_reason = "Payment failed"
                 charge.provider_reference = provider_ref
                 charge.save(

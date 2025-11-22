@@ -6,6 +6,8 @@ from django.db import models
 from django.db.models import Q, F
 from django.utils import timezone
 
+from .enums import AlertStatus
+
 
 class AuditSoftDeleteModel(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -240,14 +242,10 @@ class Telemetry(AuditSoftDeleteModel):
 
 
 class Alert(AuditSoftDeleteModel):
-    class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        RESOLVED = "resolved", "Resolved"
-
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="alerts")
     alert_type = models.CharField(max_length=64)
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.OPEN
+        max_length=16, choices=AlertStatus, default=AlertStatus.OPEN
     )
     triggered_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_triggered_at = models.DateTimeField(default=timezone.now, db_index=True)

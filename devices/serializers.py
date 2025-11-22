@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from .enums import AlertStatus
 from .models import Device, Telemetry, Alert
 from .constants import AlertType, DeviceStatus
 from django.db import models
@@ -94,7 +95,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             return Alert.objects.filter(
                 device_id__in=member_ids,
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             ).exists()
         except Exception:
             return False

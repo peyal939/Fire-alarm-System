@@ -328,7 +328,11 @@ SPECTACULAR_SETTINGS = {
     "VERSION": os.getenv("OPENAPI_VERSION", "1.0.0"),
     "SERVE_INCLUDE_SCHEMA": False,
     "ENUM_NAME_OVERRIDES": {
-        "Status0faEnum": "SubscriptionStatusEnum",
+        "PaymentTransactionStatusEnum": "shurjopay.enums.PaymentTransactionStatus",
+        "DeviceSubscriptionStatusEnum": "subscriptions.enums.DeviceSubscriptionStatus",
+        "SubscriptionChargeStatusEnum": "subscriptions.enums.SubscriptionChargeStatus",
+        "AlertStatusEnum": "devices.enums.AlertStatus",
+        "NotificationStatusEnum": "notifications.enums.NotificationStatus",
     },
 }
 

@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.conf import settings
 
+from devices.enums import AlertStatus
 from devices.models import Device, Alert
 
 
@@ -356,7 +357,7 @@ def metrics_summary(request):
         base_alerts = base_alerts.filter(device__user=user)
 
     total_devices = base_devices.count()
-    open_alerts = base_alerts.filter(status=Alert.Status.OPEN).count()
+    open_alerts = base_alerts.filter(status=AlertStatus.OPEN).count()
     online = base_devices.filter(
         last_seen__isnull=False,
         last_seen__gte=now - window,

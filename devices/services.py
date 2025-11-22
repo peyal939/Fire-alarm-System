@@ -21,8 +21,10 @@ from .constants import (
     WebSocketBroadcastError,
     normalize_device_status,
 )
+from .enums import AlertStatus
 from .models import Alert, Device, Telemetry
 from products.models import Order
+from products.enums import OrderStatus
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +167,7 @@ def assign_device_to_order(
                 Order.objects.select_for_update()
                 .filter(
                     user_id=user_id,
-                    order_status=Order.Status.PAID,
+                    order_status=OrderStatus.PAID,
                     deleted_at__isnull=True,
                     package__deleted_at__isnull=True,
                     assigned_devices__lt=models.F("quantity"),
@@ -439,14 +441,14 @@ def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
                 Alert.objects.filter(
                     device__in=[d.id for d in members],
                     alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
             )
 
             if alerts:
                 resolved_at = timezone.now()
                 for alert in alerts:
-                    alert.status = Alert.Status.RESOLVED
+                    alert.status = AlertStatus.RESOLVED
                     alert.resolved_at = resolved_at
                     alert.save(update_fields=["status", "resolved_at"])
                     reset_state_for_alert(alert)
@@ -516,8 +518,8 @@ def recompute_mesh_after_change(device: Device) -> None:
             Alert.objects.filter(
                 device__in=[d.id for d in members],
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
-            ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+                status=AlertStatus.OPEN,
+            ).update(status=AlertStatus.RESOLVED, resolved_at=timezone.now())
             return
 
         # Step 4: Check if any online member currently has an open alert
@@ -525,7 +527,7 @@ def recompute_mesh_after_change(device: Device) -> None:
             Alert.objects.filter(
                 device_id__in=[m.id for m in online_members],
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             ).values_list("device_id", flat=True)
         )
 
@@ -554,14 +556,14 @@ def recompute_mesh_after_change(device: Device) -> None:
                 Alert.objects.filter(
                     device__in=[d.id for d in members],
                     alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
             )
 
             if alerts:
                 resolved_at = timezone.now()
                 for alert in alerts:
-                    alert.status = Alert.Status.RESOLVED
+                    alert.status = AlertStatus.RESOLVED
                     alert.resolved_at = resolved_at
                     alert.save(update_fields=["status", "resolved_at"])
                     reset_state_for_alert(alert)
@@ -632,10 +634,21 @@ def ingest_telemetry(
 
     # Update device's last activity timestamp and current status
     # The is_online property uses last_seen to determine if device is active
+    # Optimization: Throttle updates to reduce DB write load.
+    # Only update if status changed OR it's been > 10s since last update.
     try:
-        device.status = status_lower
-        device.last_seen = timezone.now()
-        device.save(update_fields=["status", "last_seen"])
+        should_save = False
+        now = timezone.now()
+
+        if device.status != status_lower:
+            should_save = True
+        elif not device.last_seen or (now - device.last_seen).total_seconds() > 10:
+            should_save = True
+
+        if should_save:
+            device.status = status_lower
+            device.last_seen = now
+            device.save(update_fields=["status", "last_seen"])
     except DatabaseError as e:
         logger.error(f"Failed to update device {device.id} status: {e}")
 
@@ -713,13 +726,13 @@ def ingest_telemetry(
             has_open = Alert.objects.filter(
                 device=device,
                 alert_type=AlertType.DEVICE_STATUS,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             ).exists()
             if not has_open:
                 alert = Alert.objects.create(
                     device=device,
                     alert_type=AlertType.DEVICE_STATUS,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
                 logger.info(
                     f"Created device_status alert for device {device.id} (status: {status_lower})"
@@ -752,10 +765,10 @@ def ingest_telemetry(
             qs = Alert.objects.filter(
                 device=device,
                 alert_type=AlertType.DEVICE_STATUS,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             )
             if qs.exists():
-                qs.update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+                qs.update(status=AlertStatus.RESOLVED, resolved_at=timezone.now())
                 logger.info(f"Resolved device_status alert for device {device.id}")
 
     except DatabaseError as e:
@@ -795,7 +808,7 @@ def _broadcast_alert_resolution(
         mesh_open = Alert.objects.filter(
             device_id__in=member_ids,
             alert_type=AlertType.SMOKE_HIGH,
-            status=Alert.Status.OPEN,
+            status=AlertStatus.OPEN,
         ).exists()
 
         # Convert timestamp to Unix epoch (integer seconds)

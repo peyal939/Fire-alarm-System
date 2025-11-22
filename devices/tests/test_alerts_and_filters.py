@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 from devices import services
 from devices.alarm_state import schedule_next_reminder
 from devices.constants import AlertType
+from devices.enums import AlertStatus
 from devices.models import Device, Alert
 
 
@@ -72,7 +73,7 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         alert_id = alert["id"]
         r = self.client.post(f"/alerts/{alert_id}/resolve/")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data.get("status"), Alert.Status.RESOLVED)
+        self.assertEqual(r.data.get("status"), AlertStatus.RESOLVED)
 
         # Now open list should not include it, resolved list should include it
         r_open = self.client.get(f"/alerts/?device={self.device_id}&status=open")
@@ -81,7 +82,7 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         self.assertNotIn(alert_id, open_ids)
 
         r_res = self.client.get(
-            f"/alerts/?device={self.device_id}&status={Alert.Status.RESOLVED}"
+            f"/alerts/?device={self.device_id}&status={AlertStatus.RESOLVED}"
         )
         self.assertEqual(r_res.status_code, 200)
         res_ids = [a["id"] for a in get_items(r_res.data)]
@@ -100,7 +101,7 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
 
         ack_response = self.client.post(f"/alerts/{alert_id}/acknowledge/")
         self.assertEqual(ack_response.status_code, 200)
-        self.assertEqual(ack_response.data.get("status"), Alert.Status.OPEN)
+        self.assertEqual(ack_response.data.get("status"), AlertStatus.OPEN)
         self.assertIsNotNone(ack_response.data.get("acknowledged_at"))
         self.assertEqual(ack_response.data.get("acknowledged_by"), self.user.id)
 
@@ -169,7 +170,7 @@ class AlertReminderEscalationTests(TestCase):
         alert = Alert.objects.create(
             device=device,
             alert_type=AlertType.SMOKE_HIGH,
-            status=Alert.Status.OPEN,
+            status=AlertStatus.OPEN,
             triggered_at=now - timedelta(minutes=1),
             last_triggered_at=now - timedelta(minutes=1),
         )

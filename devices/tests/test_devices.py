@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
 from products.models import Order, Package
+from subscriptions.enums import DeviceSubscriptionStatus
 from subscriptions.models import DeviceSubscription
 from devices.models import Device
 
@@ -64,7 +65,7 @@ class DeviceOwnershipTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         device_id = response.data["id"]
         subscription = DeviceSubscription.objects.get(device_id=device_id)
-        self.assertEqual(subscription.status, DeviceSubscription.Status.ACTIVE)
+        self.assertEqual(subscription.status, DeviceSubscriptionStatus.ACTIVE)
 
     def test_device_registration_with_order_links_subscription(self):
         user = self.user_a
