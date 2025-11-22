@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 
+from .enums import PaymentTransactionStatus
 from .models import PaymentTransaction
 from . import services
 from . import serializers as sz
@@ -86,9 +87,9 @@ def _update_transaction_from_verification(
     if txn:
         txn.verification_payload = payload
         txn.status = (
-            PaymentTransaction.Status.SUCCESS
+            PaymentTransactionStatus.SUCCESS
             if success
-            else PaymentTransaction.Status.FAILED
+            else PaymentTransactionStatus.FAILED
         )
         txn.save(update_fields=["status", "verification_payload", "updated_at"])
         _sync_subscription_charge(txn)
@@ -160,7 +161,7 @@ class InitiatePaymentView(APIView):
                 reference=ref,
                 amount=amount,
                 currency=currency,
-                status=PaymentTransaction.Status.INITIATED,
+                status=PaymentTransactionStatus.INITIATED,
                 request_payload=data,
             )
             # Use txn.pk to make customer_order_id stable and unique
@@ -173,7 +174,7 @@ class InitiatePaymentView(APIView):
                 **cust,
             )
             if details is None:
-                txn.status = PaymentTransaction.Status.FAILED
+                txn.status = PaymentTransactionStatus.FAILED
                 txn.save(update_fields=["status"])
                 _sync_subscription_charge(txn)
                 return Response({"detail": "Failed to obtain checkout URL"}, status=502)
@@ -183,9 +184,9 @@ class InitiatePaymentView(APIView):
             txn.sp_order_id = getattr(details, "sp_order_id", "")
             txn.customer_order_id = getattr(details, "customer_order_id", order_id)
             txn.status = (
-                PaymentTransaction.Status.REDIRECTED
+                PaymentTransactionStatus.REDIRECTED
                 if txn.checkout_url
-                else PaymentTransaction.Status.INITIATED
+                else PaymentTransactionStatus.INITIATED
             )
             txn.response_payload = details.__dict__
             txn.save()
@@ -338,7 +339,7 @@ class CancelView(APIView):
             or PaymentTransaction.objects.filter(customer_order_id=order_id).first()
         )
         if txn:
-            txn.status = PaymentTransaction.Status.CANCELLED
+            txn.status = PaymentTransactionStatus.CANCELLED
             txn.save(update_fields=["status"])
             _sync_subscription_charge(txn)
         info = {"message": "Payment cancelled", "order_id": order_id or None}

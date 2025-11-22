@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .constants import AlertType
+from .enums import AlertStatus
 from .models import Alert, Device, DeviceAlarmState
 
 logger = logging.getLogger(__name__)
@@ -76,14 +77,14 @@ def record_high_smoke(
         alert = state.active_alert
         if (
             not alert
-            or alert.status != Alert.Status.OPEN
+            or alert.status != AlertStatus.OPEN
             or alert.alert_type != AlertType.SMOKE_HIGH
         ):
             alert = (
                 Alert.objects.filter(
                     device=device,
                     alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
                 .order_by("-triggered_at")
                 .first()
@@ -94,7 +95,7 @@ def record_high_smoke(
             alert = Alert.objects.create(
                 device=device,
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
                 triggered_at=observed_at,
                 last_triggered_at=observed_at,
             )
@@ -104,8 +105,8 @@ def record_high_smoke(
             if alert.last_triggered_at != observed_at:
                 alert.last_triggered_at = observed_at
                 fields.append("last_triggered_at")
-            if alert.status != Alert.Status.OPEN:
-                alert.status = Alert.Status.OPEN
+            if alert.status != AlertStatus.OPEN:
+                alert.status = AlertStatus.OPEN
                 fields.append("status")
             if fields:
                 alert.save(update_fields=fields)
@@ -138,12 +139,12 @@ def record_safe_smoke(
     with transaction.atomic():
         state = _get_state_for_update(device)
         alert = state.active_alert
-        if not alert or alert.status != Alert.Status.OPEN:
+        if not alert or alert.status != AlertStatus.OPEN:
             alert = (
                 Alert.objects.filter(
                     device=device,
                     alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
                 .order_by("-triggered_at")
                 .first()
@@ -151,7 +152,7 @@ def record_safe_smoke(
             if alert:
                 state.active_alert = alert
                 state.save(update_fields=["active_alert", "updated_at"])
-        if not alert or alert.status != Alert.Status.OPEN:
+        if not alert or alert.status != AlertStatus.OPEN:
             if state.safe_reading_streak:
                 state.safe_reading_streak = 0
                 state.save(update_fields=["safe_reading_streak", "updated_at"])
@@ -163,7 +164,7 @@ def record_safe_smoke(
             return AlarmStateResult(alert=alert, created=False, resolved=False)
 
         # Auto-resolve alert
-        alert.status = Alert.Status.RESOLVED
+        alert.status = AlertStatus.RESOLVED
         alert.resolved_at = observed_at
         alert.save(update_fields=["status", "resolved_at"])
 
@@ -211,16 +212,16 @@ def schedule_next_reminder(alert: Alert) -> None:
     state, _ = DeviceAlarmState.objects.get_or_create(
         device=alert.device,
         defaults={
-            "active_alert": alert if alert.status == Alert.Status.OPEN else None,
+            "active_alert": alert if alert.status == AlertStatus.OPEN else None,
             "safe_reading_streak": 0,
             "next_reminder_at": None,
         },
     )
 
-    if alert.status == Alert.Status.OPEN and state.active_alert_id != alert.id:
+    if alert.status == AlertStatus.OPEN and state.active_alert_id != alert.id:
         state.active_alert = alert
 
-    if alert.status != Alert.Status.OPEN:
+    if alert.status != AlertStatus.OPEN:
         state.next_reminder_at = None
     else:
         state.next_reminder_at = _compute_next_reminder(alert)

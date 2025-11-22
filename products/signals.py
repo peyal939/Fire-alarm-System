@@ -4,6 +4,7 @@ from django.dispatch import Signal, receiver
 from django.db import transaction
 from typing import Optional
 
+from .enums import OrderStatus
 from .models import Order
 
 # Signal fired when external payment notification is received.
@@ -12,7 +13,13 @@ payment_received = Signal()
 
 
 @receiver(payment_received)
-def handle_payment_received(sender, provider_order_id: str, transaction_id: Optional[str] = None, gateway_response=None, **kwargs):
+def handle_payment_received(
+    sender,
+    provider_order_id: str,
+    transaction_id: Optional[str] = None,
+    gateway_response=None,
+    **kwargs,
+):
     """
     Find pending orders matching the incoming provider_order_id.
     Matching strategy:
@@ -24,7 +31,9 @@ def handle_payment_received(sender, provider_order_id: str, transaction_id: Opti
     if not provider_order_id:
         return
     with transaction.atomic():
-        qs = Order.objects.select_for_update().filter(deleted_at__isnull=True, order_status=Order.Status.PENDING)
+        qs = Order.objects.select_for_update().filter(
+            deleted_at__isnull=True, order_status=OrderStatus.PENDING
+        )
         # match by reference
         matches = qs.filter(reference=provider_order_id)
         # if provider id looks like an integer, also try matching by Order.id
@@ -36,9 +45,15 @@ def handle_payment_received(sender, provider_order_id: str, transaction_id: Opti
             matches = matches | qs.filter(id=numeric)
         # iterate and update matched pending orders
         for order in matches.distinct():
-            order.order_status = Order.Status.PAID
+            order.order_status = OrderStatus.PAID
             if transaction_id:
                 order.gateway_transaction_id = transaction_id
             if gateway_response is not None:
                 order.gateway_response = gateway_response
-            order.save(update_fields=["order_status", "gateway_transaction_id", "gateway_response"]) 
+            order.save(
+                update_fields=[
+                    "order_status",
+                    "gateway_transaction_id",
+                    "gateway_response",
+                ]
+            )

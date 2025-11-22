@@ -23,6 +23,7 @@ from drf_spectacular.utils import (
 )
 
 from . import services
+from .enums import AlertStatus
 from .models import Device, Telemetry, Alert
 from .serializers import (
     DeviceSerializer,
@@ -34,6 +35,7 @@ from .serializers import (
 )
 from .constants import DeviceConfigurationPublishError
 from .alarm_state import reset_state_for_alert, schedule_next_reminder
+from subscriptions.enums import DeviceSubscriptionStatus
 from subscriptions.models import DeviceSubscription
 from subscriptions.services import ensure_device_subscription
 
@@ -111,9 +113,9 @@ def _subscription_access_q(*, relation: str = "subscription", now=None) -> Q:
 
     return (
         Q(**{field("isnull"): True})
-        | Q(**{field("status"): DeviceSubscription.Status.ACTIVE})
+        | Q(**{field("status"): DeviceSubscriptionStatus.ACTIVE})
         | (
-            Q(**{field("status"): DeviceSubscription.Status.GRACE})
+            Q(**{field("status"): DeviceSubscriptionStatus.GRACE})
             & (
                 Q(**{field("grace_expires_at__isnull"): True})
                 | Q(**{field("grace_expires_at__gte"): now})
@@ -794,7 +796,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         device: Device = self.get_object()
         qs = Alert.objects.filter(device=device, deleted_at__isnull=True)
         status_param = request.query_params.get("status")
-        if status_param in {s for s, _ in Alert.Status.choices}:
+        if status_param in {s for s, _ in AlertStatus.choices}:
             qs = qs.filter(status=status_param)
 
         page = self.paginate_queryset(qs)
@@ -942,7 +944,7 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(device_id=int(device_id))
             except Exception:
                 pass
-        if status_param in {s for s, _ in Alert.Status.choices}:
+        if status_param in {s for s, _ in AlertStatus.choices}:
             qs = qs.filter(status=status_param)
         return qs
 
@@ -950,7 +952,7 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(tags=["Alerts"], summary="Acknowledge an alert")
     def acknowledge(self, request, pk=None):
         alert: Alert = self.get_object()
-        if alert.status == Alert.Status.RESOLVED:
+        if alert.status == AlertStatus.RESOLVED:
             return Response(AlertSerializer(alert).data)
 
         now = timezone.now()
@@ -969,11 +971,11 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(tags=["Alerts"], summary="Resolve an alert")
     def resolve(self, request, pk=None):
         alert: Alert = self.get_object()
-        if alert.status == Alert.Status.RESOLVED:
+        if alert.status == AlertStatus.RESOLVED:
             return Response(AlertSerializer(alert).data)
 
         now = timezone.now()
-        alert.status = Alert.Status.RESOLVED
+        alert.status = AlertStatus.RESOLVED
         alert.resolved_at = now
 
         update_fields = ["status", "resolved_at"]

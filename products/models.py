@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .enums import OrderStatus
+
 
 class AuditSoftDeleteModel(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -56,13 +58,6 @@ class Package(AuditSoftDeleteModel):
 
 
 class Order(AuditSoftDeleteModel):
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        PAID = "paid", "Paid"
-        CANCELLED = "cancelled", "Cancelled"
-        FAILED = "failed", "Failed"
-        DELIVERED = "delivered", "Delivered"
-
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders"
     )
@@ -86,7 +81,7 @@ class Order(AuditSoftDeleteModel):
     customer_post_code = models.CharField(max_length=32, blank=True)
     customer_email = models.CharField(max_length=254, blank=True)
     order_status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.PENDING
+        max_length=16, choices=OrderStatus.choices, default=OrderStatus.PENDING
     )
     gateway_transaction_id = models.CharField(max_length=128, blank=True)
     gateway_response = models.JSONField(null=True, blank=True)

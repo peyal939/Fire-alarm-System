@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import User
+from shurjopay.enums import PaymentTransactionStatus
 from shurjopay.models import PaymentTransaction
 
 
@@ -25,7 +26,7 @@ class ShurjoPayViewSyncTests(APITestCase):
             amount=100,
             currency="BDT",
             sp_order_id="SP-123",
-            status=PaymentTransaction.Status.INITIATED,
+            status=PaymentTransactionStatus.INITIATED,
         )
 
         verify_mock.return_value = SimpleNamespace(transaction_status="success")
@@ -38,7 +39,7 @@ class ShurjoPayViewSyncTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         txn.refresh_from_db()
-        self.assertEqual(txn.status, PaymentTransaction.Status.SUCCESS)
+        self.assertEqual(txn.status, PaymentTransactionStatus.SUCCESS)
         sync_mock.assert_called_once_with(txn)
 
     @patch("subscriptions.services.sync_charge_from_transaction")
@@ -49,7 +50,7 @@ class ShurjoPayViewSyncTests(APITestCase):
             amount=100,
             currency="BDT",
             sp_order_id="SP-456",
-            status=PaymentTransaction.Status.INITIATED,
+            status=PaymentTransactionStatus.INITIATED,
         )
 
         response = self.client.get(
@@ -59,7 +60,7 @@ class ShurjoPayViewSyncTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         txn.refresh_from_db()
-        self.assertEqual(txn.status, PaymentTransaction.Status.CANCELLED)
+        self.assertEqual(txn.status, PaymentTransactionStatus.CANCELLED)
         sync_mock.assert_called_once_with(txn)
 
     @patch("subscriptions.services.sync_charge_from_transaction")
@@ -71,7 +72,7 @@ class ShurjoPayViewSyncTests(APITestCase):
             amount=150,
             currency="BDT",
             sp_order_id="SP-789",
-            status=PaymentTransaction.Status.INITIATED,
+            status=PaymentTransactionStatus.INITIATED,
         )
 
         verify_mock.return_value = SimpleNamespace(
@@ -88,5 +89,5 @@ class ShurjoPayViewSyncTests(APITestCase):
         self.assertEqual(response.data["message"], "Payment successful")
 
         txn.refresh_from_db()
-        self.assertEqual(txn.status, PaymentTransaction.Status.SUCCESS)
+        self.assertEqual(txn.status, PaymentTransactionStatus.SUCCESS)
         sync_mock.assert_called_once_with(txn)

@@ -26,7 +26,9 @@ from django.utils import timezone
 from django.db import close_old_connections
 from django.db.utils import InterfaceError, OperationalError
 
-from devices.models import Device
+from devices.enums import AlertStatus
+from devices.models import Device, Telemetry, Alert
+
 from devices import services
 from devices.constants import (
     AlertType,
@@ -150,7 +152,7 @@ def _compute_mesh_alert(device_obj: Device) -> bool:
         has_alert = Alert.objects.filter(
             device_id__in=member_ids,
             alert_type=AlertType.SMOKE_HIGH,
-            status=Alert.Status.OPEN,
+            status=AlertStatus.OPEN,
         ).exists()
 
         return has_alert
@@ -546,7 +548,7 @@ def process_payload(payload: dict) -> None:
                 has_any_high = _Alert.objects.filter(
                     device_id__in=online_member_ids,
                     alert_type="smoke_high",
-                    status=_Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 ).exists()
 
         services.apply_mesh_alert(master, group_alarm=has_any_high)

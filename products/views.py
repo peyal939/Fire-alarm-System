@@ -8,6 +8,7 @@ from drf_spectacular.utils import extend_schema
 from django.utils import timezone
 from django.db import models
 from common.permissions import IsOwnerOrSuperadmin
+from .enums import OrderStatus
 from .models import Package, Order
 from .serializers import PackageSerializer, OrderSerializer, OrderCreateSerializer
 
@@ -132,13 +133,22 @@ class OrderIdNotifyView(APIView):
         )
 
         # indicate whether any order was marked paid
-        marked_paid = Order.objects.filter(
-            deleted_at__isnull=True, order_status=Order.Status.PAID
-        ).filter(
-            models.Q(reference=str(provider_order_id))
-            | models.Q(id__exact=provider_order_id if str(provider_order_id).isdigit() else None)
-        ).exists()
-        return Response({"provider_order_id": provider_order_id, "marked_paid": marked_paid}, status=200)
+        marked_paid = (
+            Order.objects.filter(deleted_at__isnull=True, order_status=OrderStatus.PAID)
+            .filter(
+                models.Q(reference=str(provider_order_id))
+                | models.Q(
+                    id__exact=(
+                        provider_order_id if str(provider_order_id).isdigit() else None
+                    )
+                )
+            )
+            .exists()
+        )
+        return Response(
+            {"provider_order_id": provider_order_id, "marked_paid": marked_paid},
+            status=200,
+        )
 
 
 @extend_schema(
@@ -210,7 +220,7 @@ class UserOrderListView(APIView):
                 qs = qs.filter(package_id=int(package_id))
             except Exception:
                 pass
-        if status_param in {s for s, _ in Order.Status.choices}:
+        if status_param in {s for s, _ in OrderStatus.choices}:
             qs = qs.filter(order_status=status_param)
         return Response(OrderSerializer(qs, many=True).data)
 
@@ -277,9 +287,13 @@ class UserOrderListView(APIView):
         if "shipping_address" in request.data:
             update_data["shipping_address"] = request.data["shipping_address"]
         if "number_of_master_devices" in request.data:
-            update_data["number_of_master_devices"] = request.data["number_of_master_devices"]
+            update_data["number_of_master_devices"] = request.data[
+                "number_of_master_devices"
+            ]
         if "number_of_slave_devices" in request.data:
-            update_data["number_of_slave_devices"] = request.data["number_of_slave_devices"]
+            update_data["number_of_slave_devices"] = request.data[
+                "number_of_slave_devices"
+            ]
         if not update_data:
             return Response({"detail": "No mutable fields provided"}, status=400)
         updated = _apply_order_patch(order, update_data, user=request.user)
@@ -293,7 +307,9 @@ class UserOrderListView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
         qs = Order.objects.filter(user_id=user_id, deleted_at__isnull=True)
         now = timezone.now()
-        updated = qs.update(deleted_at=now, deleted_by=request.user, updated_by=request.user)
+        updated = qs.update(
+            deleted_at=now, deleted_by=request.user, updated_by=request.user
+        )
         return Response({"deleted": updated}, status=200)
 
 
@@ -373,9 +389,13 @@ class UserOrderDetailView(APIView):
         if "shipping_address" in request.data:
             update_data["shipping_address"] = request.data["shipping_address"]
         if "number_of_master_devices" in request.data:
-            update_data["number_of_master_devices"] = request.data["number_of_master_devices"]
+            update_data["number_of_master_devices"] = request.data[
+                "number_of_master_devices"
+            ]
         if "number_of_slave_devices" in request.data:
-            update_data["number_of_slave_devices"] = request.data["number_of_slave_devices"]
+            update_data["number_of_slave_devices"] = request.data[
+                "number_of_slave_devices"
+            ]
         if not update_data:
             return Response({"detail": "No mutable fields provided"}, status=400)
         updated = _apply_order_patch(res, update_data, user=request.user)
@@ -406,7 +426,7 @@ class UserOrderDetailView(APIView):
             "properties": {
                 "order_status": {
                     "type": "string",
-                    "enum": [s for s, _ in Order.Status.choices],
+                    "enum": [s for s, _ in OrderStatus.choices],
                     "description": "New status (pending, paid, cancelled, failed, delivered)",
                 }
             },
@@ -441,7 +461,7 @@ class AdminOrderStatusUpdateView(APIView):
         if not isinstance(request.data, dict):
             return Response({"detail": "Payload must be an object"}, status=400)
         new_status = request.data.get("order_status")
-        valid_statuses = {s for s, _ in Order.Status.choices}
+        valid_statuses = {s for s, _ in OrderStatus.choices}
         if not new_status or new_status not in valid_statuses:
             return Response(
                 {

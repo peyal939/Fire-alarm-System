@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from .enums import DeviceSubscriptionStatus
 from .forms import ManualPaymentForm, OverrideWindowForm, UserTopUpForm
 from .models import DeviceSubscription, SubscriptionCharge
 from . import services
@@ -40,13 +41,13 @@ def admin_subscription_list(request):
         )
     stats = {
         "active": _subscription_queryset()
-        .filter(status=DeviceSubscription.Status.ACTIVE)
+        .filter(status=DeviceSubscriptionStatus.ACTIVE)
         .count(),
         "grace": _subscription_queryset()
-        .filter(status=DeviceSubscription.Status.GRACE)
+        .filter(status=DeviceSubscriptionStatus.GRACE)
         .count(),
         "suspended": _subscription_queryset()
-        .filter(status=DeviceSubscription.Status.SUSPENDED)
+        .filter(status=DeviceSubscriptionStatus.SUSPENDED)
         .count(),
     }
     return render(
@@ -57,7 +58,7 @@ def admin_subscription_list(request):
             "status_filter": status_filter,
             "query": query,
             "stats": stats,
-            "status_choices": DeviceSubscription.Status.choices,
+            "status_choices": DeviceSubscriptionStatus.choices,
         },
     )
 

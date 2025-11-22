@@ -1,6 +1,7 @@
 from rest_framework.test import APITestCase
 from rest_framework import status
 
+from subscriptions.enums import DeviceSubscriptionStatus
 from subscriptions.models import DeviceSubscription
 
 
@@ -72,4 +73,4 @@ class DeviceOwnershipTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         device_id = response.data["id"]
         subscription = DeviceSubscription.objects.get(device_id=device_id)
-        self.assertEqual(subscription.status, DeviceSubscription.Status.ACTIVE)
+        self.assertEqual(subscription.status, DeviceSubscriptionStatus.ACTIVE)
