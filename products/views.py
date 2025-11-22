@@ -7,9 +7,11 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from django.utils import timezone
 from django.db import models
-from common.permissions import IsOwnerOrSuperadmin
+from common.permissions import IsOwnerOrSuperadmin, IsSuperAdmin
 from .models import Package, Order
 from .serializers import PackageSerializer, OrderSerializer, OrderCreateSerializer
+from . import services as order_services
+from django.shortcuts import get_object_or_404
 
 # ensure signals are imported / registered
 from . import signals
@@ -48,8 +50,6 @@ def _apply_order_patch(instance: Order, data: dict, user=None) -> Order:
       - number_of_master_devices
       - number_of_slave_devices
     """
-    from decimal import Decimal
-
     old_package_id = instance.package_id
     old_quantity = instance.quantity
     mutable_fields = {
@@ -68,7 +68,10 @@ def _apply_order_patch(instance: Order, data: dict, user=None) -> Order:
     updated = ser.save()
     fields_to_update = []
     if updated.package_id != old_package_id or updated.quantity != old_quantity:
-        updated.amount = updated.package.price_per_device * Decimal(updated.quantity)
+        updated.amount = order_services.calculate_order_total(
+            updated.package,
+            updated.quantity,
+        )
         fields_to_update.append("amount")
     if user is not None and getattr(user, "is_authenticated", False):
         updated.updated_by = user
@@ -76,6 +79,44 @@ def _apply_order_patch(instance: Order, data: dict, user=None) -> Order:
     if fields_to_update:
         updated.save(update_fields=fields_to_update)
     return updated
+
+
+@extend_schema(
+    tags=["Orders"],
+    summary="Admin: list all active orders",
+    responses={
+        200: OrderSerializer(many=True),
+        401: None,
+        403: None,
+    },
+)
+class OrderListAllView(APIView):
+    """Admin-only endpoint to list every non-deleted order."""
+
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        qs = (
+            Order.objects.select_related("user", "package")
+            .filter(deleted_at__isnull=True, package__deleted_at__isnull=True)
+            .order_by("-ordered_at")
+        )
+        status_param = request.query_params.get("status")
+        if status_param in {s for s, _ in Order.Status.choices}:
+            qs = qs.filter(order_status=status_param)
+        package_id = request.query_params.get("package")
+        if package_id:
+            try:
+                qs = qs.filter(package_id=int(package_id))
+            except (TypeError, ValueError):
+                pass
+        user_id = request.query_params.get("user")
+        if user_id:
+            try:
+                qs = qs.filter(user_id=int(user_id))
+            except (TypeError, ValueError):
+                pass
+        return Response(OrderSerializer(qs, many=True).data)
 
 
 @extend_schema(
@@ -224,6 +265,13 @@ class UserOrderListView(APIView):
             if not request.user or not request.user.is_authenticated:
                 return Response({"detail": "Authentication required"}, status=401)
             return Response({"detail": "Forbidden"}, status=403)
+        if request.user.is_superuser or getattr(request.user, "role", "") == "superadmin":
+            return Response(
+                {
+                    "detail": "Admin or super admin can't create any order. Only User can create order.",
+                },
+                status=403,
+            )
         if str(request.user.id) != str(user_id) and not (
             request.user.is_superuser
             or getattr(request.user, "role", None) == "superadmin"
@@ -399,6 +447,75 @@ class UserOrderDetailView(APIView):
 
 @extend_schema(
     tags=["Orders"],
+    summary="Initiate payment for an order",
+    responses={
+        201: {
+            "type": "object",
+            "properties": {
+                "transaction_id": {"type": "integer"},
+                "checkout_url": {"type": "string", "format": "uri"},
+                "sp_order_id": {"type": "string"},
+                "customer_order_id": {"type": "string"},
+            },
+        },
+        400: None,
+        401: None,
+        403: None,
+        404: None,
+        502: None,
+    },
+)
+class OrderPaymentInitView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id: int, order_id: int):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=401)
+        if str(request.user.id) != str(user_id):
+            return Response({"detail": "Forbidden"}, status=403)
+        try:
+            order = Order.objects.select_related("user", "package").get(
+                id=order_id,
+                user_id=user_id,
+                deleted_at__isnull=True,
+                package__deleted_at__isnull=True,
+            )
+        except Order.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+        if order.order_status == Order.Status.PAID:
+            return Response({"detail": "Order is already paid."}, status=400)
+        if order.amount is None or order.amount <= 0:
+            return Response(
+                {"detail": "Order amount must be greater than zero."},
+                status=400,
+            )
+        xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        client_ip = (
+            xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR", "")
+        )
+        txn = order_services.initiate_payment_for_order(
+            order,
+            client_ip=client_ip or "",
+            actor=request.user,
+        )
+        if not txn or not txn.checkout_url:
+            return Response(
+                {"detail": "Unable to start payment. Please try again later."},
+                status=502,
+            )
+        return Response(
+            {
+                "transaction_id": txn.id,
+                "checkout_url": txn.checkout_url,
+                "sp_order_id": txn.sp_order_id,
+                "customer_order_id": txn.customer_order_id,
+            },
+            status=201,
+        )
+
+
+@extend_schema(
+    tags=["Orders"],
     summary="Admin: update order status",
     request={
         "application/json": {
@@ -467,3 +584,57 @@ class AdminOrderStatusUpdateView(APIView):
             order.save(update_fields=["order_status", "updated_by"])
 
         return Response(OrderSerializer(order).data, status=200)
+
+
+@extend_schema(
+    tags=["Orders"],
+    summary="Admin: fulfill an order by assigning hardware IDs",
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "master_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "slave_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["master_ids", "slave_ids"],
+        }
+    },
+    responses={200: None, 400: None, 401: None, 403: None, 404: None},
+)
+class OrderFulfillView(APIView):
+    """Admin-only endpoint to fulfill an order by assigning hardware IDs."""
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, user_id, order_id):
+        # Ensure order belongs to the user specified in URL (or just ignore user_id if we trust order_id unique)
+        # Using user_id adds a layer of safety/consistency with other URLs
+        order = get_object_or_404(Order, pk=order_id, user_id=user_id)
+        
+        master_ids = request.data.get('master_ids', [])
+        slave_data = request.data.get('slave_data', [])
+        
+        # Legacy support or simple list handling if needed, but UI will send structured data
+        # If master_ids is string, split it
+        if isinstance(master_ids, str):
+            master_ids = [x.strip() for x in master_ids.splitlines() if x.strip()]
+            
+        # If slave_data is not provided but slave_ids is (legacy/textarea fallback)
+        if not slave_data and 'slave_ids' in request.data:
+            slave_ids_raw = request.data.get('slave_ids')
+            if isinstance(slave_ids_raw, str):
+                slave_ids_list = [x.strip() for x in slave_ids_raw.splitlines() if x.strip()]
+                slave_data = [{'id': x, 'master_id': None} for x in slave_ids_list]
+            elif isinstance(slave_ids_raw, list):
+                slave_data = [{'id': x, 'master_id': None} for x in slave_ids_raw]
+
+        try:
+            order_services.fulfill_order(order, master_ids, slave_data, actor=request.user)
+            return Response({"detail": "Order fulfilled successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

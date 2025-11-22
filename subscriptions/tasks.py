@@ -48,3 +48,13 @@ def refresh_subscription_statuses(self):
     if count:
         logger.info("Refreshed %s subscription records", count)
     return count
+
+
+@shared_task(bind=True, name="subscriptions.send_due_soon_reminders")
+def send_due_soon_reminders(self, days_before: int = 5):
+    """Send SMS reminders ahead of subscription due dates."""
+
+    sent = services.send_due_soon_sms_reminders(days_before=days_before)
+    if sent:
+        logger.info("Sent %s due soon subscription reminders", sent)
+    return sent

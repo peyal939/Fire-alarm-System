@@ -91,6 +91,9 @@ SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES = int(
     os.getenv("SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES", "60") or "60"
 )
 SUBSCRIPTION_BILLING_CLIENT_IP = os.getenv("SUBSCRIPTION_BILLING_CLIENT_IP", "")
+SUBSCRIPTION_DUE_SOON_REMINDER_DAYS = int(
+    os.getenv("SUBSCRIPTION_DUE_SOON_REMINDER_DAYS", "5") or "5"
+)
 
 # Allow JWT lifetimes to be overridden without code changes
 JWT_ACCESS_TOKEN_LIFETIME_MINUTES = int(
@@ -306,6 +309,13 @@ if SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES > 0:
     CELERY_BEAT_SCHEDULE["refresh_subscription_statuses"] = {
         "task": "subscriptions.refresh_subscription_statuses",
         "schedule": timedelta(minutes=SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES * 2),
+    }
+
+if SUBSCRIPTION_DUE_SOON_REMINDER_DAYS > 0:
+    CELERY_BEAT_SCHEDULE["send_subscription_due_soon_reminders"] = {
+        "task": "subscriptions.send_due_soon_reminders",
+        "schedule": timedelta(days=1),
+        "kwargs": {"days_before": SUBSCRIPTION_DUE_SOON_REMINDER_DAYS},
     }
 
 # drf-spectacular settings

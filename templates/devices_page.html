@@ -5,7 +5,7 @@
   <style>
     .devices-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .devices-toolbar .form-control { max-width: 260px; }
-    #mapPickerMaster, #mapPickerSlave { height: 280px; }
+    #mapPickerMaster, #mapPickerSlave, #mapPickerClaim { height: 280px; }
   </style>
 {% endblock %}
 {% block content %}
@@ -63,7 +63,11 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
-              <input name="hardware_identifier" class="form-control" required maxlength="64" />
+              <div class="input-group">
+                 <input name="hardware_identifier" class="form-control" required maxlength="64" list="masterProvisionedList" autocomplete="off" />
+                 <datalist id="masterProvisionedList"></datalist>
+              </div>
+              <div class="form-text">Enter ID or select from provisioned devices.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
@@ -109,7 +113,11 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
-              <input name="hardware_identifier" class="form-control" required maxlength="64" />
+              <div class="input-group">
+                 <input name="hardware_identifier" class="form-control" required maxlength="64" list="slaveProvisionedList" autocomplete="off" />
+                 <datalist id="slaveProvisionedList"></datalist>
+              </div>
+              <div class="form-text">Enter ID or select from provisioned devices.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
@@ -177,6 +185,62 @@
       </div>
     </div>
    </div>
+
+<!-- Claim Device Modal -->
+<div class="modal fade" id="claimDeviceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Claim Provisioned Device</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="errClaim"></div>
+        <form id="claimDeviceForm">
+          <div class="mb-3">
+              <label class="form-label">Select Device</label>
+              <select name="device_id" id="claimDeviceSelect" class="form-select" required>
+                  <option value="">Loading unclaimed devices...</option>
+              </select>
+              <div class="form-text">Only devices provisioned for your paid orders are shown here.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Device Name</label>
+              <input name="device_name" class="form-control" required maxlength="255" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone Number</label>
+              <div class="input-group">
+                  <span class="input-group-text">+88</span>
+                  <input type="text" class="form-control" name="phone_number" placeholder="017XXXXXXXX" maxlength="13" required />
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Latitude</label>
+              <input name="latitude" class="form-control" placeholder="e.g. 23.7776" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Longitude</label>
+              <input name="longitude" class="form-control" placeholder="e.g. 90.4054" required />
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="button" id="pickOnMapClaimBtn" class="btn btn-outline-primary w-100">Pick on Map</button>
+            </div>
+          </div>
+          <div class="mt-3" id="mapPickerClaimWrap" style="display:none">
+            <div id="mapPickerClaim" class="rounded border" style="height: 280px;"></div>
+            <div class="form-text">Click on the map to set coordinates. Click again to move the marker.</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" id="submitClaimDeviceBtn" class="btn btn-primary">Claim Device</button>
+      </div>
+    </div>
+  </div>
+ </div>
 {% endblock %}
 
 {% block scripts %}
@@ -189,11 +253,14 @@
     const refreshBtn = document.getElementById('refreshBtn');
     const registerMasterBtn = document.getElementById('registerMasterBtn');
     const registerSlaveBtn = document.getElementById('registerSlaveBtn');
+    const claimDeviceBtn = document.getElementById('claimDeviceBtn');
 
     const masterModalEl = document.getElementById('registerMasterModal');
     const slaveModalEl = document.getElementById('registerSlaveModal');
+    const claimDeviceModalEl = document.getElementById('claimDeviceModal');
     const masterModal = new bootstrap.Modal(masterModalEl);
     const slaveModal = new bootstrap.Modal(slaveModalEl);
+    const claimDeviceModal = new bootstrap.Modal(claimDeviceModalEl);
 
   const assignPhoneModalEl = document.getElementById('assignPhoneModal');
   const assignPhoneModal = new bootstrap.Modal(assignPhoneModalEl);
@@ -206,15 +273,22 @@
 
     const registerMasterForm = document.getElementById('registerMasterForm');
     const registerSlaveForm = document.getElementById('registerSlaveForm');
+    const claimDeviceForm = document.getElementById('claimDeviceForm');
     const submitRegisterMasterBtn = document.getElementById('submitRegisterMasterBtn');
     const submitRegisterSlaveBtn = document.getElementById('submitRegisterSlaveBtn');
+    const submitClaimDeviceBtn = document.getElementById('submitClaimDeviceBtn');
+    const masterError = document.getElementById('errMaster');
+    const slaveError = document.getElementById('errSlave');
+    const claimError = document.getElementById('errClaim');
 
     const pickOnMapMasterBtn = document.getElementById('pickOnMapMasterBtn');
     const pickOnMapSlaveBtn = document.getElementById('pickOnMapSlaveBtn');
+    const pickOnMapClaimBtn = document.getElementById('pickOnMapClaimBtn');
     const mapPickerMasterWrap = document.getElementById('mapPickerMasterWrap');
     const mapPickerSlaveWrap = document.getElementById('mapPickerSlaveWrap');
-    let mapMaster = null, mapSlave = null;
-    let markerMaster = null, markerSlave = null;
+    const mapPickerClaimWrap = document.getElementById('mapPickerClaimWrap');
+    let mapMaster = null, mapSlave = null, mapClaim = null;
+    let markerMaster = null, markerSlave = null, markerClaim = null;
 
     let allDevices = [];
 
@@ -422,6 +496,30 @@
       registerSlaveForm.longitude.value = pos.lng.toFixed(6);
     }
 
+    function ensureMapClaim() {
+      if (mapClaim) return mapClaim;
+      mapClaim = L.map('mapPickerClaim').setView([23.777628, 90.405449], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapClaim);
+      mapClaim.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        if (!markerClaim) {
+          markerClaim = L.marker([lat, lng], { draggable: true }).addTo(mapClaim);
+          markerClaim.on('dragend', syncClaimMarkerToInputs);
+        } else {
+          markerClaim.setLatLng([lat, lng]);
+        }
+        syncClaimMarkerToInputs();
+      });
+      return mapClaim;
+    }
+
+    function syncClaimMarkerToInputs() {
+      if (!markerClaim) return;
+      const pos = markerClaim.getLatLng();
+      claimDeviceForm.latitude.value = pos.lat.toFixed(6);
+      claimDeviceForm.longitude.value = pos.lng.toFixed(6);
+    }
+
     function parseNumber(v) {
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
@@ -540,6 +638,32 @@
       }
     }
 
+    async function populateProvisionedLists() {
+      try {
+        const data = await apiGet('/devices/unclaimed/');
+        const devices = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        
+        const masterList = document.getElementById('masterProvisionedList');
+        const slaveList = document.getElementById('slaveProvisionedList');
+        masterList.innerHTML = '';
+        slaveList.innerHTML = '';
+
+        devices.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.hardware_identifier;
+            opt.textContent = `${d.hardware_identifier} (${d.device_role})`;
+            
+            if (d.device_role === 'master') {
+                masterList.appendChild(opt);
+            } else if (d.device_role === 'slave') {
+                slaveList.appendChild(opt);
+            }
+        });
+      } catch (e) {
+        console.error('Failed to load provisioned devices', e);
+      }
+    }
+
     async function populateMastersSelect() {
       const sel = document.getElementById('masterSelect');
       sel.innerHTML = '<option value="">Loading masters…</option>';
@@ -561,6 +685,27 @@
       }
     }
 
+    async function populateClaimDeviceSelect() {
+      const sel = document.getElementById('claimDeviceSelect');
+      sel.innerHTML = '<option value="">Loading unclaimed devices…</option>';
+      try {
+        const data = await apiGet('/devices/unclaimed/');
+        const devices = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        if (!devices.length) {
+          sel.innerHTML = '<option value="">No unclaimed devices found.</option>';
+          return;
+        }
+        sel.innerHTML = '<option value="">Select device…</option>' + devices
+          .map(d => {
+            const label = (d.hardware_identifier || 'Unknown ID') + (d.device_role ? ` (${d.device_role})` : '');
+            return `<option value="${d.id}">${label}</option>`;
+          })
+          .join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">Failed to load devices</option>';
+      }
+    }
+
     async function onSubmitRegisterMaster() {
       const hid = (registerMasterForm.hardware_identifier.value || '').trim();
       const name = (registerMasterForm.device_name.value || '').trim();
@@ -568,6 +713,8 @@
       const lon = parseNumber(registerMasterForm.longitude.value);
       if (!hid) { alert('Hardware identifier is required'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
+      masterError.classList.add('d-none');
+      masterError.textContent = '';
       try {
         submitRegisterMasterBtn.disabled = true;
         const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon, device_role: 'master' };
@@ -578,7 +725,8 @@
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert(extractApiError(err, 'Failed to register master device.'));
+        masterError.textContent = extractApiError(err, 'Failed to register master device.');
+        masterError.classList.remove('d-none');
       } finally {
         submitRegisterMasterBtn.disabled = false;
       }
@@ -593,6 +741,8 @@
       if (!hid) { alert('Hardware identifier is required'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
       if (!masterId) { alert('Please select a master.'); return; }
+      slaveError.classList.add('d-none');
+      slaveError.textContent = '';
       try {
         submitRegisterSlaveBtn.disabled = true;
         const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon, device_role: 'slave', master_id: masterId };
@@ -603,9 +753,38 @@
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert(extractApiError(err, 'Failed to register slave device. Ensure master ownership and inputs.'));
+        slaveError.textContent = extractApiError(err, 'Failed to register slave device. Ensure master ownership and inputs.');
+        slaveError.classList.remove('d-none');
       } finally {
         submitRegisterSlaveBtn.disabled = false;
+      }
+    }
+
+    async function onSubmitClaimDevice() {
+      const deviceId = parseInt(claimDeviceForm.device_id.value, 10);
+      const deviceName = (claimDeviceForm.device_name.value || '').trim();
+      const phoneRaw = (claimDeviceForm.phone_number.value || '').trim();
+      const lat = parseNumber(claimDeviceForm.latitude.value);
+      const lon = parseNumber(claimDeviceForm.longitude.value);
+      if (!deviceId) { alert('Please select a device to claim'); return; }
+      if (!deviceName) { alert('Device name is required'); return; }
+      if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
+      claimError.classList.add('d-none');
+      claimError.textContent = '';
+      try {
+        submitClaimDeviceBtn.disabled = true;
+        const payload = { device_name: deviceName, phone_number: phoneRaw, latitude: lat, longitude: lon };
+        await apiPost(`/devices/${deviceId}/claim/`, payload);
+        claimDeviceModal.hide();
+        claimDeviceForm.reset();
+        mapPickerClaimWrap.style.display = 'none';
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        claimError.textContent = extractApiError(err, 'Failed to claim device. Ensure device is unclaimed and inputs are correct.');
+        claimError.classList.remove('d-none');
+      } finally {
+        submitClaimDeviceBtn.disabled = false;
       }
     }
 
@@ -657,13 +836,27 @@
     registerMasterBtn.addEventListener('click', () => {
       registerMasterForm.reset();
       mapPickerMasterWrap.style.display = 'none';
+      masterError.classList.add('d-none');
+      masterError.textContent = '';
+      populateProvisionedLists();
       masterModal.show();
     });
     registerSlaveBtn.addEventListener('click', async () => {
       registerSlaveForm.reset();
       mapPickerSlaveWrap.style.display = 'none';
+      slaveError.classList.add('d-none');
+      slaveError.textContent = '';
       await populateMastersSelect();
+      populateProvisionedLists();
       slaveModal.show();
+    });
+    claimDeviceBtn.addEventListener('click', () => {
+      claimDeviceForm.reset();
+      mapPickerClaimWrap.style.display = 'none';
+      claimError.classList.add('d-none');
+      claimError.textContent = '';
+      populateClaimDeviceSelect();
+      claimDeviceModal.show();
     });
     pickOnMapMasterBtn.addEventListener('click', () => {
       mapPickerMasterWrap.style.display = '';
@@ -673,8 +866,13 @@
       mapPickerSlaveWrap.style.display = '';
       setTimeout(() => { ensureMapSlave(); mapSlave.invalidateSize(); }, 200);
     });
+    pickOnMapClaimBtn.addEventListener('click', () => {
+      mapPickerClaimWrap.style.display = '';
+      setTimeout(() => { ensureMapClaim(); mapClaim.invalidateSize(); }, 200);
+    });
     submitRegisterMasterBtn.addEventListener('click', onSubmitRegisterMaster);
     submitRegisterSlaveBtn.addEventListener('click', onSubmitRegisterSlave);
+    submitClaimDeviceBtn.addEventListener('click', onSubmitClaimDevice);
     assignPhoneForm.addEventListener('submit', onSubmitAssignPhone);
     assignPhoneModalEl.addEventListener('hidden.bs.modal', () => {
       phoneTargetDevice = null;

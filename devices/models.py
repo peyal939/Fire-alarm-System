@@ -93,7 +93,7 @@ class Device(AuditSoftDeleteModel):
     phone_number = models.CharField(max_length=16, null=True, blank=True)
     phone_number_updated_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, blank=True)
-    registered_at = models.DateTimeField(default=timezone.now)
+    registered_at = models.DateTimeField(null=True, blank=True)
     last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
 
     # --- Runtime / derived properties (not stored) ---------------------------------

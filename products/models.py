@@ -70,7 +70,7 @@ class Order(AuditSoftDeleteModel):
         Package, on_delete=models.PROTECT, related_name="orders"
     )
     number_of_master_devices = models.PositiveIntegerField(default=1)
-    number_of_slave_devices = models.PositiveIntegerField(default=1)
+    number_of_slave_devices = models.PositiveIntegerField(default=0)
     quantity = models.PositiveIntegerField()
     # renamed from total_amount -> amount
     amount = models.DecimalField(max_digits=12, decimal_places=2)

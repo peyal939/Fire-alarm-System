@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
@@ -27,12 +27,67 @@ from products.models import Order
 logger = logging.getLogger(__name__)
 
 
-def assign_device_to_order(device: Device) -> Optional[Order]:
-    """Assign the given device to the earliest paid order with remaining slots.
+class OrderAssignmentError(Exception):
+    """Raised when a device cannot be attached to the requested order."""
 
-    The helper increments the order's assigned_devices counter inside a
-    transaction to prevent race conditions. If no eligible order is found, the
-    device is left without an originating order and the function returns None.
+
+def get_order_assignment_counts(order: Order) -> dict:
+    """Return current assignment totals (active only) for the given order."""
+
+    aggregates = Device.objects.filter(
+        originating_order=order, deleted_at__isnull=True
+    ).aggregate(
+        total=models.Count("id"),
+        masters=models.Count(
+            "id",
+            filter=models.Q(device_role=Device.DeviceRole.MASTER),
+        ),
+        slaves=models.Count(
+            "id",
+            filter=models.Q(device_role=Device.DeviceRole.SLAVE),
+        ),
+    )
+
+    return {
+        "total": aggregates.get("total") or 0,
+        "masters": aggregates.get("masters") or 0,
+        "slaves": aggregates.get("slaves") or 0,
+    }
+
+
+def order_has_capacity(order: Order, *, role: str) -> Tuple[bool, dict, str]:
+    """Check whether *order* can accommodate one more device of *role*."""
+
+    counts = get_order_assignment_counts(order)
+    role_value = str(role or Device.DeviceRole.MASTER)
+
+    total_limit = order.quantity or 0
+    next_total = counts["total"] + 1
+    if next_total > total_limit:
+        return False, counts, "Order has no remaining device slots."
+
+    if role_value == Device.DeviceRole.MASTER:
+        master_limit = order.number_of_master_devices or 0
+        if master_limit <= 0 or counts["masters"] + 1 > master_limit:
+            return False, counts, "Order has no remaining master device slots."
+
+    if role_value == Device.DeviceRole.SLAVE:
+        slave_limit = order.number_of_slave_devices or 0
+        if slave_limit <= 0 or counts["slaves"] + 1 > slave_limit:
+            return False, counts, "Order has no remaining slave device slots."
+
+    return True, counts, ""
+
+
+def assign_device_to_order(
+    device: Device, preferred_order: Optional[Order] = None
+) -> Optional[Order]:
+    """Assign the device to a paid order with available slots.
+
+    If ``preferred_order`` is provided we try to use it first (after validating
+    ownership, payment status, and remaining capacity). Otherwise we fall back to
+    the earliest eligible order. In all cases the order's ``assigned_devices``
+    counter is incremented inside a transaction to prevent double assignment.
     """
 
     if not device or not getattr(device, "pk", None):
@@ -51,7 +106,62 @@ def assign_device_to_order(device: Device) -> Optional[Order]:
 
     try:
         with transaction.atomic():
-            order = (
+            if preferred_order and getattr(preferred_order, "pk", None):
+                order = (
+                    Order.objects.select_for_update()
+                    .filter(
+                        pk=preferred_order.pk,
+                        user_id=user_id,
+                        order_status=Order.Status.PAID,
+                        deleted_at__isnull=True,
+                        package__deleted_at__isnull=True,
+                    )
+                    .first()
+                )
+                if not order:
+                    logger.info(
+                        "Preferred order %s is not available for user %s",
+                        getattr(preferred_order, "pk", None),
+                        user_id,
+                    )
+                    raise OrderAssignmentError(
+                        "Selected order is not available for assignment."
+                    )
+
+                ok, counts, message = order_has_capacity(
+                    order, role=device.device_role
+                )
+                if not ok:
+                    logger.info(
+                        "Preferred order %s rejected device %s: %s",
+                        order.pk,
+                        device.pk,
+                        message,
+                    )
+                    raise OrderAssignmentError(message)
+
+                order.assigned_devices = counts["total"] + 1
+                order.save(update_fields=["assigned_devices"])
+                device.originating_order_id = order.pk
+                device.save(update_fields=["originating_order"])
+                try:
+                    from subscriptions.services import ensure_device_subscription
+
+                    ensure_device_subscription(device)
+                except Exception as sub_exc:  # pragma: no cover - best effort hook
+                    logger.warning(
+                        "Failed to ensure subscription for device %s: %s",
+                        device.pk,
+                        sub_exc,
+                    )
+                logger.info(
+                    "Assigned device %s to preferred order %s",
+                    device.pk,
+                    order.pk,
+                )
+                return order
+
+            orders = (
                 Order.objects.select_for_update()
                 .filter(
                     user_id=user_id,
@@ -61,48 +171,59 @@ def assign_device_to_order(device: Device) -> Optional[Order]:
                     assigned_devices__lt=models.F("quantity"),
                 )
                 .order_by("ordered_at", "id")
-                .first()
             )
 
-            if not order:
+            rejection_message = (
+                "No paid orders with remaining device slots for this account."
+            )
+            saw_order = False
+            for order in orders:
+                saw_order = True
+                ok, counts, message = order_has_capacity(
+                    order, role=device.device_role
+                )
+                if not ok:
+                    if message:
+                        rejection_message = message
+                    continue
+
+                order.assigned_devices = counts["total"] + 1
+                order.save(update_fields=["assigned_devices"])
+                device.originating_order_id = order.pk
+                device.save(update_fields=["originating_order"])
+                try:
+                    from subscriptions.services import ensure_device_subscription
+
+                    ensure_device_subscription(device)
+                except Exception as sub_exc:  # pragma: no cover - best effort hook
+                    logger.warning(
+                        "Failed to ensure subscription for device %s: %s",
+                        device.pk,
+                        sub_exc,
+                    )
                 logger.info(
-                    "No available paid orders with remaining slots for user %s (device %s)",
-                    user_id,
+                    "Assigned device %s to order %s via queue",
                     device.pk,
-                )
-                return None
-
-            updated = Order.objects.filter(pk=order.pk).update(
-                assigned_devices=models.F("assigned_devices") + 1
-            )
-            if updated != 1:
-                logger.warning(
-                    "Failed to increment assigned_devices for order %s when assigning device %s",
                     order.pk,
-                    device.pk,
                 )
-                return None
+                return order
 
-            device.originating_order_id = order.pk
-            device.save(update_fields=["originating_order"])
-            try:
-                from subscriptions.services import ensure_device_subscription
-
-                ensure_device_subscription(device)
-            except Exception as sub_exc:  # pragma: no cover - best effort hook
-                logger.warning(
-                    "Failed to ensure subscription for device %s: %s",
+            if saw_order:
+                logger.info(
+                    "No eligible paid orders for device %s. Reason: %s",
                     device.pk,
-                    sub_exc,
+                    rejection_message,
                 )
+                raise OrderAssignmentError(rejection_message)
+
             logger.info(
-                "Assigned device %s to order %s (assigned_devices now %s of %s)",
+                "No paid orders available for user %s when registering device %s",
+                user_id,
                 device.pk,
-                order.pk,
-                (order.assigned_devices or 0) + 1,
-                order.quantity,
             )
-            return order
+            return None
+    except OrderAssignmentError:
+        raise
     except Exception as exc:
         logger.error(
             "Unexpected error assigning device %s to order queue: %s",

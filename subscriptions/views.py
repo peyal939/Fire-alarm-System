@@ -159,6 +159,12 @@ def user_subscription_pay(request, pk: int):
         pk=pk,
         device__user=request.user,
     )
+    if request.user.is_superuser or getattr(request.user, "role", "") == "superadmin":
+        messages.error(
+            request,
+            "Admin or super admin can't pay. Only owner of the order can pay.",
+        )
+        return redirect(reverse("subscriptions:user-dashboard"))
     form = UserTopUpForm(request.POST or None, initial={"subscription_id": pk})
     if request.method != "POST" or not form.is_valid():
         logger.info(

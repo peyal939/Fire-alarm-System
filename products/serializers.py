@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from rest_framework import serializers
 
 from .models import Package, Order
+from .services import calculate_order_total
 
 
 class PackageSerializer(serializers.ModelSerializer):
@@ -104,7 +104,13 @@ class OrderCreateSerializer(serializers.Serializer):
         user = self.context["request"].user
         if not user or not user.is_authenticated:
             raise serializers.ValidationError("Authentication required")
-        total = package.price_per_device * Decimal(qty)
+        if user.is_superuser or getattr(user, "role", "") == "superadmin":
+            raise serializers.ValidationError(
+                "Admin or super admin can't create any order. Only User can create order."
+            )
+        total = calculate_order_total(package, qty)
+        master_devices = validated_data.get("number_of_master_devices", 1)
+        slave_devices = validated_data.get("number_of_slave_devices", 1)
         # build kwargs for optional customer/currency fields; reference will be assigned server-side
         extra = {
             "currency": validated_data.get("currency", "BDT") or "BDT",
@@ -119,6 +125,8 @@ class OrderCreateSerializer(serializers.Serializer):
             user=user,
             package=package,
             quantity=qty,
+            number_of_master_devices=master_devices,
+            number_of_slave_devices=slave_devices,
             amount=total,
             created_by=user,
             shipping_address=validated_data.get("shipping_address", ""),

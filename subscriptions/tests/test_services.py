@@ -138,3 +138,25 @@ class SubscriptionServiceTests(TestCase):
             "customer_email",
         ]:
             self.assertTrue(payload.get(key), f"{key} should not be blank")
+
+    @patch("notifications.sms.SMSClient.send_text")
+    def test_due_soon_reminder_sent_once(self, sms_mock):
+        self.user.phone_number = "+8801000000000"
+        self.user.save(update_fields=["phone_number"])
+        base_now = timezone.now()
+        due_at = base_now + timedelta(days=5, minutes=5)
+        self.subscription.next_due_at = due_at
+        self.subscription.save(update_fields=["next_due_at"])
+
+        sms_mock.return_value = {"status": "success"}
+
+        sent = services.send_due_soon_sms_reminders(as_of=base_now)
+
+        self.assertEqual(sent, 1)
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.due_reminder_for_due_at, due_at)
+        self.assertIsNotNone(self.subscription.due_reminder_sent_at)
+
+        again = services.send_due_soon_sms_reminders(as_of=base_now)
+        self.assertEqual(again, 0)
+        sms_mock.assert_called_once()

@@ -7,10 +7,13 @@ from typing import Optional
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from shurjopay import services as shurjopay_services
 from shurjopay.models import PaymentTransaction
+
+from notifications.sms import SMSClient
 
 from .models import DeviceSubscription, SubscriptionCharge
 
@@ -521,3 +524,75 @@ def sync_charge_from_transaction(
 
     refresh_subscription_status(subscription)
     return charge
+
+
+def send_due_soon_sms_reminders(
+    *,
+    days_before: int = 5,
+    as_of: Optional[timezone.datetime] = None,
+    limit: int = 200,
+) -> int:
+    """Send SMS reminders ahead of a subscription's next due date."""
+
+    as_of = as_of or timezone.now()
+    days_before = max(1, int(days_before or 1))
+
+    target = as_of + timedelta(days=days_before)
+    target_start = target.replace(hour=0, minute=0, second=0, microsecond=0)
+    target_end = target_start + timedelta(days=1)
+
+    qs = (
+        DeviceSubscription.objects.filter(
+            monthly_amount__gt=0,
+            next_due_at__gte=target_start,
+            next_due_at__lt=target_end,
+            device__deleted_at__isnull=True,
+        )
+        .exclude(due_reminder_for_due_at=F("next_due_at"))
+        .select_related("device__user")
+        .order_by("next_due_at")
+    )
+
+    sms_client = SMSClient()
+    sent_count = 0
+
+    for subscription in qs[:limit]:
+        device = subscription.device
+        user = getattr(device, "user", None)
+        if not user:
+            continue
+
+        phone_number = (user.phone_number or "").strip()
+        if not phone_number:
+            phone_number = (device.phone_number or "").strip()
+        if not phone_number:
+            continue
+
+        device_name = device.device_name or device.hardware_identifier
+        due_local = timezone.localtime(subscription.next_due_at)
+        message = (
+            f"Reminder: Your fire alarm subscription for {device_name} is due on "
+            f"{due_local:%d %b %Y}. Pay within 5 days to avoid device deactivation."
+        )
+
+        try:
+            sms_client.send_text(
+                phone_number,
+                message,
+                session_id=f"subscription:{subscription.pk}",
+                extra_payload={"type": "due_soon"},
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send due reminder SMS for subscription %s", subscription.pk
+            )
+            continue
+
+        subscription.due_reminder_for_due_at = subscription.next_due_at
+        subscription.due_reminder_sent_at = timezone.now()
+        subscription.save(
+            update_fields=["due_reminder_for_due_at", "due_reminder_sent_at"]
+        )
+        sent_count += 1
+
+    return sent_count

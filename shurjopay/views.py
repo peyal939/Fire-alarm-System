@@ -40,6 +40,31 @@ def _sync_subscription_charge(txn: PaymentTransaction | None) -> None:
         )
 
 
+def _sync_order(txn: PaymentTransaction | None):
+    if not txn:
+        return None
+    try:
+        from products.services import sync_order_from_transaction
+    except Exception:
+        return None
+    try:
+        return sync_order_from_transaction(txn)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning(
+            "Failed to sync order for transaction %s: %s",
+            txn.pk,
+            exc,
+        )
+        return None
+
+
+def _orders_redirect_url() -> str:
+    try:
+        return reverse("products_page")
+    except Exception:
+        return reverse("subscriptions:user-dashboard")
+
+
 def _get_transaction_for_order(order_id: str) -> PaymentTransaction | None:
     if not order_id:
         return None
@@ -92,6 +117,7 @@ def _update_transaction_from_verification(
         )
         txn.save(update_fields=["status", "verification_payload", "updated_at"])
         _sync_subscription_charge(txn)
+        _sync_order(txn)
     return txn, success, payload
 
 
@@ -190,6 +216,7 @@ class InitiatePaymentView(APIView):
             txn.response_payload = details.__dict__
             txn.save()
             _sync_subscription_charge(txn)
+            _sync_order(txn)
 
         return Response(
             {
@@ -272,6 +299,7 @@ class ReturnView(APIView):
             "message": "Payment verification could not be completed.",
         }
         status_code = http_status.HTTP_400_BAD_REQUEST
+        redirect_url = reverse("subscriptions:user-dashboard")
 
         if order_id:
             try:
@@ -285,6 +313,11 @@ class ReturnView(APIView):
             txn, success, payload = _update_transaction_from_verification(
                 order_id, verified
             )
+            if txn and (
+                (txn.reference or "").startswith("order:")
+                or (isinstance(txn.request_payload, dict) and txn.request_payload.get("order_id"))
+            ):
+                redirect_url = _orders_redirect_url()
             info.update(
                 {
                     "success": success,
@@ -300,6 +333,7 @@ class ReturnView(APIView):
         else:
             info["message"] = "order_id is required"
 
+        info["redirect_url"] = redirect_url
         wants_json = (
             getattr(getattr(request, "accepted_renderer", None), "format", None)
             == "json"
@@ -312,7 +346,7 @@ class ReturnView(APIView):
             messages.success(request, info["message"])
         else:
             messages.error(request, info["message"])
-        return redirect(reverse("subscriptions:user-dashboard"))
+        return redirect(redirect_url)
 
 
 class CancelView(APIView):
@@ -337,11 +371,19 @@ class CancelView(APIView):
             PaymentTransaction.objects.filter(sp_order_id=order_id).first()
             or PaymentTransaction.objects.filter(customer_order_id=order_id).first()
         )
+        redirect_url = reverse("subscriptions:user-dashboard")
         if txn:
             txn.status = PaymentTransaction.Status.CANCELLED
             txn.save(update_fields=["status"])
             _sync_subscription_charge(txn)
+            _sync_order(txn)
+            if (
+                (txn.reference or "").startswith("order:")
+                or (isinstance(txn.request_payload, dict) and txn.request_payload.get("order_id"))
+            ):
+                redirect_url = _orders_redirect_url()
         info = {"message": "Payment cancelled", "order_id": order_id or None}
+        info["redirect_url"] = redirect_url
         wants_json = (
             getattr(getattr(request, "accepted_renderer", None), "format", None)
             == "json"
@@ -350,7 +392,7 @@ class CancelView(APIView):
         if wants_json:
             return Response(info)
         messages.warning(request, "Payment was cancelled before completion.")
-        return redirect(reverse("subscriptions:user-dashboard"))
+        return redirect(redirect_url)
 
 
 class StatusView(APIView):

@@ -39,6 +39,8 @@ class DeviceSubscription(models.Model):
     next_due_at = models.DateTimeField()
     grace_expires_at = models.DateTimeField(null=True, blank=True)
     admin_override_until = models.DateTimeField(null=True, blank=True)
+    due_reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    due_reminder_for_due_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     notes = models.TextField(blank=True)

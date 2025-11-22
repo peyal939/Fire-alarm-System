@@ -250,6 +250,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         lon_dec = ser.validated_data.get("longitude")
         role = ser.validated_data.get("device_role") or Device.DeviceRole.MASTER
         master = ser.validated_data.get("master")  # set in serializer when role==slave
+        preferred_order = ser.validated_data.get("originating_order")
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
@@ -285,7 +286,19 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 existing.master = master
             elif role == Device.DeviceRole.MASTER:
                 existing.master = None
+            
+            # Mark as registered if this is the first claim
+            if not existing.registered_at:
+                existing.registered_at = timezone.now()
+
             existing.save()
+            if not existing.originating_order_id:
+                if preferred_order:
+                    services.assign_device_to_order(
+                        existing, preferred_order=preferred_order
+                    )
+                else:
+                    services.assign_device_to_order(existing)
 
             # Broadcast the updated device to WebSocket clients
             _broadcast_new_device(existing)
@@ -299,12 +312,21 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ).first()
 
         if soft_deleted:
+            # Only allow restore if it belonged to the requesting user
+            if soft_deleted.user != request.user and not (
+                request.user.is_superuser
+                or getattr(request.user, "role", None) == "superadmin"
+            ):
+                 return Response({"detail": "Device not found or not assigned to you"}, status=404)
+
             # Un-delete (restore) the device and reassign to current user
             soft_deleted.deleted_at = None
             soft_deleted.deleted_by = None
-            soft_deleted.user = request.user
-            soft_deleted.created_by = request.user
-            soft_deleted.created_at = timezone.now()
+            # soft_deleted.user = request.user # Already checked
+            soft_deleted.updated_by = request.user
+            soft_deleted.updated_at = timezone.now()
+            # soft_deleted.registered_at = timezone.now() # Keep original registration date? Or update?
+            # If it was deleted, maybe treat as new registration?
             soft_deleted.registered_at = timezone.now()
 
             if name:
@@ -329,28 +351,21 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
             soft_deleted.save()
             if soft_deleted.originating_order_id is None:
-                services.assign_device_to_order(soft_deleted)
+                if preferred_order:
+                    services.assign_device_to_order(
+                        soft_deleted, preferred_order=preferred_order
+                    )
+                else:
+                    services.assign_device_to_order(soft_deleted)
             _ensure_subscription(soft_deleted)
             _broadcast_new_device(soft_deleted)
             return Response(DeviceSerializer(soft_deleted).data, status=201)
 
-        device = Device(
-            user=request.user,
-            hardware_identifier=hid,
-            device_name=name,
-            latitude=lat_dec,
-            longitude=lon_dec,
-            created_by=request.user,
-            device_role=role,
+        # If neither active nor soft-deleted found, reject registration
+        return Response(
+            {"detail": "Device not found. Please ensure the device ID is correct and has been assigned to your order."},
+            status=404
         )
-        if role == Device.DeviceRole.SLAVE:
-            device.master = master
-        device.save()
-        services.assign_device_to_order(device)
-        _ensure_subscription(device)
-
-        _broadcast_new_device(device)
-        return Response(DeviceSerializer(device).data, status=201)
 
     @extend_schema(
         tags=["Devices"],

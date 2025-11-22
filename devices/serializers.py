@@ -8,6 +8,8 @@ from .constants import AlertType, DeviceStatus
 from django.db import models
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
+from .services import order_has_capacity
+from products.models import Order
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -15,6 +17,10 @@ class DeviceSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="user.email", read_only=True)
     owner_phone = serializers.CharField(source="user.phone_number", read_only=True)
     online = serializers.SerializerMethodField()
+    originating_order_id = serializers.PrimaryKeyRelatedField(
+        source="originating_order",
+        read_only=True,
+    )
     device_role = serializers.CharField(read_only=True)
     master_id = serializers.IntegerField(source="master.id", read_only=True)
     master_hardware_identifier = serializers.CharField(
@@ -53,6 +59,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "owner_id",
             "owner_email",
             "owner_phone",
+            "originating_order_id",
         )
         read_only_fields = (
             "id",
@@ -163,6 +170,30 @@ class DeviceRegisterSerializer(serializers.Serializer):
             "that belongs to you (unless superadmin)."
         ),
     )
+    originating_order_id = serializers.PrimaryKeyRelatedField(
+        queryset=Order.objects.none(),
+        required=False,
+        allow_null=True,
+        source="originating_order",
+        help_text=(
+            "Optional order to link this device to. Must be one of your paid orders with available slots."
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request") if hasattr(self, "context") else None
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            self.fields["originating_order_id"].queryset = (
+                Order.objects.filter(
+                    user=user,
+                    order_status=Order.Status.PAID,
+                    deleted_at__isnull=True,
+                    package__deleted_at__isnull=True,
+                )
+                .order_by("ordered_at", "id")
+            )
 
     def validate(self, attrs):
         lat = attrs.get("latitude")
@@ -175,6 +206,7 @@ class DeviceRegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError("longitude must be between -180 and 180")
         role = attrs.get("device_role") or Device.DeviceRole.MASTER
         master_id = attrs.get("master_id")
+        selected_order = attrs.get("originating_order")
         # Cross-field validation for master/slave
         if str(role) == Device.DeviceRole.SLAVE:
             if not master_id:
@@ -215,8 +247,34 @@ class DeviceRegisterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "master_id must not be provided when device_role is 'master'"
                 )
-        return attrs
+        if selected_order:
+            request = self.context.get("request") if hasattr(self, "context") else None
+            user = getattr(request, "user", None)
+            if not user or not getattr(user, "is_authenticated", False):
+                raise serializers.ValidationError(
+                    "originating_order_id cannot be used without authentication"
+                )
+            order = (
+                Order.objects.filter(
+                    pk=selected_order.pk,
+                    user=user,
+                    order_status=Order.Status.PAID,
+                    deleted_at__isnull=True,
+                    package__deleted_at__isnull=True,
+                )
+                .select_related("package")
+                .first()
+            )
+            if not order:
+                raise serializers.ValidationError(
+                    "originating_order_id is not available for assignment"
+                )
+            can_assign, _, message = order_has_capacity(order, role=str(role))
+            if not can_assign:
+                raise serializers.ValidationError(message)
+            attrs["originating_order"] = order
 
+        return attrs
 
 class DevicePhoneUpdateSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)
