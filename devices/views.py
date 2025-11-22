@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 import logging
 
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -345,12 +345,18 @@ class DeviceViewSet(viewsets.ModelViewSet):
         )
         if role == Device.DeviceRole.SLAVE:
             device.master = master
-        device.save()
-        services.assign_device_to_order(device)
-        _ensure_subscription(device)
 
-        _broadcast_new_device(device)
-        return Response(DeviceSerializer(device).data, status=201)
+        try:
+            device.save()
+            services.assign_device_to_order(device)
+            _ensure_subscription(device)
+
+            _broadcast_new_device(device)
+            return Response(DeviceSerializer(device).data, status=201)
+        except IntegrityError:
+            return Response(
+                {"detail": "Device already registered by another user"}, status=409
+            )
 
     @extend_schema(
         tags=["Devices"],

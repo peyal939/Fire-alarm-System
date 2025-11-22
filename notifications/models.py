@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .enums import NotificationStatus
+
 
 class FCMDevice(models.Model):
     """Store Firebase Cloud Messaging device tokens for push notifications.
@@ -72,12 +74,6 @@ class FCMDevice(models.Model):
 class NotificationLog(models.Model):
     """Log of all push notifications sent for debugging and audit purposes."""
 
-    STATUS_CHOICES = [
-        ("sent", "Sent Successfully"),
-        ("failed", "Failed"),
-        ("invalid_token", "Invalid Token"),
-    ]
-
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -97,7 +93,7 @@ class NotificationLog(models.Model):
         blank=True,
         help_text="Additional data payload sent with notification",
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    status = models.CharField(max_length=20, choices=NotificationStatus)
     error_message = models.TextField(blank=True)
     sent_at = models.DateTimeField(default=timezone.now, db_index=True)
 

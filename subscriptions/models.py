@@ -6,14 +6,10 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .enums import DeviceSubscriptionStatus, SubscriptionChargeStatus
+
 
 class DeviceSubscription(models.Model):
-    class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        GRACE = "grace", "Grace"
-        SUSPENDED = "suspended", "Suspended"
-        CANCELLED = "cancelled", "Cancelled"
-
     device = models.OneToOneField(
         "devices.Device",
         on_delete=models.CASCADE,
@@ -32,7 +28,9 @@ class DeviceSubscription(models.Model):
         default=Decimal("0.00"),
     )
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.ACTIVE
+        max_length=16,
+        choices=DeviceSubscriptionStatus,
+        default=DeviceSubscriptionStatus.ACTIVE,
     )
     billing_anchor = models.DateTimeField()
     last_paid_through = models.DateTimeField()
@@ -55,10 +53,10 @@ class DeviceSubscription(models.Model):
 
     @property
     def is_active_for_user(self) -> bool:
-        if self.status == self.Status.ACTIVE:
+        if self.status == DeviceSubscriptionStatus.ACTIVE:
             return True
         now = timezone.now()
-        if self.status == self.Status.GRACE and (
+        if self.status == DeviceSubscriptionStatus.GRACE and (
             not self.grace_expires_at or self.grace_expires_at >= now
         ):
             return True
@@ -68,12 +66,6 @@ class DeviceSubscription(models.Model):
 
 
 class SubscriptionCharge(models.Model):
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        PAID = "paid", "Paid"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
-
     subscription = models.ForeignKey(
         DeviceSubscription,
         on_delete=models.CASCADE,
@@ -87,7 +79,9 @@ class SubscriptionCharge(models.Model):
         help_text="Number of billing cycles covered by this charge",
     )
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.PENDING
+        max_length=16,
+        choices=SubscriptionChargeStatus,
+        default=SubscriptionChargeStatus.PENDING,
     )
     provider_reference = models.CharField(max_length=191, blank=True)
     payment_transaction = models.ForeignKey(

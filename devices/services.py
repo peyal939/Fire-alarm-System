@@ -511,10 +511,21 @@ def ingest_telemetry(
 
     # Update device's last activity timestamp and current status
     # The is_online property uses last_seen to determine if device is active
+    # Optimization: Throttle updates to reduce DB write load.
+    # Only update if status changed OR it's been > 10s since last update.
     try:
-        device.status = status_lower
-        device.last_seen = timezone.now()
-        device.save(update_fields=["status", "last_seen"])
+        should_save = False
+        now = timezone.now()
+
+        if device.status != status_lower:
+            should_save = True
+        elif not device.last_seen or (now - device.last_seen).total_seconds() > 10:
+            should_save = True
+
+        if should_save:
+            device.status = status_lower
+            device.last_seen = now
+            device.save(update_fields=["status", "last_seen"])
     except DatabaseError as e:
         logger.error(f"Failed to update device {device.id} status: {e}")
 
