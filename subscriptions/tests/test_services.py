@@ -163,3 +163,24 @@ class SubscriptionServiceTests(TestCase):
         again = services.send_due_soon_sms_reminders(as_of=base_now)
         self.assertEqual(again, 0)
         sms_mock.assert_called_once()
+
+    def test_process_due_subscriptions_ignores_cancelled(self):
+        self.subscription.status = DeviceSubscriptionStatus.CANCELLED
+        self.subscription.next_due_at = timezone.now() - timedelta(days=1)
+        self.subscription.save()
+
+        charges = services.process_due_subscriptions()
+        self.assertEqual(len(charges), 0)
+
+    def test_activate_subscription(self):
+        self.subscription.status = DeviceSubscriptionStatus.CANCELLED
+        self.subscription.save()
+
+        # Simulate admin activating the subscription
+        self.subscription.status = DeviceSubscriptionStatus.ACTIVE
+        self.subscription.grace_expires_at = None
+        self.subscription.save()
+
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, DeviceSubscriptionStatus.ACTIVE)
+        self.assertIsNone(self.subscription.grace_expires_at)

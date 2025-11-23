@@ -194,7 +194,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         instance: Device = self.get_object()
         instance.soft_delete(acting_user=request.user)
-        
+
         # Reset fulfillment status if exists so it can be reclaimed
         OrderFulfillment.objects.filter(
             hardware_identifier=instance.hardware_identifier
@@ -213,11 +213,9 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def unclaimed(self, request):
         """List fulfilled but unclaimed devices for the user."""
         qs = OrderFulfillment.objects.filter(
-            order__user=request.user,
-            is_claimed=False,
-            deleted_at__isnull=True
-        ).select_related('order')
-        
+            order__user=request.user, is_claimed=False, deleted_at__isnull=True
+        ).select_related("order")
+
         # Create dummy Device instances to ensure serialization consistency
         dummy_devices = []
         for item in qs:
@@ -227,7 +225,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 hardware_identifier=item.hardware_identifier,
                 device_name="",
                 device_role=item.device_role,
-                latitude=Decimal("23.810300"), # Default location for map pin
+                latitude=Decimal("23.810300"),  # Default location for map pin
                 longitude=Decimal("90.412500"),
                 status="unknown",
                 user=request.user,
@@ -237,10 +235,12 @@ class DeviceViewSet(viewsets.ModelViewSet):
             # d.is_online is a property, so we can't set it directly on the instance.
             # However, DeviceSerializer uses getattr(obj, "is_online", False).
             # Since d.last_seen is None, d.is_online will return False automatically.
-            # d.is_online = False 
-            
-            d.master = None # Unclaimed devices don't have a linked master device record yet
-            
+            # d.is_online = False
+
+            d.master = (
+                None  # Unclaimed devices don't have a linked master device record yet
+            )
+
             # For master_hardware_identifier, we need to trick the serializer
             # DeviceSerializer uses source='master.hardware_identifier'
             # Since d.master is None, this would be None.
@@ -248,8 +248,10 @@ class DeviceViewSet(viewsets.ModelViewSet):
             # We can't easily inject it into d.master without a dummy master object.
             if item.master_hardware_identifier:
                 # Create a dummy master just for the identifier
-                d.master = Device(hardware_identifier=item.master_hardware_identifier, device_name="")
-            
+                d.master = Device(
+                    hardware_identifier=item.master_hardware_identifier, device_name=""
+                )
+
             dummy_devices.append(d)
 
         serializer = DeviceSerializer(dummy_devices, many=True)
@@ -373,7 +375,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 existing.master = master
             elif role == Device.DeviceRole.MASTER:
                 existing.master = None
-            
+
             # Mark as registered if this is the first claim
             if not existing.registered_at:
                 existing.registered_at = timezone.now()
@@ -398,13 +400,33 @@ class DeviceViewSet(viewsets.ModelViewSet):
             hardware_identifier=hid, deleted_at__isnull=False
         ).first()
 
+        # Check OrderFulfillment
+        fulfillment = OrderFulfillment.objects.filter(
+            hardware_identifier=hid, deleted_at__isnull=True
+        ).first()
+
         if soft_deleted:
-            # Only allow restore if it belonged to the target owner
-            if soft_deleted.user != owner and not (
-                request.user.is_superuser
-                or getattr(request.user, "role", None) == "superadmin"
+            # Check if the user has a valid fulfillment for this device
+            has_valid_fulfillment = False
+            if (
+                fulfillment
+                and fulfillment.order.user == owner
+                and not fulfillment.is_claimed
             ):
-                 return Response({"detail": "Device not found or not assigned to you"}, status=404)
+                has_valid_fulfillment = True
+
+            # Only allow restore if it belonged to the target owner OR if they have a valid fulfillment
+            if (
+                not has_valid_fulfillment
+                and soft_deleted.user != owner
+                and not (
+                    request.user.is_superuser
+                    or getattr(request.user, "role", None) == "superadmin"
+                )
+            ):
+                return Response(
+                    {"detail": "Device not found or not assigned to you"}, status=404
+                )
 
             # Un-delete (restore) the device and reassign to owner
             soft_deleted.deleted_at = None
@@ -428,46 +450,56 @@ class DeviceViewSet(viewsets.ModelViewSet):
             elif role == Device.DeviceRole.MASTER:
                 soft_deleted.master = None
 
-            # Clear originating order if device is moving to a different owner
-            if (
-                soft_deleted.originating_order_id
-                and soft_deleted.originating_order
-                and soft_deleted.originating_order.user_id != request.user.id
-            ):
-                soft_deleted.originating_order = None
+            if has_valid_fulfillment:
+                soft_deleted.originating_order = fulfillment.order
+                fulfillment.is_claimed = True
+                fulfillment.save(update_fields=["is_claimed"])
+            else:
+                # Clear originating order if device is moving to a different owner (e.g. admin override)
+                if (
+                    soft_deleted.originating_order_id
+                    and soft_deleted.originating_order
+                    and soft_deleted.originating_order.user_id != request.user.id
+                ):
+                    soft_deleted.originating_order = None
 
             soft_deleted.save()
-            if soft_deleted.originating_order_id is None:
+
+            if not has_valid_fulfillment and soft_deleted.originating_order_id is None:
                 if preferred_order:
                     services.assign_device_to_order(
                         soft_deleted, preferred_order=preferred_order
                     )
                 else:
                     services.assign_device_to_order(soft_deleted)
+
             _ensure_subscription(soft_deleted)
             _broadcast_new_device(soft_deleted)
             return Response(DeviceSerializer(soft_deleted).data, status=201)
 
         # If neither active nor soft-deleted found, create new device
-        
-        # Check OrderFulfillment
-        fulfillment = OrderFulfillment.objects.filter(
-            hardware_identifier=hid,
-            deleted_at__isnull=True
-        ).first()
 
         if not fulfillment:
-             # Strict mode: only allow registration if fulfilled (unless superadmin)
-             if not (request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"):
-                 return Response({"detail": "Device ID not authorized. Please contact support."}, status=400)
-        
+            # Strict mode: only allow registration if fulfilled (unless superadmin)
+            if not (
+                request.user.is_superuser
+                or getattr(request.user, "role", None) == "superadmin"
+            ):
+                return Response(
+                    {"detail": "Device ID not authorized. Please contact support."},
+                    status=400,
+                )
+
         if fulfillment:
-              if fulfillment.is_claimed:
-                  return Response({"detail": "Device ID already claimed."}, status=409)
-              if fulfillment.order.user != owner and not (
-                 request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"
-              ):
-                  return Response({"detail": "Device ID belongs to another user."}, status=403)
+            if fulfillment.is_claimed:
+                return Response({"detail": "Device ID already claimed."}, status=409)
+            if fulfillment.order.user != owner and not (
+                request.user.is_superuser
+                or getattr(request.user, "role", None) == "superadmin"
+            ):
+                return Response(
+                    {"detail": "Device ID belongs to another user."}, status=403
+                )
 
         try:
             with transaction.atomic():
@@ -505,7 +537,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
                             )
                         else:
                             services.assign_device_to_order(device)
-                
+
                 _ensure_subscription(device)
                 _broadcast_new_device(device)
                 return Response(DeviceSerializer(device).data, status=201)
@@ -513,7 +545,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             # Surface model validation errors (e.g. missing master for slave) as 400 responses
             return Response(exc.message_dict, status=400)
         except IntegrityError:
-             return Response(
+            return Response(
                 {"detail": "Device already registered by another user"}, status=409
             )
         except OrderAssignmentError as exc:

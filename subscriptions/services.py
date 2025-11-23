@@ -324,6 +324,7 @@ def process_due_subscriptions(
             next_due_at__lte=now,
             device__deleted_at__isnull=True,
         )
+        .exclude(status=DeviceSubscriptionStatus.CANCELLED)
         .select_related("device", "originating_order")
         .order_by("next_due_at")
     )

@@ -36,8 +36,6 @@ class DeviceSerializer(serializers.ModelSerializer):
     )
     mesh_alert = serializers.SerializerMethodField(read_only=True)
     effective_status = serializers.SerializerMethodField(read_only=True)
-    latitude = serializers.SerializerMethodField()
-    longitude = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
@@ -82,15 +80,29 @@ class DeviceSerializer(serializers.ModelSerializer):
             "owner_phone",
         )
 
-    @extend_schema_field(OpenApiTypes.FLOAT)
-    def get_latitude(self, obj: Device) -> float:
-        val = obj.latitude if obj.latitude is not None else Decimal("23.810300")
-        return float(val)
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
 
-    @extend_schema_field(OpenApiTypes.FLOAT)
-    def get_longitude(self, obj: Device) -> float:
-        val = obj.longitude if obj.longitude is not None else Decimal("90.412500")
-        return float(val)
+        # Ensure latitude/longitude are floats and have defaults
+        lat = ret.get("latitude")
+        if lat is None:
+            ret["latitude"] = 23.810300
+        else:
+            try:
+                ret["latitude"] = float(lat)
+            except (ValueError, TypeError):
+                ret["latitude"] = 23.810300
+
+        lon = ret.get("longitude")
+        if lon is None:
+            ret["longitude"] = 90.412500
+        else:
+            try:
+                ret["longitude"] = float(lon)
+            except (ValueError, TypeError):
+                ret["longitude"] = 90.412500
+
+        return ret
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
@@ -215,15 +227,12 @@ class DeviceRegisterSerializer(serializers.Serializer):
         request = self.context.get("request") if hasattr(self, "context") else None
         user = getattr(request, "user", None)
         if user and getattr(user, "is_authenticated", False):
-            self.fields["originating_order_id"].queryset = (
-                Order.objects.filter(
-                    user=user,
-                    order_status=OrderStatus.PAID,
-                    deleted_at__isnull=True,
-                    package__deleted_at__isnull=True,
-                )
-                .order_by("ordered_at", "id")
-            )
+            self.fields["originating_order_id"].queryset = Order.objects.filter(
+                user=user,
+                order_status=OrderStatus.PAID,
+                deleted_at__isnull=True,
+                package__deleted_at__isnull=True,
+            ).order_by("ordered_at", "id")
 
     def validate(self, attrs):
         lat = attrs.get("latitude")
@@ -299,20 +308,25 @@ class DeviceRegisterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "originating_order_id is not available for assignment"
                 )
-            
+
             # Check if we can skip capacity check (if device is already assigned or fulfilled)
             hid = attrs.get("hardware_identifier")
             skip_capacity_check = False
-            
+
             # 1. Check existing device
-            existing_device = Device.objects.filter(hardware_identifier=hid, deleted_at__isnull=True).first()
+            existing_device = Device.objects.filter(
+                hardware_identifier=hid, deleted_at__isnull=True
+            ).first()
             if existing_device and existing_device.originating_order_id == order.pk:
                 skip_capacity_check = True
-            
+
             # 2. Check fulfillment
             if not skip_capacity_check:
                 from products.models import OrderFulfillment
-                fulfillment = OrderFulfillment.objects.filter(hardware_identifier=hid, deleted_at__isnull=True).first()
+
+                fulfillment = OrderFulfillment.objects.filter(
+                    hardware_identifier=hid, deleted_at__isnull=True
+                ).first()
                 if fulfillment and fulfillment.order_id == order.pk:
                     skip_capacity_check = True
 
@@ -320,10 +334,11 @@ class DeviceRegisterSerializer(serializers.Serializer):
                 can_assign, _, message = order_has_capacity(order, role=str(role))
                 if not can_assign:
                     raise serializers.ValidationError(message)
-            
+
             attrs["originating_order"] = order
 
         return attrs
+
 
 class DevicePhoneUpdateSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)

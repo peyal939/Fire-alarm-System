@@ -5,6 +5,7 @@ from contextlib import suppress
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
+from django.utils import timezone
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from . import device_cache
@@ -31,6 +32,7 @@ class DeviceConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._owner_cache: dict[str, int | None] = {}
+        self._subscription_cache: dict[str, bool] = {}
 
     async def connect(self):
         user = self.scope.get("user")
@@ -154,7 +156,9 @@ class DeviceConsumer(AsyncWebsocketConsumer):
                 self._owner_cache[device_id] = payload["owner_id"]
             return True
         owner_id = await self._get_owner_id_for_payload(payload)
-        return owner_id == getattr(user, "id", None)
+        if owner_id != getattr(user, "id", None):
+            return False
+        return await self._check_subscription_access(payload.get("deviceID"))
 
     async def _can_view_device_id(self, device_id: str | None) -> bool:
         if not device_id:
@@ -167,4 +171,31 @@ class DeviceConsumer(AsyncWebsocketConsumer):
         owner_id = self._owner_cache.get(device_id)
         if owner_id is None:
             owner_id = await self._get_owner_id_for_payload({"deviceID": device_id})
-        return owner_id == getattr(user, "id", None)
+        if owner_id != getattr(user, "id", None):
+            return False
+        return await self._check_subscription_access(device_id)
+
+    async def _check_subscription_access(self, device_id: str) -> bool:
+        if not device_id:
+            return False
+
+        # Check cache
+        if device_id in self._subscription_cache:
+            return self._subscription_cache[device_id]
+
+        # DB check
+        has_access = await sync_to_async(self._db_check_subscription)(device_id)
+        self._subscription_cache[device_id] = has_access
+        return has_access
+
+    def _db_check_subscription(self, device_id: str) -> bool:
+        from devices.views import _subscription_access_q
+
+        now = timezone.now()
+        return (
+            Device.objects.filter(
+                hardware_identifier=device_id, deleted_at__isnull=True
+            )
+            .filter(_subscription_access_q(relation="subscription", now=now))
+            .exists()
+        )

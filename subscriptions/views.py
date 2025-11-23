@@ -93,6 +93,19 @@ def admin_subscription_detail(request, pk: int):
                 messages.success(request, "Override window cleared.")
             return redirect(request.path)
 
+        if action == "halt":
+            subscription.status = DeviceSubscriptionStatus.CANCELLED
+            subscription.save(update_fields=["status"])
+            messages.success(request, "Subscription halted (cancelled).")
+            return redirect(request.path)
+
+        if action == "activate":
+            subscription.status = DeviceSubscriptionStatus.ACTIVE
+            subscription.grace_expires_at = None
+            subscription.save(update_fields=["status", "grace_expires_at"])
+            messages.success(request, "Subscription activated.")
+            return redirect(request.path)
+
         if action == "manual" and manual_form.is_valid():
             charge = services.apply_manual_payment(
                 subscription,

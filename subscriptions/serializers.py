@@ -21,11 +21,19 @@ class DeviceSummarySerializer(serializers.ModelSerializer):
 
 class SubscriptionChargeSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    device_id = serializers.IntegerField(
+        source="subscription.device.id", read_only=True
+    )
+    device_name = serializers.CharField(
+        source="subscription.device.device_name", read_only=True
+    )
 
     class Meta:
         model = SubscriptionCharge
         fields = (
             "id",
+            "device_id",
+            "device_name",
             "amount",
             "cycles",
             "status",
