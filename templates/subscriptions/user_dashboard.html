@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}My Subscriptions | apS Fire{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">My Device Subscriptions</h1>
+{% if cards %}
+  <div class="row g-3">
+    {% for card in cards %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <h5 class="card-title mb-0">{{ card.device.device_name|default:"Device" }}</h5>
+              <small class="text-muted">{{ card.device.hardware_identifier }}</small>
+            </div>
+            <span class="badge {% if card.subscription.status == 'active' %}bg-success{% elif card.subscription.status == 'grace' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+              {{ card.subscription.get_status_display }}
+            </span>
+          </div>
+          <p class="mb-1"><strong>Days remaining:</strong> {{ card.days_remaining }}</p>
+          <p class="mb-1"><strong>Next bill:</strong> {{ card.subscription.next_due_at|date:"Y-m-d" }}</p>
+          <p class="mb-3"><strong>Monthly fee:</strong> ৳{{ card.subscription.monthly_amount }}</p>
+          <form method="post" action="{% url 'subscriptions:user-pay' card.subscription.pk %}" class="mt-auto">
+            {% csrf_token %}
+            {{ card.form.subscription_id }}
+            {{ card.form.months.label_tag }}
+            <div class="input-group mb-2">
+              {{ card.form.months }}
+              <span class="input-group-text">month(s)</span>
+            </div>
+            <button class="btn btn-primary w-100">Pay now</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-center text-muted py-5">
+    <h4>No subscriptions yet</h4>
+    <p>Register a device to view its billing status.</p>
+  </div>
+{% endif %}
+{% endblock %}

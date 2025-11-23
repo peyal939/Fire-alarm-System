@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .enums import OrderStatus
+
 
 class AuditSoftDeleteModel(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -56,13 +58,6 @@ class Package(AuditSoftDeleteModel):
 
 
 class Order(AuditSoftDeleteModel):
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        PAID = "paid", "Paid"
-        CANCELLED = "cancelled", "Cancelled"
-        FAILED = "failed", "Failed"
-        DELIVERED = "delivered", "Delivered"
-
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders"
     )
@@ -70,7 +65,7 @@ class Order(AuditSoftDeleteModel):
         Package, on_delete=models.PROTECT, related_name="orders"
     )
     number_of_master_devices = models.PositiveIntegerField(default=1)
-    number_of_slave_devices = models.PositiveIntegerField(default=1)
+    number_of_slave_devices = models.PositiveIntegerField(default=0)
     quantity = models.PositiveIntegerField()
     # renamed from total_amount -> amount
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -86,19 +81,53 @@ class Order(AuditSoftDeleteModel):
     customer_post_code = models.CharField(max_length=32, blank=True)
     customer_email = models.CharField(max_length=254, blank=True)
     order_status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.PENDING
+        max_length=16, choices=OrderStatus.choices, default=OrderStatus.PENDING
     )
     gateway_transaction_id = models.CharField(max_length=128, blank=True)
     gateway_response = models.JSONField(null=True, blank=True)
     shipping_address = models.TextField(blank=True)
     ordered_at = models.DateTimeField(default=timezone.now, db_index=True)
+    assigned_devices = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of device registrations already linked to this order",
+    )
 
     class Meta:
         ordering = ["-ordered_at"]
         indexes = [
             models.Index(fields=["user", "ordered_at"]),
             models.Index(fields=["package", "ordered_at"]),
+            models.Index(fields=["assigned_devices"]),
         ]
 
     def __str__(self) -> str:  # pragma: no cover
         return f"Order {self.pk} ({self.order_status})"
+
+    @property
+    def remaining_device_slots(self) -> int:
+        """Return how many device registrations can still be linked to this order."""
+        remaining = (self.quantity or 0) - (self.assigned_devices or 0)
+        return remaining if remaining > 0 else 0
+
+
+class OrderFulfillment(AuditSoftDeleteModel):
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="fulfillments"
+    )
+    hardware_identifier = models.CharField(max_length=64, unique=True)
+    device_role = models.CharField(
+        max_length=10,
+        choices=[("master", "Master"), ("slave", "Slave")],
+        default="master",
+    )
+    master_hardware_identifier = models.CharField(max_length=64, null=True, blank=True)
+    is_claimed = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["hardware_identifier"]),
+            models.Index(fields=["order", "is_claimed"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.hardware_identifier} ({self.device_role})"

@@ -6,6 +6,8 @@ from django.db import models
 from django.db.models import Q, F
 from django.utils import timezone
 
+from .enums import AlertStatus
+
 
 class AuditSoftDeleteModel(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -76,6 +78,14 @@ class Device(AuditSoftDeleteModel):
         related_name="slaves",
         on_delete=models.PROTECT,
     )
+    originating_order = models.ForeignKey(
+        "products.Order",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="devices",
+        help_text="Order that supplied this physical device",
+    )
     latitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
@@ -85,7 +95,7 @@ class Device(AuditSoftDeleteModel):
     phone_number = models.CharField(max_length=16, null=True, blank=True)
     phone_number_updated_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, blank=True)
-    registered_at = models.DateTimeField(default=timezone.now)
+    registered_at = models.DateTimeField(null=True, blank=True)
     last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
 
     # --- Runtime / derived properties (not stored) ---------------------------------
@@ -117,6 +127,7 @@ class Device(AuditSoftDeleteModel):
             models.Index(fields=["hardware_identifier"]),
             models.Index(fields=["device_role"]),
             models.Index(fields=["master"]),
+            models.Index(fields=["originating_order"]),
         ]
         # Default ordering surfaces most recently active devices first while preserving stability
         ordering = ["-last_seen", "-registered_at"]
@@ -231,14 +242,10 @@ class Telemetry(AuditSoftDeleteModel):
 
 
 class Alert(AuditSoftDeleteModel):
-    class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        RESOLVED = "resolved", "Resolved"
-
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="alerts")
     alert_type = models.CharField(max_length=64)
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.OPEN
+        max_length=16, choices=AlertStatus, default=AlertStatus.OPEN
     )
     triggered_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_triggered_at = models.DateTimeField(default=timezone.now, db_index=True)

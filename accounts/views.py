@@ -4,7 +4,7 @@ from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -49,6 +49,41 @@ def _resolve_user(identifier: str):
         return User.objects.filter(email=identifier.lower()).first()
     variants = phone_variants(identifier) or [identifier]
     return User.objects.filter(phone_number__in=variants).first()
+
+
+class IsSuperOrRoleSuperAdmin(BasePermission):
+    """Allow access only to superusers or users with role='superadmin'."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "is_superuser", False):
+            return True
+        return getattr(user, "role", "") == "superadmin"
+
+
+@extend_schema(
+    tags=["Admin"],
+    summary="List users (admin only)",
+    responses={200: UserDetailSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsSuperOrRoleSuperAdmin])
+def user_list_admin(request):
+    """Return all users or filter by email/phone via ?q= for admin dashboard."""
+
+    q = (request.query_params.get("q") or "").strip()
+    qs = User.objects.all().order_by("id")
+    if q:
+        if "@" in q:
+            qs = qs.filter(email__icontains=q.lower())
+        else:
+            variants = phone_variants(q) or [q]
+            qs = qs.filter(phone_number__in=variants)
+
+    serializer = UserDetailSerializer(qs[:200], many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):

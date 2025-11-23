@@ -78,8 +78,24 @@ class OTPSessionManager:
         metadata: Optional[Dict[str, Any]] = None,
         skip_rate_limits: bool = False,
     ) -> PhoneOTP:
-        if not skip_rate_limits and not self._within_daily_limit(phone_number):
-            raise ValueError("Daily OTP request limit exceeded for this number")
+        if not skip_rate_limits:
+            if not self._within_daily_limit(phone_number):
+                raise ValueError("Daily OTP request limit exceeded for this number")
+
+            # Check for cooldown violation (prevent spamming new sessions)
+            last_otp = (
+                PhoneOTP.objects.filter(phone_number=phone_number, purpose=self.purpose)
+                .order_by("-created_at")
+                .first()
+            )
+
+            if last_otp and last_otp.last_sent_at and not last_otp.is_verified:
+                elapsed = (timezone.now() - last_otp.last_sent_at).total_seconds()
+                if elapsed < self.cfg.resend_cooldown_seconds:
+                    wait_time = int(self.cfg.resend_cooldown_seconds - elapsed)
+                    raise ValueError(
+                        f"Please wait {wait_time} seconds before requesting a new OTP."
+                    )
 
         code = self._generate_code()
         expires_at = timezone.now() + timedelta(seconds=self.cfg.ttl_seconds)

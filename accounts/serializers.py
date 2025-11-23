@@ -20,6 +20,7 @@ class DeviceSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Device
+        ref_name = "AccountDeviceSummary"
         fields = (
             "id",
             "hardware_identifier",

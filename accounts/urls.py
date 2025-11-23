@@ -12,6 +12,7 @@ from .views import (
     me,
     change_password,
     user_detail_admin,
+    user_list_admin,
 )
 
 urlpatterns = [
@@ -30,4 +31,5 @@ urlpatterns = [
     path("me", me, name="me"),
     path("change-password", change_password, name="change-password"),
     path("users/<int:pk>", user_detail_admin, name="user-detail-admin"),
+    path("users/", user_list_admin, name="user-list-admin"),
 ]

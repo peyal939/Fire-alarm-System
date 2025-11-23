@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from devices.alarm_state import schedule_next_reminder
+from devices.enums import AlertStatus
 from devices.models import Alert, DeviceAlarmState
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class Command(BaseCommand):
 
         for state in reminder_states:
             alert = state.active_alert
-            if not alert or alert.status != Alert.Status.OPEN:
+            if not alert or alert.status != AlertStatus.OPEN:
                 state.next_reminder_at = None
                 state.save(update_fields=["next_reminder_at", "updated_at"])
                 skipped += 1
@@ -62,7 +63,7 @@ class Command(BaseCommand):
                     .get(pk=state.pk)
                 )
                 alert = locked_state.active_alert
-                if not alert or alert.status != Alert.Status.OPEN:
+                if not alert or alert.status != AlertStatus.OPEN:
                     locked_state.next_reminder_at = None
                     locked_state.save(update_fields=["next_reminder_at", "updated_at"])
                     skipped += 1

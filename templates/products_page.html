@@ -2,7 +2,8 @@
 {% block title %}Products · apS Fire Alarm{% endblock %}
 {% block content %}
 <div class="py-3" id="productsPage"
-     data-user-id="{{ request.user.id }}">
+  data-user-id="{{ request.user.id }}"
+  data-is-admin="{% if request.user.is_superuser or request.user.role == 'superadmin' %}true{% else %}false{% endif %}">
 
   <div class="row g-4">
     <div class="col-12 col-lg-7">
@@ -96,12 +97,47 @@
       </div>
     </div>
   </div>
+
+  <!-- Fulfillment Modal -->
+  <div class="modal fade" id="fulfillModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Fulfill Order #<span id="fulfillOrderIdDisplay"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="fulfillForm">
+            <div id="fulfillMasterSection" class="mb-4">
+                <h6 class="border-bottom pb-2">Master Devices (<span id="fulfillMasterCount">0</span>)</h6>
+                <div id="fulfillMasterRows"></div>
+            </div>
+            
+            <div id="fulfillSlaveSection" class="mb-4">
+                <h6 class="border-bottom pb-2">Slave Devices (<span id="fulfillSlaveCount">0</span>)</h6>
+                <div id="fulfillSlaveRows"></div>
+            </div>
+
+            <div class="alert alert-danger d-none" id="fulfillError"></div>
+            <div class="alert alert-success d-none" id="fulfillSuccess">Order fulfilled successfully!</div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="fulfillSubmitBtn">Fulfill Order</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
 (function(){
-  const userId = document.getElementById('productsPage').dataset.userId;
+  const pageRoot = document.getElementById('productsPage');
+  const userId = pageRoot.dataset.userId;
+  const isAdmin = pageRoot.dataset.isAdmin === 'true';
   const pkgLoading = document.getElementById('pkgLoading');
   const pkgEmpty = document.getElementById('pkgEmpty');
   const packagesTable = document.getElementById('packagesTable');
@@ -137,6 +173,16 @@
     failed: 'bg-danger'
   };
 
+  function computePackageTotal(pkg, quantity) {
+    if (!pkg) return null;
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return null;
+    const deviceRate = Number(pkg.price_per_device ?? 0);
+    const mrfRate = Number(pkg.mrf ?? 0);
+    const total = qty * (deviceRate + mrfRate);
+    return Number.isFinite(total) ? total : null;
+  }
+
   async function fetchPackages() {
     pkgLoading.style.display = '';
     try {
@@ -153,11 +199,21 @@
     }
   }
 
+  function resolveOrderUserId(order) {
+    if (!order || order.user === undefined || order.user === null) {
+      return null;
+    }
+    if (typeof order.user === 'object') {
+      return order.user.id ?? order.user.pk ?? null;
+    }
+    return order.user;
+  }
+
   async function fetchUserOrders() {
     ordersPlaced.innerHTML = '';
     noOrdersNote.style.display = '';
     try {
-      const orders = await apiGet(`/orders/${userId}/`);
+      const orders = await apiGet(isAdmin ? '/orders/' : `/orders/${userId}/`);
       if (Array.isArray(orders) && orders.length) {
         orders.forEach(order => appendOrderCard(order));
         noOrdersNote.style.display = 'none';
@@ -211,11 +267,11 @@
   function updateCalc() {
     const pkg = pkgMap[orderPackage.value];
     const qty = parseInt(orderQty.value, 10);
-    if (pkg && Number.isFinite(qty)) {
-      const total = parseFloat(pkg.price_per_device) * qty;
+    const total = computePackageTotal(pkg, qty);
+    if (total !== null) {
       calcTotal.textContent = `Total: ${formatMoney(total)}`;
     } else {
-      calcTotal.textContent = 'Total: ';
+      calcTotal.textContent = 'Total: —';
     }
   }
 
@@ -242,18 +298,39 @@
 
   function appendOrderCard(order) {
     noOrdersNote.style.display = 'none';
-    const pkgName = (order.package && order.package.name)
-        ? order.package.name
-        : (pkgMap[order.package] && pkgMap[order.package].name) || `Package`;
-  const total = order.amount !== undefined
-    ? formatMoney(order.amount)
-    : (pkgMap[order.package] ? formatMoney(pkgMap[order.package].price_per_device * order.quantity) : '—');
+    const pkgData = (order.package && order.package.name)
+        ? order.package
+        : pkgMap[order.package];
+    const pkgName = pkgData && pkgData.name ? pkgData.name : 'Package';
+    const rawTotal = order.amount !== undefined
+      ? order.amount
+      : computePackageTotal(pkgData, order.quantity);
+    const total = formatMoney(rawTotal);
     const created = order.ordered_at || order.created_at || '';
     const nMaster = order.number_of_master_devices;
     const nSlave = order.number_of_slave_devices;
     const statusNorm = (order.order_status || '').toLowerCase();
-    const canMarkDelivered = statusNorm === 'paid';
+    const orderUserId = resolveOrderUserId(order);
+    const belongsToViewer = orderUserId !== null && String(orderUserId) === String(userId);
+    const canMarkDelivered = statusNorm === 'paid' && isAdmin;
+    const canFulfill = isAdmin && statusNorm === 'paid' && (order.assigned_devices || 0) < (nMaster + nSlave);
+    const basePayNow = statusNorm === 'pending' || statusNorm === 'failed';
+    const amountValue = Number(order.amount);
+    const payEligible = belongsToViewer && basePayNow && (!Number.isFinite(amountValue) || amountValue > 0);
     const badgeClass = statusBadgeClass[statusNorm] || 'bg-secondary';
+    const actions = [];
+    if (payEligible) {
+      actions.push(`<button class="btn btn-sm btn-primary" data-action="pay-now" data-order-id="${order.id}">Pay now</button>`);
+    }
+    if (canFulfill) {
+      actions.push(`<button class="btn btn-sm btn-warning" data-action="fulfill-order" data-order-id="${order.id}">Fulfill</button>`);
+    }
+    if (canMarkDelivered) {
+      actions.push(`<button class="btn btn-sm btn-outline-success" data-action="mark-delivered" data-order-id="${order.id}">Mark delivered</button>`);
+    }
+    const actionsHtml = actions.length
+      ? `<div class="d-flex justify-content-end gap-2 mt-2">${actions.join('')}</div>`
+      : '';
     const card = document.createElement('div');
     card.className = 'card border-success-subtle';
     card.innerHTML = `
@@ -267,14 +344,12 @@
           <div><span class="text-muted">Total:</span> ${total}</div>
           ${order.customer_name ? `<div><span class="text-muted">Customer:</span> ${escapeHtml(order.customer_name)}</div>` : ''}
           ${order.customer_phone ? `<div><span class="text-muted">Phone:</span> ${escapeHtml(order.customer_phone)}</div>` : ''}
+          ${isAdmin && !belongsToViewer && orderUserId !== null ? `<div><span class="text-muted">User ID:</span> ${escapeHtml(orderUserId)}</div>` : ''}
           ${order.shipping_address ? `<div><span class="text-muted">Address:</span> ${escapeHtml(order.shipping_address)}</div>` : ''}
           ${created ? `<div class="text-muted">Time: ${escapeHtml(created)}</div>` : ''}
+          ${(order.assigned_devices || 0) > 0 ? `<div class="text-success fw-bold">Fulfilled (${order.assigned_devices} devices)</div>` : ''}
         </div>
-        ${canMarkDelivered ? `
-          <div class="text-end mt-2">
-            <button class="btn btn-sm btn-outline-success" data-action="mark-delivered" data-order-id="${order.id}">Mark delivered</button>
-          </div>
-        ` : ''}
+        ${actionsHtml}
         <div class="text-danger small order-card-error" style="display:none;"></div>
       </div>
     `;
@@ -283,22 +358,66 @@
     const actionBtn = card.querySelector('[data-action="mark-delivered"]');
     if (actionBtn) {
       actionBtn.addEventListener('click', () => {
-        markOrderDelivered(order, actionBtn, badgeEl, errorEl);
+        markOrderDelivered(order, orderUserId, actionBtn, badgeEl, errorEl);
+      });
+    }
+    const fulfillBtn = card.querySelector('[data-action="fulfill-order"]');
+    if (fulfillBtn) {
+      fulfillBtn.addEventListener('click', () => {
+        openFulfillModal(order, orderUserId);
+      });
+    }
+    const payBtn = card.querySelector('[data-action="pay-now"]');
+    if (payBtn) {
+      payBtn.addEventListener('click', () => {
+        startOrderPayment(order, orderUserId, payBtn, errorEl);
       });
     }
     ordersPlaced.prepend(card);
   }
 
-  async function markOrderDelivered(order, button, badgeEl, errorEl) {
+  async function startOrderPayment(order, orderUserId, button, errorEl) {
     if (!order || !order.id) return;
     if (button.disabled) return;
+    if (orderUserId === null) return;
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Redirecting…';
+    try {
+      const payload = await apiPost(`/orders/${orderUserId}/${order.id}/pay/`, {});
+      const checkoutUrl = payload && payload.checkout_url;
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
+      }
+      const detail = payload && payload.detail ? payload.detail : null;
+      throw new Error(detail || 'Missing checkout URL.');
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = originalText;
+      const message =
+        (err && err.body && err.body.detail) ||
+        err?.detail ||
+        err?.message ||
+        'Unable to start payment.';
+      errorEl.textContent = message;
+      errorEl.style.display = '';
+    }
+  }
+
+  async function markOrderDelivered(order, orderUserId, button, badgeEl, errorEl) {
+    if (!order || !order.id) return;
+    if (button.disabled) return;
+    if (orderUserId === null) return;
     errorEl.style.display = 'none';
     errorEl.textContent = '';
     const originalText = button.textContent;
     button.disabled = true;
     button.textContent = 'Updating…';
     try {
-      const updated = await apiPost(`/orders/update_status/${userId}/${order.id}/`, {
+      const updated = await apiPost(`/orders/update_status/${orderUserId}/${order.id}/`, {
         order_status: 'delivered'
       });
       const newStatus = (updated && updated.order_status) || 'delivered';
@@ -368,12 +487,207 @@
       calcTotal.textContent = 'Total: ';
     } catch (err) {
       orderMsg.classList.add('text-danger');
-      orderMsg.textContent = (err && err.detail) ? err.detail : 'Failed to create order.';
+      const backendMsg = err?.body?.detail || (typeof err?.body === 'string' ? err.body : null);
+      orderMsg.textContent = backendMsg && backendMsg.trim() ? backendMsg : (err?.message || 'Failed to create order.');
     } finally {
       orderSubmit.textContent = 'Create Order';
       validateForm();
     }
   });
+
+  // --- Fulfillment Modal Logic ---
+  const fulfillModalEl = document.getElementById('fulfillModal');
+  let fulfillModal;
+  try {
+    if (window.bootstrap && window.bootstrap.Modal) {
+      fulfillModal = new bootstrap.Modal(fulfillModalEl);
+    } else {
+      // Fallback if bootstrap global isn't directly available but loaded
+      fulfillModal = new bootstrap.Modal(fulfillModalEl);
+    }
+  } catch (e) {
+    console.warn('Bootstrap modal init failed', e);
+  }
+
+  const fulfillOrderIdDisplay = document.getElementById('fulfillOrderIdDisplay');
+  const fulfillMasterSection = document.getElementById('fulfillMasterSection');
+  const fulfillSlaveSection = document.getElementById('fulfillSlaveSection');
+  const fulfillMasterRows = document.getElementById('fulfillMasterRows');
+  const fulfillSlaveRows = document.getElementById('fulfillSlaveRows');
+  const fulfillMasterCount = document.getElementById('fulfillMasterCount');
+  const fulfillSlaveCount = document.getElementById('fulfillSlaveCount');
+  const fulfillError = document.getElementById('fulfillError');
+  const fulfillSuccess = document.getElementById('fulfillSuccess');
+  const fulfillSubmitBtn = document.getElementById('fulfillSubmitBtn');
+  
+  let currentFulfillOrder = null;
+  let currentFulfillUserId = null;
+
+  function openFulfillModal(order, orderUserId) {
+    currentFulfillOrder = order;
+    currentFulfillUserId = orderUserId;
+    fulfillOrderIdDisplay.textContent = order.id;
+    fulfillError.classList.add('d-none');
+    fulfillSuccess.classList.add('d-none');
+    fulfillSubmitBtn.disabled = false;
+    fulfillSubmitBtn.textContent = 'Fulfill Order';
+
+    const nMaster = order.number_of_master_devices || 0;
+    const nSlave = order.number_of_slave_devices || 0;
+
+    fulfillMasterCount.textContent = nMaster;
+    fulfillSlaveCount.textContent = nSlave;
+
+    // Generate Master Rows
+    fulfillMasterRows.innerHTML = '';
+    if (nMaster > 0) {
+        fulfillMasterSection.style.display = '';
+        for (let i = 0; i < nMaster; i++) {
+            const row = document.createElement('div');
+            row.className = 'row mb-2 align-items-center';
+            row.innerHTML = `
+                <div class="col-auto"><span class="badge bg-primary">Master ${i+1}</span></div>
+                <div class="col">
+                    <input type="text" class="form-control master-id-input" placeholder="Hardware ID" required oninput="updateMasterDropdowns()">
+                </div>
+            `;
+            fulfillMasterRows.appendChild(row);
+        }
+    } else {
+        fulfillMasterSection.style.display = 'none';
+    }
+
+    // Generate Slave Rows
+    fulfillSlaveRows.innerHTML = '';
+    if (nSlave > 0) {
+        fulfillSlaveSection.style.display = '';
+        for (let i = 0; i < nSlave; i++) {
+            const row = document.createElement('div');
+            row.className = 'row mb-2 align-items-center';
+            row.innerHTML = `
+                <div class="col-auto"><span class="badge bg-secondary">Slave ${i+1}</span></div>
+                <div class="col">
+                    <input type="text" class="form-control slave-id-input" placeholder="Hardware ID" required>
+                </div>
+                <div class="col">
+                    <select class="form-select slave-master-select">
+                        <option value="">Select Master...</option>
+                    </select>
+                </div>
+            `;
+            fulfillSlaveRows.appendChild(row);
+        }
+        // Initial population of dropdowns (empty but ready)
+        updateMasterDropdowns();
+    } else {
+        fulfillSlaveSection.style.display = 'none';
+    }
+
+    if (fulfillModal) fulfillModal.show();
+  }
+
+  // Expose globally so inline event handler can find it
+  window.updateMasterDropdowns = function() {
+      const masterInputs = document.querySelectorAll('.master-id-input');
+      const slaveSelects = document.querySelectorAll('.slave-master-select');
+      
+      const masterIds = Array.from(masterInputs).map(input => input.value.trim()).filter(val => val !== '');
+      
+      slaveSelects.forEach(select => {
+          const currentVal = select.value;
+          // Clear existing options except the first one
+          while (select.options.length > 1) {
+              select.remove(1);
+          }
+          
+          masterIds.forEach(id => {
+              const opt = document.createElement('option');
+              opt.value = id;
+              opt.textContent = id;
+              select.appendChild(opt);
+          });
+          
+          // Restore selection if still valid
+          if (masterIds.includes(currentVal)) {
+              select.value = currentVal;
+          } else if (masterIds.length === 1) {
+              // Auto-select if there's only one master
+              select.value = masterIds[0];
+          }
+      });
+  };
+
+  if (fulfillSubmitBtn) {
+    fulfillSubmitBtn.addEventListener('click', async () => {
+        if (!currentFulfillOrder) return;
+        
+        fulfillError.classList.add('d-none');
+        
+        // Collect Data
+        const masterInputs = document.querySelectorAll('.master-id-input');
+        const slaveInputs = document.querySelectorAll('.slave-id-input');
+        const slaveSelects = document.querySelectorAll('.slave-master-select');
+
+        const masterIds = Array.from(masterInputs).map(input => input.value.trim());
+        const slaveData = [];
+
+        // Validate Masters
+        if (masterIds.some(id => !id)) {
+            fulfillError.textContent = "All Master Device IDs are required.";
+            fulfillError.classList.remove('d-none');
+            return;
+        }
+
+        // Validate Slaves
+        let slaveError = false;
+        slaveInputs.forEach((input, index) => {
+            const hid = input.value.trim();
+            const masterId = slaveSelects[index].value;
+            
+            if (!hid) {
+                slaveError = true;
+                return;
+            }
+            slaveData.push({
+                id: hid,
+                master_id: masterId || null // Allow null if user really wants to (or enforce?)
+            });
+        });
+
+        if (slaveError) {
+            fulfillError.textContent = "All Slave Device IDs are required.";
+            fulfillError.classList.remove('d-none');
+            return;
+        }
+
+        fulfillSubmitBtn.disabled = true;
+        fulfillSubmitBtn.textContent = 'Processing...';
+
+        try {
+            const body = {
+                master_ids: masterIds,
+                slave_data: slaveData
+            };
+            
+            await apiPost(`/orders/${currentFulfillUserId}/${currentFulfillOrder.id}/fulfill/`, body);
+            
+            fulfillSuccess.classList.remove('d-none');
+            fulfillSubmitBtn.textContent = 'Fulfilled';
+            
+            setTimeout(() => {
+                if (fulfillModal) fulfillModal.hide();
+                fetchUserOrders();
+            }, 1500);
+
+        } catch (err) {
+            fulfillSubmitBtn.disabled = false;
+            fulfillSubmitBtn.textContent = 'Fulfill Order';
+            const msg = (err && err.body && err.body.detail) || err.detail || (err.message || 'Failed to fulfill order');
+            fulfillError.textContent = msg;
+            fulfillError.classList.remove('d-none');
+        }
+    });
+  }
 
   fetchPackages();
   fetchUserOrders();

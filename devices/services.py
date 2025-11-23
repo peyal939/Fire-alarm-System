@@ -3,13 +3,13 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 import paho.mqtt.client as mqtt
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import DatabaseError, models
+from django.db import DatabaseError, models, transaction
 from django.utils import timezone
 
 from .alarm_state import record_high_smoke, record_safe_smoke, reset_state_for_alert
@@ -21,9 +21,219 @@ from .constants import (
     WebSocketBroadcastError,
     normalize_device_status,
 )
+from .enums import AlertStatus
 from .models import Alert, Device, Telemetry
+from products.models import Order
+from products.enums import OrderStatus
 
 logger = logging.getLogger(__name__)
+
+
+class OrderAssignmentError(Exception):
+    """Raised when a device cannot be attached to the requested order."""
+
+
+def get_order_assignment_counts(order: Order) -> dict:
+    """Return current assignment totals (active only) for the given order."""
+
+    aggregates = Device.objects.filter(
+        originating_order=order, deleted_at__isnull=True
+    ).aggregate(
+        total=models.Count("id"),
+        masters=models.Count(
+            "id",
+            filter=models.Q(device_role=Device.DeviceRole.MASTER),
+        ),
+        slaves=models.Count(
+            "id",
+            filter=models.Q(device_role=Device.DeviceRole.SLAVE),
+        ),
+    )
+
+    return {
+        "total": aggregates.get("total") or 0,
+        "masters": aggregates.get("masters") or 0,
+        "slaves": aggregates.get("slaves") or 0,
+    }
+
+
+def order_has_capacity(order: Order, *, role: str) -> Tuple[bool, dict, str]:
+    """Check whether *order* can accommodate one more device of *role*."""
+
+    counts = get_order_assignment_counts(order)
+    role_value = str(role or Device.DeviceRole.MASTER)
+
+    total_limit = order.quantity or 0
+    next_total = counts["total"] + 1
+    if next_total > total_limit:
+        return False, counts, "Order has no remaining device slots."
+
+    if role_value == Device.DeviceRole.MASTER:
+        master_limit = order.number_of_master_devices or 0
+        if master_limit <= 0 or counts["masters"] + 1 > master_limit:
+            return False, counts, "Order has no remaining master device slots."
+
+    if role_value == Device.DeviceRole.SLAVE:
+        slave_limit = order.number_of_slave_devices or 0
+        if slave_limit <= 0 or counts["slaves"] + 1 > slave_limit:
+            return False, counts, "Order has no remaining slave device slots."
+
+    return True, counts, ""
+
+
+def assign_device_to_order(
+    device: Device, preferred_order: Optional[Order] = None
+) -> Optional[Order]:
+    """Assign the device to a paid order with available slots.
+
+    If ``preferred_order`` is provided we try to use it first (after validating
+    ownership, payment status, and remaining capacity). Otherwise we fall back to
+    the earliest eligible order. In all cases the order's ``assigned_devices``
+    counter is incremented inside a transaction to prevent double assignment.
+    """
+
+    if not device or not getattr(device, "pk", None):
+        logger.warning("assign_device_to_order called with unsaved device")
+        return None
+
+    if getattr(device, "originating_order_id", None):
+        return device.originating_order
+
+    user_id = getattr(device, "user_id", None)
+    if not user_id:
+        logger.warning(
+            "Device %s is missing user context for order assignment", device.pk
+        )
+        return None
+
+    try:
+        with transaction.atomic():
+            if preferred_order and getattr(preferred_order, "pk", None):
+                order = (
+                    Order.objects.select_for_update()
+                    .filter(
+                        pk=preferred_order.pk,
+                        user_id=user_id,
+                        order_status=OrderStatus.PAID,
+                        deleted_at__isnull=True,
+                        package__deleted_at__isnull=True,
+                    )
+                    .first()
+                )
+                if not order:
+                    logger.info(
+                        "Preferred order %s is not available for user %s",
+                        getattr(preferred_order, "pk", None),
+                        user_id,
+                    )
+                    raise OrderAssignmentError(
+                        "Selected order is not available for assignment."
+                    )
+
+                ok, counts, message = order_has_capacity(
+                    order, role=device.device_role
+                )
+                if not ok:
+                    logger.info(
+                        "Preferred order %s rejected device %s: %s",
+                        order.pk,
+                        device.pk,
+                        message,
+                    )
+                    raise OrderAssignmentError(message)
+
+                order.assigned_devices = counts["total"] + 1
+                order.save(update_fields=["assigned_devices"])
+                device.originating_order_id = order.pk
+                device.save(update_fields=["originating_order"])
+                try:
+                    from subscriptions.services import ensure_device_subscription
+
+                    ensure_device_subscription(device)
+                except Exception as sub_exc:  # pragma: no cover - best effort hook
+                    logger.warning(
+                        "Failed to ensure subscription for device %s: %s",
+                        device.pk,
+                        sub_exc,
+                    )
+                logger.info(
+                    "Assigned device %s to preferred order %s",
+                    device.pk,
+                    order.pk,
+                )
+                return order
+
+            orders = (
+                Order.objects.select_for_update()
+                .filter(
+                    user_id=user_id,
+                    order_status=OrderStatus.PAID,
+                    deleted_at__isnull=True,
+                    package__deleted_at__isnull=True,
+                    assigned_devices__lt=models.F("quantity"),
+                )
+                .order_by("ordered_at", "id")
+            )
+
+            rejection_message = (
+                "No paid orders with remaining device slots for this account."
+            )
+            saw_order = False
+            for order in orders:
+                saw_order = True
+                ok, counts, message = order_has_capacity(
+                    order, role=device.device_role
+                )
+                if not ok:
+                    if message:
+                        rejection_message = message
+                    continue
+
+                order.assigned_devices = counts["total"] + 1
+                order.save(update_fields=["assigned_devices"])
+                device.originating_order_id = order.pk
+                device.save(update_fields=["originating_order"])
+                try:
+                    from subscriptions.services import ensure_device_subscription
+
+                    ensure_device_subscription(device)
+                except Exception as sub_exc:  # pragma: no cover - best effort hook
+                    logger.warning(
+                        "Failed to ensure subscription for device %s: %s",
+                        device.pk,
+                        sub_exc,
+                    )
+                logger.info(
+                    "Assigned device %s to order %s via queue",
+                    device.pk,
+                    order.pk,
+                )
+                return order
+
+            if saw_order:
+                logger.info(
+                    "No eligible paid orders for device %s. Reason: %s",
+                    device.pk,
+                    rejection_message,
+                )
+                raise OrderAssignmentError(rejection_message)
+
+            logger.info(
+                "No paid orders available for user %s when registering device %s",
+                user_id,
+                device.pk,
+            )
+            return None
+    except OrderAssignmentError:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Unexpected error assigning device %s to order queue: %s",
+            device.pk,
+            exc,
+            exc_info=True,
+        )
+        return None
 
 
 def publish_device_phone_assignment(device: Device, *, phone_number: str) -> None:
@@ -231,14 +441,14 @@ def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
                 Alert.objects.filter(
                     device__in=[d.id for d in members],
                     alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
             )
 
             if alerts:
                 resolved_at = timezone.now()
                 for alert in alerts:
-                    alert.status = Alert.Status.RESOLVED
+                    alert.status = AlertStatus.RESOLVED
                     alert.resolved_at = resolved_at
                     alert.save(update_fields=["status", "resolved_at"])
                     reset_state_for_alert(alert)
@@ -308,8 +518,8 @@ def recompute_mesh_after_change(device: Device) -> None:
             Alert.objects.filter(
                 device__in=[d.id for d in members],
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
-            ).update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+                status=AlertStatus.OPEN,
+            ).update(status=AlertStatus.RESOLVED, resolved_at=timezone.now())
             return
 
         # Step 4: Check if any online member currently has an open alert
@@ -317,7 +527,7 @@ def recompute_mesh_after_change(device: Device) -> None:
             Alert.objects.filter(
                 device_id__in=[m.id for m in online_members],
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             ).values_list("device_id", flat=True)
         )
 
@@ -346,14 +556,14 @@ def recompute_mesh_after_change(device: Device) -> None:
                 Alert.objects.filter(
                     device__in=[d.id for d in members],
                     alert_type=AlertType.SMOKE_HIGH,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
             )
 
             if alerts:
                 resolved_at = timezone.now()
                 for alert in alerts:
-                    alert.status = Alert.Status.RESOLVED
+                    alert.status = AlertStatus.RESOLVED
                     alert.resolved_at = resolved_at
                     alert.save(update_fields=["status", "resolved_at"])
                     reset_state_for_alert(alert)
@@ -424,10 +634,21 @@ def ingest_telemetry(
 
     # Update device's last activity timestamp and current status
     # The is_online property uses last_seen to determine if device is active
+    # Optimization: Throttle updates to reduce DB write load.
+    # Only update if status changed OR it's been > 10s since last update.
     try:
-        device.status = status_lower
-        device.last_seen = timezone.now()
-        device.save(update_fields=["status", "last_seen"])
+        should_save = False
+        now = timezone.now()
+
+        if device.status != status_lower:
+            should_save = True
+        elif not device.last_seen or (now - device.last_seen).total_seconds() > 10:
+            should_save = True
+
+        if should_save:
+            device.status = status_lower
+            device.last_seen = now
+            device.save(update_fields=["status", "last_seen"])
     except DatabaseError as e:
         logger.error(f"Failed to update device {device.id} status: {e}")
 
@@ -505,13 +726,13 @@ def ingest_telemetry(
             has_open = Alert.objects.filter(
                 device=device,
                 alert_type=AlertType.DEVICE_STATUS,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             ).exists()
             if not has_open:
                 alert = Alert.objects.create(
                     device=device,
                     alert_type=AlertType.DEVICE_STATUS,
-                    status=Alert.Status.OPEN,
+                    status=AlertStatus.OPEN,
                 )
                 logger.info(
                     f"Created device_status alert for device {device.id} (status: {status_lower})"
@@ -544,10 +765,10 @@ def ingest_telemetry(
             qs = Alert.objects.filter(
                 device=device,
                 alert_type=AlertType.DEVICE_STATUS,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             )
             if qs.exists():
-                qs.update(status=Alert.Status.RESOLVED, resolved_at=timezone.now())
+                qs.update(status=AlertStatus.RESOLVED, resolved_at=timezone.now())
                 logger.info(f"Resolved device_status alert for device {device.id}")
 
     except DatabaseError as e:
@@ -587,7 +808,7 @@ def _broadcast_alert_resolution(
         mesh_open = Alert.objects.filter(
             device_id__in=member_ids,
             alert_type=AlertType.SMOKE_HIGH,
-            status=Alert.Status.OPEN,
+            status=AlertStatus.OPEN,
         ).exists()
 
         # Convert timestamp to Unix epoch (integer seconds)

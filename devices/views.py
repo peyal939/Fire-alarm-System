@@ -3,8 +3,11 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 import logging
 
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
+from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status, viewsets, filters
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
@@ -21,6 +24,7 @@ from drf_spectacular.utils import (
 )
 
 from . import services
+from .enums import AlertStatus
 from .models import Device, Telemetry, Alert
 from .serializers import (
     DeviceSerializer,
@@ -31,7 +35,12 @@ from .serializers import (
     DevicePhoneUpdateSerializer,
 )
 from .constants import DeviceConfigurationPublishError
+from .services import OrderAssignmentError
 from .alarm_state import reset_state_for_alert, schedule_next_reminder
+from subscriptions.enums import DeviceSubscriptionStatus
+from subscriptions.models import DeviceSubscription
+from subscriptions.services import ensure_device_subscription
+from products.models import OrderFulfillment
 
 logger = logging.getLogger(__name__)
 
@@ -85,25 +94,64 @@ def _broadcast_device_removed(device: Device) -> None:
         )
 
 
+def _ensure_subscription(device: Device) -> None:
+    if not device or not getattr(device, "pk", None):
+        return
+    try:
+        ensure_device_subscription(device)
+    except Exception as exc:  # pragma: no cover - subscription sync is best-effort
+        logger.warning(
+            "Failed to ensure subscription for device %s: %s",
+            getattr(device, "pk", None),
+            exc,
+        )
+
+
+def _subscription_access_q(*, relation: str = "subscription", now=None) -> Q:
+    now = now or timezone.now()
+    prefix = f"{relation}__" if relation else ""
+
+    def field(name: str) -> str:
+        return f"{prefix}{name}"
+
+    return (
+        Q(**{field("isnull"): True})
+        | Q(**{field("status"): DeviceSubscriptionStatus.ACTIVE})
+        | (
+            Q(**{field("status"): DeviceSubscriptionStatus.GRACE})
+            & (
+                Q(**{field("grace_expires_at__isnull"): True})
+                | Q(**{field("grace_expires_at__gte"): now})
+            )
+        )
+        | Q(**{field("admin_override_until__gte"): now})
+    )
+
+
 class DeviceViewSet(viewsets.ModelViewSet):
     serializer_class = DeviceSerializer
     # Require authentication first to avoid AnonymousUser reaching queryset resolution
     permission_classes = [IsAuthenticated, IsOwnerOrSuperadmin]
     http_method_names = ["get", "patch", "delete", "post"]
     # Provide a base queryset so schema generators can infer model/lookup types
-    queryset = Device.objects.select_related("user").filter(deleted_at__isnull=True)
+    queryset = Device.objects.select_related("user", "subscription").filter(
+        deleted_at__isnull=True
+    )
     # Constrain lookup to digits and document path param as integer
     lookup_value_regex = r"\d+"
 
     def get_queryset(self):
-        base = Device.objects.select_related("user").filter(deleted_at__isnull=True)
+        base = Device.objects.select_related("user", "subscription").filter(
+            deleted_at__isnull=True
+        )
         user = self.request.user
         # Safety guard: if somehow unauthenticated slips through, return empty set
         if not getattr(user, "is_authenticated", False):
             return Device.objects.none()
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
-        return base.filter(user=user)
+        now = timezone.now()
+        return base.filter(user=user).filter(_subscription_access_q(now=now))
 
     def list(self, request, *args, **kwargs):
         """List all devices with ordering: online devices first, then offline.
@@ -134,11 +182,80 @@ class DeviceViewSet(viewsets.ModelViewSet):
             {"detail": "Use /devices/register to create/claim devices"}, status=405
         )
 
+    def partial_update(self, request, *args, **kwargs):
+        """Patch a device's editable fields.
+
+        Permissions:
+        - Admins (superuser or role=superadmin) can patch any device.
+        - Normal users can patch only their own devices (enforced by IsOwnerOrSuperadmin).
+        """
+        return super().partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         instance: Device = self.get_object()
         instance.soft_delete(acting_user=request.user)
+
+        # Reset fulfillment status if exists so it can be reclaimed
+        OrderFulfillment.objects.filter(
+            hardware_identifier=instance.hardware_identifier
+        ).update(is_claimed=False)
+
         _broadcast_device_removed(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="List unclaimed devices",
+        description="List devices assigned to the user (e.g. via Order) but not yet registered/setup.",
+        responses={200: DeviceSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"], url_path="unclaimed")
+    def unclaimed(self, request):
+        """List fulfilled but unclaimed devices for the user."""
+        qs = OrderFulfillment.objects.filter(
+            order__user=request.user, is_claimed=False, deleted_at__isnull=True
+        ).select_related("order")
+
+        # Create dummy Device instances to ensure serialization consistency
+        dummy_devices = []
+        for item in qs:
+            # Create a transient Device instance (not saved to DB)
+            d = Device(
+                id=-item.id,  # Negative ID to avoid collision
+                hardware_identifier=item.hardware_identifier,
+                device_name="",
+                device_role=item.device_role,
+                latitude=Decimal("23.810300"),  # Default location for map pin
+                longitude=Decimal("90.412500"),
+                status="unknown",
+                user=request.user,
+                originating_order=item.order,
+            )
+            # Manually attach attributes expected by serializer that aren't on the model instance
+            # d.is_online is a property, so we can't set it directly on the instance.
+            # However, DeviceSerializer uses getattr(obj, "is_online", False).
+            # Since d.last_seen is None, d.is_online will return False automatically.
+            # d.is_online = False
+
+            d.master = (
+                None  # Unclaimed devices don't have a linked master device record yet
+            )
+
+            # For master_hardware_identifier, we need to trick the serializer
+            # DeviceSerializer uses source='master.hardware_identifier'
+            # Since d.master is None, this would be None.
+            # But OrderFulfillment has the info.
+            # We can't easily inject it into d.master without a dummy master object.
+            if item.master_hardware_identifier:
+                # Create a dummy master just for the identifier
+                d.master = Device(
+                    hardware_identifier=item.master_hardware_identifier, device_name=""
+                )
+
+            dummy_devices.append(d)
+
+        serializer = DeviceSerializer(dummy_devices, many=True)
+        return Response(serializer.data)
 
     @extend_schema(
         tags=["Devices"],
@@ -201,12 +318,28 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def register(self, request):
         ser = DeviceRegisterSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
-        hid = ser.validated_data["hardware_identifier"].strip()
-        name = ser.validated_data.get("device_name", "").strip()
-        lat_dec = ser.validated_data.get("latitude")
-        lon_dec = ser.validated_data.get("longitude")
-        role = ser.validated_data.get("device_role") or Device.DeviceRole.MASTER
-        master = ser.validated_data.get("master")  # set in serializer when role==slave
+        validated = ser.validated_data
+        hid = validated["hardware_identifier"].strip()
+        name = validated.get("device_name", "").strip()
+        lat_dec = validated.get("latitude")
+        lon_dec = validated.get("longitude")
+        role = validated.get("device_role") or Device.DeviceRole.MASTER
+        master = validated.get("master")  # set in serializer when role==slave
+        preferred_order = validated.get("originating_order")
+        target_user_id = validated.get("target_user_id")
+
+        owner = request.user
+        if target_user_id and (
+            request.user.is_superuser
+            or getattr(request.user, "role", None) == "superadmin"
+            or getattr(request.user, "is_staff", False)
+        ):
+            from django.contrib.auth import get_user_model
+
+            User = get_user_model()
+            owner = User.objects.filter(pk=target_user_id).first()
+            if not owner:
+                return Response({"detail": "Target user not found."}, status=400)
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
@@ -221,7 +354,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         if existing:
             # Active device exists - update it if allowed
-            if existing.user != request.user and not (
+            if existing.user != owner and not (
                 request.user.is_superuser
                 or getattr(request.user, "role", None) == "superadmin"
             ):
@@ -242,10 +375,23 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 existing.master = master
             elif role == Device.DeviceRole.MASTER:
                 existing.master = None
+
+            # Mark as registered if this is the first claim
+            if not existing.registered_at:
+                existing.registered_at = timezone.now()
+
             existing.save()
+            if not existing.originating_order_id:
+                if preferred_order:
+                    services.assign_device_to_order(
+                        existing, preferred_order=preferred_order
+                    )
+                else:
+                    services.assign_device_to_order(existing)
 
             # Broadcast the updated device to WebSocket clients
             _broadcast_new_device(existing)
+            _ensure_subscription(existing)
 
             return Response(DeviceSerializer(existing).data, status=200)
 
@@ -254,13 +400,42 @@ class DeviceViewSet(viewsets.ModelViewSet):
             hardware_identifier=hid, deleted_at__isnull=False
         ).first()
 
+        # Check OrderFulfillment
+        fulfillment = OrderFulfillment.objects.filter(
+            hardware_identifier=hid, deleted_at__isnull=True
+        ).first()
+
         if soft_deleted:
-            # Un-delete (restore) the device and reassign to current user
+            # Check if the user has a valid fulfillment for this device
+            has_valid_fulfillment = False
+            if (
+                fulfillment
+                and fulfillment.order.user == owner
+                and not fulfillment.is_claimed
+            ):
+                has_valid_fulfillment = True
+
+            # Only allow restore if it belonged to the target owner OR if they have a valid fulfillment
+            if (
+                not has_valid_fulfillment
+                and soft_deleted.user != owner
+                and not (
+                    request.user.is_superuser
+                    or getattr(request.user, "role", None) == "superadmin"
+                )
+            ):
+                return Response(
+                    {"detail": "Device not found or not assigned to you"}, status=404
+                )
+
+            # Un-delete (restore) the device and reassign to owner
             soft_deleted.deleted_at = None
             soft_deleted.deleted_by = None
-            soft_deleted.user = request.user
-            soft_deleted.created_by = request.user
-            soft_deleted.created_at = timezone.now()
+            soft_deleted.user = owner
+            soft_deleted.updated_by = request.user
+            soft_deleted.updated_at = timezone.now()
+            # soft_deleted.registered_at = timezone.now() # Keep original registration date? Or update?
+            # If it was deleted, maybe treat as new registration?
             soft_deleted.registered_at = timezone.now()
 
             if name:
@@ -275,25 +450,106 @@ class DeviceViewSet(viewsets.ModelViewSet):
             elif role == Device.DeviceRole.MASTER:
                 soft_deleted.master = None
 
+            if has_valid_fulfillment:
+                soft_deleted.originating_order = fulfillment.order
+                fulfillment.is_claimed = True
+                fulfillment.save(update_fields=["is_claimed"])
+            else:
+                # Clear originating order if device is moving to a different owner (e.g. admin override)
+                if (
+                    soft_deleted.originating_order_id
+                    and soft_deleted.originating_order
+                    and soft_deleted.originating_order.user_id != request.user.id
+                ):
+                    soft_deleted.originating_order = None
+
             soft_deleted.save()
+
+            if not has_valid_fulfillment and soft_deleted.originating_order_id is None:
+                if preferred_order:
+                    services.assign_device_to_order(
+                        soft_deleted, preferred_order=preferred_order
+                    )
+                else:
+                    services.assign_device_to_order(soft_deleted)
+
+            _ensure_subscription(soft_deleted)
             _broadcast_new_device(soft_deleted)
             return Response(DeviceSerializer(soft_deleted).data, status=201)
 
-        device = Device(
-            user=request.user,
-            hardware_identifier=hid,
-            device_name=name,
-            latitude=lat_dec,
-            longitude=lon_dec,
-            created_by=request.user,
-            device_role=role,
-        )
-        if role == Device.DeviceRole.SLAVE:
-            device.master = master
-        device.save()
+        # If neither active nor soft-deleted found, create new device
 
-        _broadcast_new_device(device)
-        return Response(DeviceSerializer(device).data, status=201)
+        if not fulfillment:
+            # Strict mode: only allow registration if fulfilled (unless superadmin)
+            if not (
+                request.user.is_superuser
+                or getattr(request.user, "role", None) == "superadmin"
+            ):
+                return Response(
+                    {"detail": "Device ID not authorized. Please contact support."},
+                    status=400,
+                )
+
+        if fulfillment:
+            if fulfillment.is_claimed:
+                return Response({"detail": "Device ID already claimed."}, status=409)
+            if fulfillment.order.user != owner and not (
+                request.user.is_superuser
+                or getattr(request.user, "role", None) == "superadmin"
+            ):
+                return Response(
+                    {"detail": "Device ID belongs to another user."}, status=403
+                )
+
+        try:
+            with transaction.atomic():
+                device_kwargs = dict(
+                    user=owner,
+                    hardware_identifier=hid,
+                    device_name=name,
+                    latitude=lat_dec,
+                    longitude=lon_dec,
+                    device_role=role,
+                    registered_at=timezone.now(),
+                    created_by=request.user,
+                )
+                if role == Device.DeviceRole.SLAVE and master:
+                    device_kwargs["master"] = master
+
+                device = Device.objects.create(**device_kwargs)
+
+                if fulfillment:
+                    device.originating_order = fulfillment.order
+                    device.save(update_fields=["originating_order"])
+                    fulfillment.is_claimed = True
+                    fulfillment.save(update_fields=["is_claimed"])
+                else:
+                    # Only auto-attach to an order for non-admin users; admins can
+                    # register devices (gifts, manual deployments, etc.) without
+                    # tying them to an Order.
+                    if not (
+                        request.user.is_superuser
+                        or getattr(request.user, "role", None) == "superadmin"
+                    ):
+                        if preferred_order:
+                            services.assign_device_to_order(
+                                device, preferred_order=preferred_order
+                            )
+                        else:
+                            services.assign_device_to_order(device)
+
+                _ensure_subscription(device)
+                _broadcast_new_device(device)
+                return Response(DeviceSerializer(device).data, status=201)
+        except ValidationError as exc:
+            # Surface model validation errors (e.g. missing master for slave) as 400 responses
+            return Response(exc.message_dict, status=400)
+        except IntegrityError:
+            return Response(
+                {"detail": "Device already registered by another user"}, status=409
+            )
+        except OrderAssignmentError as exc:
+            return Response({"detail": str(exc)}, status=400)
 
     @extend_schema(
         tags=["Devices"],
@@ -676,8 +932,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
         # time filters
         since = request.query_params.get("since")
         until = request.query_params.get("until")
-        from django.utils.dateparse import parse_datetime
-        from django.utils import timezone
 
         tz = timezone.get_current_timezone()
 
@@ -733,7 +987,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         device: Device = self.get_object()
         qs = Alert.objects.filter(device=device, deleted_at__isnull=True)
         status_param = request.query_params.get("status")
-        if status_param in {s for s, _ in Alert.Status.choices}:
+        if status_param in {s for s, _ in AlertStatus.choices}:
             qs = qs.filter(status=status_param)
 
         page = self.paginate_queryset(qs)
@@ -780,14 +1034,19 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
         ],
     )
     def get_queryset(self):
-        qs = Telemetry.objects.select_related("device", "device__user").filter(
-            deleted_at__isnull=True, device__deleted_at__isnull=True
-        )
+        qs = Telemetry.objects.select_related(
+            "device",
+            "device__user",
+            "device__subscription",
+        ).filter(deleted_at__isnull=True, device__deleted_at__isnull=True)
         user = self.request.user
         if not getattr(user, "is_authenticated", False):
             return Telemetry.objects.none()
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
-            qs = qs.filter(device__user=user)
+            now = timezone.now()
+            qs = qs.filter(device__user=user).filter(
+                _subscription_access_q(relation="device__subscription", now=now)
+            )
 
         # Filters
         device_id = self.request.query_params.get("device")
@@ -798,9 +1057,6 @@ class TelemetryViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(device_id=int(device_id))
             except Exception:
                 pass
-
-        from django.utils.dateparse import parse_datetime
-        from django.utils import timezone
 
         tz = timezone.get_current_timezone()
 
@@ -857,14 +1113,19 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
         ],
     )
     def get_queryset(self):
-        qs = Alert.objects.select_related("device", "device__user").filter(
-            deleted_at__isnull=True, device__deleted_at__isnull=True
-        )
+        qs = Alert.objects.select_related(
+            "device",
+            "device__user",
+            "device__subscription",
+        ).filter(deleted_at__isnull=True, device__deleted_at__isnull=True)
         user = self.request.user
         if not getattr(user, "is_authenticated", False):
             return Alert.objects.none()
         if not (getattr(user, "role", None) == "superadmin" or user.is_superuser):
-            qs = qs.filter(device__user=user)
+            now = timezone.now()
+            qs = qs.filter(device__user=user).filter(
+                _subscription_access_q(relation="device__subscription", now=now)
+            )
 
         # Filters
         device_id = self.request.query_params.get("device")
@@ -874,7 +1135,7 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(device_id=int(device_id))
             except Exception:
                 pass
-        if status_param in {s for s, _ in Alert.Status.choices}:
+        if status_param in {s for s, _ in AlertStatus.choices}:
             qs = qs.filter(status=status_param)
         return qs
 
@@ -882,7 +1143,7 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(tags=["Alerts"], summary="Acknowledge an alert")
     def acknowledge(self, request, pk=None):
         alert: Alert = self.get_object()
-        if alert.status == Alert.Status.RESOLVED:
+        if alert.status == AlertStatus.RESOLVED:
             return Response(AlertSerializer(alert).data)
 
         now = timezone.now()
@@ -901,11 +1162,11 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(tags=["Alerts"], summary="Resolve an alert")
     def resolve(self, request, pk=None):
         alert: Alert = self.get_object()
-        if alert.status == Alert.Status.RESOLVED:
+        if alert.status == AlertStatus.RESOLVED:
             return Response(AlertSerializer(alert).data)
 
         now = timezone.now()
-        alert.status = Alert.Status.RESOLVED
+        alert.status = AlertStatus.RESOLVED
         alert.resolved_at = now
 
         update_fields = ["status", "resolved_at"]

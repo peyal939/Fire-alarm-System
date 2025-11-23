@@ -83,10 +83,16 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-4) Run the app
+4) Run the app (Terminal 1)
 
 ```powershell
 daphne -b 0.0.0.0 -p 8000 config.asgi:application
+```
+
+5) Run the MQTT Ingestor (Terminal 2)
+
+```powershell
+python manage.py run_mqtt_ingestor
 ```
 
 Open http://localhost:8000
@@ -125,6 +131,16 @@ Devices:
 - `GET /devices/{id}/telemetry/?since=&until=` – device telemetry
 - `GET /devices/{id}/alerts/?status=` – device alerts
 - `GET /devices/tree/` – list masters with nested slaves (owned by user; superadmin sees all)
+
+Subscriptions:
+- `GET /subscriptions/me/` – list the authenticated user's device subscriptions, including status, dates, and days remaining
+- `GET /subscriptions/me/{id}/` – subscription detail (must own the device)
+- `GET /subscriptions/me/{id}/charges/` – recent charges for that subscription
+- `POST /subscriptions/me/{id}/topup/` – create a multi-month charge and return the payment checkout URL (body: `{ "months": 1-24 }`)
+- `GET /subscriptions/admin/` – (superadmin) list/filter subscriptions for any user
+- `POST /subscriptions/admin/{id}/override/` – set or clear an admin override window (body: `{ "admin_override_until": "2025-12-01T00:00:00+06:00" }`)
+- `POST /subscriptions/admin/{id}/manual-payment/` – record cash/bkash/manual settlements (`{ "months": 2, "note": "bkash ref" }`)
+- `GET /subscriptions/admin/{id}/charges/` – review charge history for auditing
 
 Telemetry (global, read-only):
 - `GET /telemetry/?device=&since=&until=`

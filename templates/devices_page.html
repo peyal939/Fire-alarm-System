@@ -2,14 +2,21 @@
 {% block title %}Devices · apS Fire Alarm{% endblock %}
 {% block head_extra %}
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
   <style>
     .devices-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .devices-toolbar .form-control { max-width: 260px; }
-    #mapPickerMaster, #mapPickerSlave { height: 280px; }
+    #mapPickerMaster, #mapPickerSlave, #mapPickerClaim { height: 280px; }
+    /* Ensure Choices dropdown is collapsed by default and not fixed-open */
+    .choices__list--dropdown {
+      max-height: 240px;
+      overflow-y: auto;
+    }
   </style>
 {% endblock %}
 {% block content %}
-<div class="py-3">
+<div class="py-3" id="devicesPage"
+  data-is-admin="{% if request.user.is_superuser or request.user.role == 'superadmin' %}true{% else %}false{% endif %}">
   <div class="d-flex align-items-center justify-content-between mb-2">
     <h1 class="h4 mb-0">Devices</h1>
     <div class="devices-toolbar">
@@ -22,6 +29,9 @@
       <button id="refreshBtn" class="btn btn-outline-secondary">Refresh</button>
       <button id="registerMasterBtn" class="btn btn-success">Register Master</button>
       <button id="registerSlaveBtn" class="btn btn-outline-success">Register Slave</button>
+      {% if request.user.is_superuser or request.user.role == 'superadmin' %}
+      <button id="registerForUserBtn" class="btn btn-outline-warning">Register For User</button>
+      {% endif %}
     </div>
   </div>
 
@@ -63,7 +73,11 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
-              <input name="hardware_identifier" class="form-control" required maxlength="64" />
+              <div class="input-group">
+                 <input name="hardware_identifier" class="form-control" required maxlength="64" list="masterProvisionedList" autocomplete="off" />
+                 <datalist id="masterProvisionedList"></datalist>
+              </div>
+              <div class="form-text">Enter ID or select from provisioned devices.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
@@ -109,7 +123,11 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
-              <input name="hardware_identifier" class="form-control" required maxlength="64" />
+              <div class="input-group">
+                 <input name="hardware_identifier" class="form-control" required maxlength="64" list="slaveProvisionedList" autocomplete="off" />
+                 <datalist id="slaveProvisionedList"></datalist>
+              </div>
+              <div class="form-text">Enter ID or select from provisioned devices.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
@@ -177,11 +195,178 @@
       </div>
     </div>
    </div>
+
+    <!-- Edit Device Modal -->
+    <div class="modal fade" id="editDeviceModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editDeviceModalTitle">Edit Device</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="alert alert-danger d-none" id="errEditDevice"></div>
+            <form id="editDeviceForm">
+              <input type="hidden" name="device_id" />
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Hardware Identifier</label>
+                  <input name="hardware_identifier" class="form-control" maxlength="64" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Device Name</label>
+                  <input name="device_name" class="form-control" maxlength="255" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Latitude</label>
+                  <input name="latitude" class="form-control" placeholder="e.g. 23.7776" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Longitude</label>
+                  <input name="longitude" class="form-control" placeholder="e.g. 90.4054" />
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                  <button type="button" id="pickOnMapEditDeviceBtn" class="btn btn-outline-primary w-100">Pick on Map</button>
+                </div>
+              </div>
+              <div class="mt-3" id="mapPickerEditDeviceWrap" style="display:none">
+                <div id="mapPickerEditDevice" class="rounded border" style="height: 280px;"></div>
+                <div class="form-text">Click on the map to set coordinates. Click again to move the marker.</div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" form="editDeviceForm" class="btn btn-primary" id="submitEditDeviceBtn">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+<!-- Claim Device Modal -->
+<div class="modal fade" id="claimDeviceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Claim Provisioned Device</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="errClaim"></div>
+        <form id="claimDeviceForm">
+          <div class="mb-3">
+              <label class="form-label">Select Device</label>
+              <select name="device_id" id="claimDeviceSelect" class="form-select" required>
+                  <option value="">Loading unclaimed devices...</option>
+              </select>
+              <div class="form-text">Only devices provisioned for your paid orders are shown here.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Device Name</label>
+              <input name="device_name" class="form-control" required maxlength="255" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone Number</label>
+              <div class="input-group">
+                  <span class="input-group-text">+88</span>
+                  <input type="text" class="form-control" name="phone_number" placeholder="017XXXXXXXX" maxlength="13" required />
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Latitude</label>
+              <input name="latitude" class="form-control" placeholder="e.g. 23.7776" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Longitude</label>
+              <input name="longitude" class="form-control" placeholder="e.g. 90.4054" required />
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="button" id="pickOnMapClaimBtn" class="btn btn-outline-primary w-100">Pick on Map</button>
+            </div>
+          </div>
+          <div class="mt-3" id="mapPickerClaimWrap" style="display:none">
+            <div id="mapPickerClaim" class="rounded border" style="height: 280px;"></div>
+            <div class="form-text">Click on the map to set coordinates. Click again to move the marker.</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" id="submitClaimDeviceBtn" class="btn btn-primary">Claim Device</button>
+      </div>
+    </div>
+  </div>
+ </div>
+
+  {% if request.user.is_superuser or request.user.role == 'superadmin' %}
+  <!-- Admin: Register Device For User Modal -->
+  <div class="modal fade" id="registerForUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Register Device For User</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-danger d-none" id="errRegisterForUser"></div>
+          <form id="registerForUserForm">
+            <div class="mb-3">
+              <label class="form-label" for="targetUserId">Select User</label>
+              <select id="targetUserId" name="target_user_id" class="form-select">
+                <option value="">Loading users...</option>
+              </select>
+            </div>
+            <hr />
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Hardware Identifier</label>
+                <input name="hardware_identifier" class="form-control" required maxlength="64" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Device Name (optional)</label>
+                <input name="device_name" class="form-control" maxlength="255" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Latitude</label>
+                <input name="latitude" class="form-control" placeholder="e.g. 23.7776" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Longitude</label>
+                <input name="longitude" class="form-control" placeholder="e.g. 90.4054" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Role</label>
+                <select name="device_role" class="form-select" id="registerForUserRoleSelect">
+                  <option value="master">Master</option>
+                  <option value="slave">Slave</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-3" id="registerForUserMasterWrap" style="display:none;">
+              <label class="form-label">Master</label>
+              <select name="master_id" id="registerForUserMasterSelect" class="form-select">
+                <option value="">Select master…</option>
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="submitRegisterForUserBtn">Register</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 {% endblock %}
 
 {% block scripts %}
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
   <script>
+    const pageRoot = document.getElementById('devicesPage');
+    const isAdminFlag = pageRoot && pageRoot.dataset.isAdmin === 'true';
     const tableBody = document.querySelector('#devicesTable tbody');
     const emptyState = document.getElementById('devicesEmpty');
   const searchInput = document.getElementById('searchInput');
@@ -189,11 +374,15 @@
     const refreshBtn = document.getElementById('refreshBtn');
     const registerMasterBtn = document.getElementById('registerMasterBtn');
     const registerSlaveBtn = document.getElementById('registerSlaveBtn');
+    const claimDeviceBtn = document.getElementById('claimDeviceBtn');
+    const registerForUserBtn = document.getElementById('registerForUserBtn');
 
     const masterModalEl = document.getElementById('registerMasterModal');
     const slaveModalEl = document.getElementById('registerSlaveModal');
+    const claimDeviceModalEl = document.getElementById('claimDeviceModal');
     const masterModal = new bootstrap.Modal(masterModalEl);
     const slaveModal = new bootstrap.Modal(slaveModalEl);
+    const claimDeviceModal = new bootstrap.Modal(claimDeviceModalEl);
 
   const assignPhoneModalEl = document.getElementById('assignPhoneModal');
   const assignPhoneModal = new bootstrap.Modal(assignPhoneModalEl);
@@ -204,17 +393,44 @@
   const assignPhoneModalTitle = document.getElementById('assignPhoneModalTitle');
   let phoneTargetDevice = null;
 
+  const editDeviceModalEl = document.getElementById('editDeviceModal');
+  const editDeviceModal = editDeviceModalEl ? new bootstrap.Modal(editDeviceModalEl) : null;
+  const editDeviceForm = document.getElementById('editDeviceForm');
+  const editDeviceError = document.getElementById('errEditDevice');
+  const editDeviceModalTitle = document.getElementById('editDeviceModalTitle');
+  const submitEditDeviceBtn = document.getElementById('submitEditDeviceBtn');
+  const pickOnMapEditDeviceBtn = document.getElementById('pickOnMapEditDeviceBtn');
+  const mapPickerEditDeviceWrap = document.getElementById('mapPickerEditDeviceWrap');
+  let mapEditDevice = null;
+  let markerEditDevice = null;
+
     const registerMasterForm = document.getElementById('registerMasterForm');
     const registerSlaveForm = document.getElementById('registerSlaveForm');
+    const claimDeviceForm = document.getElementById('claimDeviceForm');
     const submitRegisterMasterBtn = document.getElementById('submitRegisterMasterBtn');
     const submitRegisterSlaveBtn = document.getElementById('submitRegisterSlaveBtn');
+    const submitClaimDeviceBtn = document.getElementById('submitClaimDeviceBtn');
+    const masterError = document.getElementById('errMaster');
+    const slaveError = document.getElementById('errSlave');
+    const claimError = document.getElementById('errClaim');
+    const registerForUserModalEl = document.getElementById('registerForUserModal');
+    const registerForUserModal = registerForUserModalEl ? new bootstrap.Modal(registerForUserModalEl) : null;
+    const registerForUserForm = document.getElementById('registerForUserForm');
+    const targetUserIdInput = document.getElementById('targetUserId');
+    const errRegisterForUser = document.getElementById('errRegisterForUser');
+    const registerForUserRoleSelect = document.getElementById('registerForUserRoleSelect');
+    const registerForUserMasterWrap = document.getElementById('registerForUserMasterWrap');
+    const registerForUserMasterSelect = document.getElementById('registerForUserMasterSelect');
+    const submitRegisterForUserBtn = document.getElementById('submitRegisterForUserBtn');
 
     const pickOnMapMasterBtn = document.getElementById('pickOnMapMasterBtn');
     const pickOnMapSlaveBtn = document.getElementById('pickOnMapSlaveBtn');
+    const pickOnMapClaimBtn = document.getElementById('pickOnMapClaimBtn');
     const mapPickerMasterWrap = document.getElementById('mapPickerMasterWrap');
     const mapPickerSlaveWrap = document.getElementById('mapPickerSlaveWrap');
-    let mapMaster = null, mapSlave = null;
-    let markerMaster = null, markerSlave = null;
+    const mapPickerClaimWrap = document.getElementById('mapPickerClaimWrap');
+    let mapMaster = null, mapSlave = null, mapClaim = null;
+    let markerMaster = null, markerSlave = null, markerClaim = null;
 
     let allDevices = [];
 
@@ -343,6 +559,9 @@
             <button type="button" class="btn btn-outline-primary" data-action="phone" data-device-id="${d.id}" title="${phoneTitle}" ${phoneDisabled}>
               ${phoneActionLabel}
             </button>
+            <button type="button" class="btn btn-outline-secondary" data-action="edit" data-device-id="${d.id}">
+              Edit
+            </button>
             <button type="button" class="btn btn-outline-danger" data-action="delete" data-device-id="${d.id}">
               Remove
             </button>
@@ -422,6 +641,54 @@
       registerSlaveForm.longitude.value = pos.lng.toFixed(6);
     }
 
+    function ensureMapClaim() {
+      if (mapClaim) return mapClaim;
+      mapClaim = L.map('mapPickerClaim').setView([23.777628, 90.405449], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapClaim);
+      mapClaim.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        if (!markerClaim) {
+          markerClaim = L.marker([lat, lng], { draggable: true }).addTo(mapClaim);
+          markerClaim.on('dragend', syncClaimMarkerToInputs);
+        } else {
+          markerClaim.setLatLng([lat, lng]);
+        }
+        syncClaimMarkerToInputs();
+      });
+      return mapClaim;
+    }
+
+    function syncClaimMarkerToInputs() {
+      if (!markerClaim) return;
+      const pos = markerClaim.getLatLng();
+      claimDeviceForm.latitude.value = pos.lat.toFixed(6);
+      claimDeviceForm.longitude.value = pos.lng.toFixed(6);
+    }
+
+    function ensureMapEditDevice() {
+      if (mapEditDevice) return mapEditDevice;
+      mapEditDevice = L.map('mapPickerEditDevice').setView([23.777628, 90.405449], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(mapEditDevice);
+      mapEditDevice.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        if (!markerEditDevice) {
+          markerEditDevice = L.marker([lat, lng], { draggable: true }).addTo(mapEditDevice);
+          markerEditDevice.on('dragend', syncEditDeviceMarkerToInputs);
+        } else {
+          markerEditDevice.setLatLng([lat, lng]);
+        }
+        syncEditDeviceMarkerToInputs();
+      });
+      return mapEditDevice;
+    }
+
+    function syncEditDeviceMarkerToInputs() {
+      if (!markerEditDevice) return;
+      const pos = markerEditDevice.getLatLng();
+      editDeviceForm.latitude.value = pos.lat.toFixed(6);
+      editDeviceForm.longitude.value = pos.lng.toFixed(6);
+    }
+
     function parseNumber(v) {
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
@@ -496,6 +763,22 @@
       setTimeout(() => assignPhoneInput.focus({ preventScroll: true }), 200);
     }
 
+    function openEditDeviceModal(device) {
+      if (!editDeviceModal || !editDeviceForm) return;
+      editDeviceForm.reset();
+      editDeviceError.classList.add('d-none');
+      editDeviceError.textContent = '';
+      editDeviceForm.device_id.value = device.id;
+      editDeviceForm.hardware_identifier.value = device.hardware_identifier || '';
+      editDeviceForm.device_name.value = device.device_name || '';
+      editDeviceForm.latitude.value = device.latitude != null ? device.latitude : '';
+      editDeviceForm.longitude.value = device.longitude != null ? device.longitude : '';
+      editDeviceModalTitle.textContent = `Edit Device · ${device.hardware_identifier || device.id}`;
+      mapPickerEditDeviceWrap.style.display = 'none';
+      markerEditDevice = null;
+      editDeviceModal.show();
+    }
+
     async function onSubmitAssignPhone(event) {
       event.preventDefault();
       if (!phoneTargetDevice) {
@@ -540,6 +823,127 @@
       }
     }
 
+    async function onSubmitEditDevice(event) {
+      event.preventDefault();
+      const deviceId = parseInt(editDeviceForm.device_id.value, 10);
+      if (!deviceId) {
+        editDeviceModal.hide();
+        return;
+      }
+      const hid = (editDeviceForm.hardware_identifier.value || '').trim();
+      const name = (editDeviceForm.device_name.value || '').trim();
+      const lat = parseNumber(editDeviceForm.latitude.value);
+      const lon = parseNumber(editDeviceForm.longitude.value);
+
+      const payload = {};
+      if (hid) payload.hardware_identifier = hid;
+      if (name) payload.device_name = name;
+      if (lat != null) payload.latitude = lat;
+      if (lon != null) payload.longitude = lon;
+
+      if (!Object.keys(payload).length) {
+        editDeviceError.textContent = 'Please change at least one field before saving.';
+        editDeviceError.classList.remove('d-none');
+        return;
+      }
+
+      editDeviceError.classList.add('d-none');
+      editDeviceError.textContent = '';
+      submitEditDeviceBtn.disabled = true;
+      try {
+        await apiPatch(`/devices/${deviceId}/`, payload);
+        editDeviceModal.hide();
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        editDeviceError.textContent = extractApiError(err, 'Failed to update device.');
+        editDeviceError.classList.remove('d-none');
+      } finally {
+        submitEditDeviceBtn.disabled = false;
+      }
+    }
+
+    async function onSubmitRegisterForUser() {
+      if (!isAdminFlag || !registerForUserForm) return;
+      const targetUserId = parseInt(targetUserIdInput && targetUserIdInput.value, 10) || null;
+      if (!targetUserId) {
+        alert('Please select a user first.');
+        return;
+      }
+      const hid = (registerForUserForm.hardware_identifier.value || '').trim();
+      const name = (registerForUserForm.device_name.value || '').trim();
+      const lat = parseNumber(registerForUserForm.latitude.value);
+      const lon = parseNumber(registerForUserForm.longitude.value);
+      const role = (registerForUserRoleSelect && registerForUserRoleSelect.value) || 'master';
+      const masterId = role === 'slave'
+        ? (parseInt(registerForUserMasterSelect && registerForUserMasterSelect.value, 10) || null)
+        : null;
+
+      if (!hid) { alert('Hardware identifier is required'); return; }
+      if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
+      if (role === 'slave' && !masterId) { alert('Please select a master.'); return; }
+
+      if (errRegisterForUser) {
+        errRegisterForUser.classList.add('d-none');
+        errRegisterForUser.textContent = '';
+      }
+      try {
+        if (submitRegisterForUserBtn) submitRegisterForUserBtn.disabled = true;
+        const payload = {
+          hardware_identifier: hid,
+          device_name: name,
+          latitude: lat,
+          longitude: lon,
+          device_role: role,
+          target_user_id: targetUserId,
+        };
+        if (role === 'slave' && masterId) {
+          payload.master_id = masterId;
+        }
+        await apiPost('/devices/register/', payload);
+        if (registerForUserModal) registerForUserModal.hide();
+        registerForUserForm.reset();
+        if (targetUserIdInput) targetUserIdInput.value = '';
+        if (selectedUserLabel) selectedUserLabel.textContent = '';
+        if (userSearchResults) userSearchResults.innerHTML = '';
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        if (errRegisterForUser) {
+          errRegisterForUser.textContent = extractApiError(err, 'Failed to register device for selected user.');
+          errRegisterForUser.classList.remove('d-none');
+        }
+      } finally {
+        if (submitRegisterForUserBtn) submitRegisterForUserBtn.disabled = false;
+      }
+    }
+
+    async function populateProvisionedLists() {
+      try {
+        const data = await apiGet('/devices/unclaimed/');
+        const devices = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        
+        const masterList = document.getElementById('masterProvisionedList');
+        const slaveList = document.getElementById('slaveProvisionedList');
+        masterList.innerHTML = '';
+        slaveList.innerHTML = '';
+
+        devices.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.hardware_identifier;
+            opt.textContent = `${d.hardware_identifier} (${d.device_role})`;
+            
+            if (d.device_role === 'master') {
+                masterList.appendChild(opt);
+            } else if (d.device_role === 'slave') {
+                slaveList.appendChild(opt);
+            }
+        });
+      } catch (e) {
+        console.error('Failed to load provisioned devices', e);
+      }
+    }
+
     async function populateMastersSelect() {
       const sel = document.getElementById('masterSelect');
       sel.innerHTML = '<option value="">Loading masters…</option>';
@@ -561,6 +965,27 @@
       }
     }
 
+    async function populateClaimDeviceSelect() {
+      const sel = document.getElementById('claimDeviceSelect');
+      sel.innerHTML = '<option value="">Loading unclaimed devices…</option>';
+      try {
+        const data = await apiGet('/devices/unclaimed/');
+        const devices = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        if (!devices.length) {
+          sel.innerHTML = '<option value="">No unclaimed devices found.</option>';
+          return;
+        }
+        sel.innerHTML = '<option value="">Select device…</option>' + devices
+          .map(d => {
+            const label = (d.hardware_identifier || 'Unknown ID') + (d.device_role ? ` (${d.device_role})` : '');
+            return `<option value="${d.id}">${label}</option>`;
+          })
+          .join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">Failed to load devices</option>';
+      }
+    }
+
     async function onSubmitRegisterMaster() {
       const hid = (registerMasterForm.hardware_identifier.value || '').trim();
       const name = (registerMasterForm.device_name.value || '').trim();
@@ -568,6 +993,8 @@
       const lon = parseNumber(registerMasterForm.longitude.value);
       if (!hid) { alert('Hardware identifier is required'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
+      masterError.classList.add('d-none');
+      masterError.textContent = '';
       try {
         submitRegisterMasterBtn.disabled = true;
         const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon, device_role: 'master' };
@@ -578,7 +1005,8 @@
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert(extractApiError(err, 'Failed to register master device.'));
+        masterError.textContent = extractApiError(err, 'Failed to register master device.');
+        masterError.classList.remove('d-none');
       } finally {
         submitRegisterMasterBtn.disabled = false;
       }
@@ -593,6 +1021,8 @@
       if (!hid) { alert('Hardware identifier is required'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
       if (!masterId) { alert('Please select a master.'); return; }
+      slaveError.classList.add('d-none');
+      slaveError.textContent = '';
       try {
         submitRegisterSlaveBtn.disabled = true;
         const payload = { hardware_identifier: hid, device_name: name, latitude: lat, longitude: lon, device_role: 'slave', master_id: masterId };
@@ -603,9 +1033,38 @@
         await fetchAllDevices();
       } catch (err) {
         console.error(err);
-        alert(extractApiError(err, 'Failed to register slave device. Ensure master ownership and inputs.'));
+        slaveError.textContent = extractApiError(err, 'Failed to register slave device. Ensure master ownership and inputs.');
+        slaveError.classList.remove('d-none');
       } finally {
         submitRegisterSlaveBtn.disabled = false;
+      }
+    }
+
+    async function onSubmitClaimDevice() {
+      const deviceId = parseInt(claimDeviceForm.device_id.value, 10);
+      const deviceName = (claimDeviceForm.device_name.value || '').trim();
+      const phoneRaw = (claimDeviceForm.phone_number.value || '').trim();
+      const lat = parseNumber(claimDeviceForm.latitude.value);
+      const lon = parseNumber(claimDeviceForm.longitude.value);
+      if (!deviceId) { alert('Please select a device to claim'); return; }
+      if (!deviceName) { alert('Device name is required'); return; }
+      if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
+      claimError.classList.add('d-none');
+      claimError.textContent = '';
+      try {
+        submitClaimDeviceBtn.disabled = true;
+        const payload = { device_name: deviceName, phone_number: phoneRaw, latitude: lat, longitude: lon };
+        await apiPost(`/devices/${deviceId}/claim/`, payload);
+        claimDeviceModal.hide();
+        claimDeviceForm.reset();
+        mapPickerClaimWrap.style.display = 'none';
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        claimError.textContent = extractApiError(err, 'Failed to claim device. Ensure device is unclaimed and inputs are correct.');
+        claimError.classList.remove('d-none');
+      } finally {
+        submitClaimDeviceBtn.disabled = false;
       }
     }
 
@@ -652,19 +1111,46 @@
           return;
         }
         openAssignPhoneModal(device);
+        return;
+      }
+
+      if (action === 'edit') {
+        const deviceId = parseInt(btn.getAttribute('data-device-id'), 10);
+        const device = allDevices.find(d => d.id === deviceId);
+        if (!device) {
+          alert('Device not found. Please refresh.');
+          return;
+        }
+        openEditDeviceModal(device);
       }
     });
     registerMasterBtn.addEventListener('click', () => {
       registerMasterForm.reset();
       mapPickerMasterWrap.style.display = 'none';
+      masterError.classList.add('d-none');
+      masterError.textContent = '';
+      populateProvisionedLists();
       masterModal.show();
     });
     registerSlaveBtn.addEventListener('click', async () => {
       registerSlaveForm.reset();
       mapPickerSlaveWrap.style.display = 'none';
+      slaveError.classList.add('d-none');
+      slaveError.textContent = '';
       await populateMastersSelect();
+      populateProvisionedLists();
       slaveModal.show();
     });
+    if (claimDeviceBtn) {
+      claimDeviceBtn.addEventListener('click', () => {
+        claimDeviceForm.reset();
+        mapPickerClaimWrap.style.display = 'none';
+        claimError.classList.add('d-none');
+        claimError.textContent = '';
+        populateClaimDeviceSelect();
+        claimDeviceModal.show();
+      });
+    }
     pickOnMapMasterBtn.addEventListener('click', () => {
       mapPickerMasterWrap.style.display = '';
       setTimeout(() => { ensureMapMaster(); mapMaster.invalidateSize(); }, 200);
@@ -673,8 +1159,102 @@
       mapPickerSlaveWrap.style.display = '';
       setTimeout(() => { ensureMapSlave(); mapSlave.invalidateSize(); }, 200);
     });
+    pickOnMapClaimBtn.addEventListener('click', () => {
+      mapPickerClaimWrap.style.display = '';
+      setTimeout(() => { ensureMapClaim(); mapClaim.invalidateSize(); }, 200);
+    });
+    if (pickOnMapEditDeviceBtn) {
+      pickOnMapEditDeviceBtn.addEventListener('click', () => {
+        mapPickerEditDeviceWrap.style.display = '';
+        setTimeout(() => { ensureMapEditDevice(); mapEditDevice.invalidateSize(); }, 200);
+      });
+    }
     submitRegisterMasterBtn.addEventListener('click', onSubmitRegisterMaster);
     submitRegisterSlaveBtn.addEventListener('click', onSubmitRegisterSlave);
+    let allAdminUsersCache = [];
+    let userChoicesInstance = null;
+
+    async function loadAllUsersForSelect() {
+      if (!targetUserIdInput) return;
+      try {
+        const data = await apiGet('/auth/users/');
+        allAdminUsersCache = Array.isArray(data) ? data : (Array.isArray(data.results) ? data.results : []);
+        // Clear existing options
+        targetUserIdInput.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select user...';
+        targetUserIdInput.appendChild(placeholder);
+        allAdminUsersCache.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = u.email || u.phone_number || `User #${u.id}`;
+          targetUserIdInput.appendChild(opt);
+        });
+        if (!userChoicesInstance && window.Choices) {
+          userChoicesInstance = new Choices('#targetUserId', {
+            searchEnabled: true,
+            searchPlaceholderValue: 'Search by email, phone or name',
+            shouldSort: false,
+            itemSelectText: '',
+            noResultsText: 'No users found',
+            noChoicesText: 'No users available',
+          });
+        } else if (userChoicesInstance) {
+          // Recreate to avoid keeping the dropdown open or stale state
+          userChoicesInstance.destroy();
+          userChoicesInstance = new Choices('#targetUserId', {
+            searchEnabled: true,
+            searchPlaceholderValue: 'Search by email, phone or name',
+            shouldSort: false,
+            itemSelectText: '',
+            noResultsText: 'No users found',
+            noChoicesText: 'No users available',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load users', err);
+        if (targetUserIdInput) {
+          targetUserIdInput.innerHTML = '<option value="">Failed to load users</option>';
+        }
+      }
+    }
+
+    if (isAdminFlag && registerForUserBtn && registerForUserModal) {
+      registerForUserBtn.addEventListener('click', () => {
+        registerForUserForm.reset();
+        if (targetUserIdInput) {
+          targetUserIdInput.value = '';
+          if (userChoicesInstance) {
+            userChoicesInstance.clearStore();
+          }
+        }
+        if (errRegisterForUser) {
+          errRegisterForUser.classList.add('d-none');
+          errRegisterForUser.textContent = '';
+        }
+        if (registerForUserMasterWrap) registerForUserMasterWrap.style.display = 'none';
+        loadAllUsersForSelect();
+        registerForUserModal.show();
+      });
+      if (registerForUserRoleSelect) {
+        registerForUserRoleSelect.addEventListener('change', () => {
+          const role = registerForUserRoleSelect.value || 'master';
+          if (role === 'slave') {
+            if (registerForUserMasterWrap) registerForUserMasterWrap.style.display = '';
+          } else if (registerForUserMasterWrap) {
+            registerForUserMasterWrap.style.display = 'none';
+          }
+        });
+      }
+      if (submitRegisterForUserBtn) {
+        submitRegisterForUserBtn.addEventListener('click', onSubmitRegisterForUser);
+      }
+    }
+    submitClaimDeviceBtn.addEventListener('click', onSubmitClaimDevice);
+    if (editDeviceForm) {
+      editDeviceForm.addEventListener('submit', onSubmitEditDevice);
+    }
     assignPhoneForm.addEventListener('submit', onSubmitAssignPhone);
     assignPhoneModalEl.addEventListener('hidden.bs.modal', () => {
       phoneTargetDevice = null;

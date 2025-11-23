@@ -9,6 +9,7 @@ urlpatterns = [
     path("", include("realtime.urls")),
     path("", include("api.urls")),
     path("", include("products.urls")),
+    path("app/subscriptions/", include("subscriptions.urls")),
     path("shurjopay/", include("shurjopay.urls")),
     path("api/fcm/", include("notifications.urls")),
     # API Documentation

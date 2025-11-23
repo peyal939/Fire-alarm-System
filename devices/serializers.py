@@ -3,11 +3,15 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from .enums import AlertStatus
 from .models import Device, Telemetry, Alert
 from .constants import AlertType, DeviceStatus
 from django.db import models
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
+from .services import order_has_capacity
+from products.models import Order
+from products.enums import OrderStatus
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -15,6 +19,10 @@ class DeviceSerializer(serializers.ModelSerializer):
     owner_email = serializers.EmailField(source="user.email", read_only=True)
     owner_phone = serializers.CharField(source="user.phone_number", read_only=True)
     online = serializers.SerializerMethodField()
+    originating_order_id = serializers.PrimaryKeyRelatedField(
+        source="originating_order",
+        read_only=True,
+    )
     device_role = serializers.CharField(read_only=True)
     master_id = serializers.IntegerField(source="master.id", read_only=True)
     master_hardware_identifier = serializers.CharField(
@@ -53,6 +61,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "owner_id",
             "owner_email",
             "owner_phone",
+            "originating_order_id",
         )
         read_only_fields = (
             "id",
@@ -60,7 +69,40 @@ class DeviceSerializer(serializers.ModelSerializer):
             "last_seen",
             "phone_number",
             "phone_number_updated_at",
+            "device_role",
+            "master_id",
+            "master_hardware_identifier",
+            "master_device_name",
+            "master_last_seen",
+            "originating_order_id",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
         )
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+
+        # Ensure latitude/longitude are floats and have defaults
+        lat = ret.get("latitude")
+        if lat is None:
+            ret["latitude"] = 23.810300
+        else:
+            try:
+                ret["latitude"] = float(lat)
+            except (ValueError, TypeError):
+                ret["latitude"] = 23.810300
+
+        lon = ret.get("longitude")
+        if lon is None:
+            ret["longitude"] = 90.412500
+        else:
+            try:
+                ret["longitude"] = float(lon)
+            except (ValueError, TypeError):
+                ret["longitude"] = 90.412500
+
+        return ret
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
@@ -87,7 +129,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             return Alert.objects.filter(
                 device_id__in=member_ids,
                 alert_type=AlertType.SMOKE_HIGH,
-                status=Alert.Status.OPEN,
+                status=AlertStatus.OPEN,
             ).exists()
         except Exception:
             return False
@@ -163,6 +205,34 @@ class DeviceRegisterSerializer(serializers.Serializer):
             "that belongs to you (unless superadmin)."
         ),
     )
+    originating_order_id = serializers.PrimaryKeyRelatedField(
+        queryset=Order.objects.none(),
+        required=False,
+        allow_null=True,
+        source="originating_order",
+        help_text=(
+            "Optional order to link this device to. Must be one of your paid orders with available slots."
+        ),
+    )
+    target_user_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Admin-only: user ID to register this device for. Ignored for non-admins."
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request") if hasattr(self, "context") else None
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            self.fields["originating_order_id"].queryset = Order.objects.filter(
+                user=user,
+                order_status=OrderStatus.PAID,
+                deleted_at__isnull=True,
+                package__deleted_at__isnull=True,
+            ).order_by("ordered_at", "id")
 
     def validate(self, attrs):
         lat = attrs.get("latitude")
@@ -175,6 +245,7 @@ class DeviceRegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError("longitude must be between -180 and 180")
         role = attrs.get("device_role") or Device.DeviceRole.MASTER
         master_id = attrs.get("master_id")
+        selected_order = attrs.get("originating_order")
         # Cross-field validation for master/slave
         if str(role) == Device.DeviceRole.SLAVE:
             if not master_id:
@@ -215,6 +286,57 @@ class DeviceRegisterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "master_id must not be provided when device_role is 'master'"
                 )
+        if selected_order:
+            request = self.context.get("request") if hasattr(self, "context") else None
+            user = getattr(request, "user", None)
+            if not user or not getattr(user, "is_authenticated", False):
+                raise serializers.ValidationError(
+                    "originating_order_id cannot be used without authentication"
+                )
+            order = (
+                Order.objects.filter(
+                    pk=selected_order.pk,
+                    user=user,
+                    order_status=OrderStatus.PAID,
+                    deleted_at__isnull=True,
+                    package__deleted_at__isnull=True,
+                )
+                .select_related("package")
+                .first()
+            )
+            if not order:
+                raise serializers.ValidationError(
+                    "originating_order_id is not available for assignment"
+                )
+
+            # Check if we can skip capacity check (if device is already assigned or fulfilled)
+            hid = attrs.get("hardware_identifier")
+            skip_capacity_check = False
+
+            # 1. Check existing device
+            existing_device = Device.objects.filter(
+                hardware_identifier=hid, deleted_at__isnull=True
+            ).first()
+            if existing_device and existing_device.originating_order_id == order.pk:
+                skip_capacity_check = True
+
+            # 2. Check fulfillment
+            if not skip_capacity_check:
+                from products.models import OrderFulfillment
+
+                fulfillment = OrderFulfillment.objects.filter(
+                    hardware_identifier=hid, deleted_at__isnull=True
+                ).first()
+                if fulfillment and fulfillment.order_id == order.pk:
+                    skip_capacity_check = True
+
+            if not skip_capacity_check:
+                can_assign, _, message = order_has_capacity(order, role=str(role))
+                if not can_assign:
+                    raise serializers.ValidationError(message)
+
+            attrs["originating_order"] = order
+
         return attrs
 
 
@@ -236,6 +358,8 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
     device_role = serializers.CharField(read_only=True)
     master_id = serializers.IntegerField(source="master.id", read_only=True)
     effective_status = serializers.SerializerMethodField(read_only=True)
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
@@ -265,6 +389,16 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
             "phone_number",
             "phone_number_updated_at",
         )
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_latitude(self, obj: Device) -> float:
+        val = obj.latitude if obj.latitude is not None else Decimal("23.810300")
+        return float(val)
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_longitude(self, obj: Device) -> float:
+        val = obj.longitude if obj.longitude is not None else Decimal("90.412500")
+        return float(val)
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:

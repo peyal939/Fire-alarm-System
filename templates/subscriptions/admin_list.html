@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Subscription Admin | apS Fire{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1">Subscription Billing - Admin</h1>
+    <p class="text-muted mb-0">Review device subscriptions, payment states, and upcoming renewals.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'subscriptions:admin-list' %}">Refresh</a>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-success">
+      <div class="card-body">
+        <p class="fw-semibold text-success mb-1">Active</p>
+        <h4 class="mb-0">{{ stats.active }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-warning">
+      <div class="card-body">
+        <p class="fw-semibold text-warning mb-1">Grace</p>
+        <h4 class="mb-0">{{ stats.grace }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-danger">
+      <div class="card-body">
+        <p class="fw-semibold text-danger mb-1">Suspended</p>
+        <h4 class="mb-0">{{ stats.suspended }}</h4>
+      </div>
+    </div>
+  </div>
+</div>
+<form class="row g-2 align-items-end mb-4" method="get">
+  <div class="col-md-4">
+    <label class="form-label">Search</label>
+    <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Email, device ID, or name" />
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Status</label>
+    <select name="status" class="form-select">
+      <option value="">All</option>
+      {% for code,label in status_choices %}
+      <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-primary w-100">Apply</button>
+  </div>
+</form>
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Device</th>
+        <th>User</th>
+        <th>Status</th>
+        <th>Last Paid Through</th>
+        <th>Next Due</th>
+        <th>Grace Ends</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sub in subscriptions %}
+      <tr>
+        <td>
+          <div class="fw-semibold">{{ sub.device.device_name|default:"Unnamed" }}</div>
+          <small class="text-muted">{{ sub.device.hardware_identifier }}</small>
+        </td>
+        <td>
+          {{ sub.device.user.email }}<br />
+          <small class="text-muted">{{ sub.device.user.phone_number }}</small>
+        </td>
+        <td>{{ sub.get_status_display }}</td>
+        <td>{{ sub.last_paid_through|date:"Y-m-d" }}</td>
+        <td>{{ sub.next_due_at|date:"Y-m-d" }}</td>
+        <td>
+          {% if sub.grace_expires_at %}
+            {{ sub.grace_expires_at|date:"Y-m-d" }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'subscriptions:admin-detail' sub.pk %}">Manage</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="7" class="text-center text-muted py-5">No subscriptions found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+*** End File

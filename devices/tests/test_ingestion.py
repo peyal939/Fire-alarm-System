@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from devices.enums import AlertStatus
 from devices.models import Device, Alert
 from devices import services
 
@@ -38,7 +39,7 @@ class IngestionAndAlertsTests(APITestCase):
             self.device, smoke_level=999, device_status="alert", timestamp=ts1
         )
         self.assertEqual(
-            Alert.objects.filter(device=self.device, status=Alert.Status.OPEN).count(),
+            Alert.objects.filter(device=self.device, status=AlertStatus.OPEN).count(),
             2,
         )
         ts2 = timezone.now()
@@ -46,7 +47,7 @@ class IngestionAndAlertsTests(APITestCase):
             self.device, smoke_level=0, device_status="alive", timestamp=ts2
         )
         self.assertEqual(
-            Alert.objects.filter(device=self.device, status=Alert.Status.OPEN).count(),
+            Alert.objects.filter(device=self.device, status=AlertStatus.OPEN).count(),
             0,
         )
 

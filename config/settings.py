@@ -82,6 +82,19 @@ DEVICE_ONLINE_FRESHNESS_SECONDS = int(
     os.getenv("DEVICE_ONLINE_FRESHNESS_SECONDS", "180")
 )
 
+SUBSCRIPTION_CYCLE_DAYS = int(os.getenv("SUBSCRIPTION_CYCLE_DAYS", "30") or "30")
+SUBSCRIPTION_GRACE_DAYS = int(os.getenv("SUBSCRIPTION_GRACE_DAYS", "7") or "7")
+SUBSCRIPTION_CHARGE_INTERVAL_MINUTES = int(
+    os.getenv("SUBSCRIPTION_CHARGE_INTERVAL_MINUTES", "60") or "60"
+)
+SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES = int(
+    os.getenv("SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES", "60") or "60"
+)
+SUBSCRIPTION_BILLING_CLIENT_IP = os.getenv("SUBSCRIPTION_BILLING_CLIENT_IP", "")
+SUBSCRIPTION_DUE_SOON_REMINDER_DAYS = int(
+    os.getenv("SUBSCRIPTION_DUE_SOON_REMINDER_DAYS", "5") or "5"
+)
+
 # Allow JWT lifetimes to be overridden without code changes
 JWT_ACCESS_TOKEN_LIFETIME_MINUTES = int(
     os.getenv("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", "60")
@@ -114,6 +127,7 @@ INSTALLED_APPS = [
     "notifications",
     "otp",
     "firestations",
+    "subscriptions",
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "shurjopay",
@@ -273,15 +287,36 @@ SIMPLE_JWT = {
     "ALGORITHM": "HS256",
 }
 
+CELERY_BEAT_SCHEDULE = {}
+
 if ALERT_REMINDER_INTERVAL_SECONDS > 0:
-    CELERY_BEAT_SCHEDULE = {
-        "send_alert_reminders": {
-            "task": "devices.tasks.send_alert_reminders_task",
-            "schedule": timedelta(seconds=ALERT_REMINDER_INTERVAL_SECONDS),
-        }
+    CELERY_BEAT_SCHEDULE["send_alert_reminders"] = {
+        "task": "devices.tasks.send_alert_reminders_task",
+        "schedule": timedelta(seconds=ALERT_REMINDER_INTERVAL_SECONDS),
     }
-else:
-    CELERY_BEAT_SCHEDULE = {}
+
+if SUBSCRIPTION_CHARGE_INTERVAL_MINUTES > 0:
+    CELERY_BEAT_SCHEDULE["generate_subscription_charges"] = {
+        "task": "subscriptions.generate_due_charges",
+        "schedule": timedelta(minutes=SUBSCRIPTION_CHARGE_INTERVAL_MINUTES),
+    }
+
+if SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES > 0:
+    CELERY_BEAT_SCHEDULE["suspend_overdue_subscriptions"] = {
+        "task": "subscriptions.suspend_overdue_subscriptions",
+        "schedule": timedelta(minutes=SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES),
+    }
+    CELERY_BEAT_SCHEDULE["refresh_subscription_statuses"] = {
+        "task": "subscriptions.refresh_subscription_statuses",
+        "schedule": timedelta(minutes=SUBSCRIPTION_STATUS_SWEEP_INTERVAL_MINUTES * 2),
+    }
+
+if SUBSCRIPTION_DUE_SOON_REMINDER_DAYS > 0:
+    CELERY_BEAT_SCHEDULE["send_subscription_due_soon_reminders"] = {
+        "task": "subscriptions.send_due_soon_reminders",
+        "schedule": timedelta(days=1),
+        "kwargs": {"days_before": SUBSCRIPTION_DUE_SOON_REMINDER_DAYS},
+    }
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {
@@ -292,6 +327,13 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": os.getenv("OPENAPI_VERSION", "1.0.0"),
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "PaymentTransactionStatusEnum": "shurjopay.enums.PaymentTransactionStatus",
+        "DeviceSubscriptionStatusEnum": "subscriptions.enums.DeviceSubscriptionStatus",
+        "SubscriptionChargeStatusEnum": "subscriptions.enums.SubscriptionChargeStatus",
+        "AlertStatusEnum": "devices.enums.AlertStatus",
+        "NotificationStatusEnum": "notifications.enums.NotificationStatus",
+    },
 }
 
 # Session login settings for dashboard
