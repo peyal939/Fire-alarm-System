@@ -10,7 +10,12 @@ from django.db import models
 from common.permissions import IsOwnerOrSuperadmin, IsSuperAdmin
 from .enums import OrderStatus
 from .models import Package, Order
-from .serializers import PackageSerializer, OrderSerializer, OrderCreateSerializer
+from .serializers import (
+    PackageSerializer,
+    OrderSerializer,
+    OrderCreateSerializer,
+    OrderPaymentInitSerializer,
+)
 from . import services as order_services
 from django.shortcuts import get_object_or_404
 
@@ -96,6 +101,7 @@ class OrderListAllView(APIView):
 
     permission_classes = [IsSuperAdmin]
 
+    @extend_schema(operation_id="orders_admin_list_all")
     def get(self, request):
         qs = (
             Order.objects.select_related("user", "package")
@@ -240,6 +246,7 @@ class UserOrderListView(APIView):
             )
         )
 
+    @extend_schema(operation_id="orders_user_list")
     def get(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
             if not request.user or not request.user.is_authenticated:
@@ -270,6 +277,7 @@ class UserOrderListView(APIView):
         request=OrderCreateSerializer,
         responses={201: OrderSerializer, 400: None, 401: None, 403: None},
     )
+    @extend_schema(operation_id="orders_user_create")
     def post(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
             if not request.user or not request.user.is_authenticated:
@@ -310,6 +318,7 @@ class UserOrderListView(APIView):
         responses={200: OrderSerializer, 400: None, 401: None, 403: None, 404: None},
     )
     @extend_schema(operation_id="orders_partial_update_for_user")
+    @extend_schema(operation_id="orders_user_patch")
     def patch(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
             if not request.user or not request.user.is_authenticated:
@@ -348,6 +357,7 @@ class UserOrderListView(APIView):
         return Response(OrderSerializer(updated).data, status=200)
 
     @extend_schema(operation_id="orders_delete_all_for_user")
+    @extend_schema(operation_id="orders_user_bulk_delete")
     def delete(self, request, user_id: int):
         if not self._auth_user_allowed(request.user, user_id):
             if not request.user or not request.user.is_authenticated:
@@ -468,6 +478,7 @@ class UserOrderDetailView(APIView):
 @extend_schema(
     tags=["Orders"],
     summary="Initiate payment for an order",
+    request=OrderPaymentInitSerializer,
     responses={
         201: {
             "type": "object",
@@ -486,6 +497,7 @@ class UserOrderDetailView(APIView):
     },
 )
 class OrderPaymentInitView(APIView):
+    serializer_class = OrderPaymentInitSerializer
     permission_classes = [IsAuthenticated]
 
     def post(self, request, user_id: int, order_id: int):

@@ -71,6 +71,15 @@ class DeviceSerializer(serializers.ModelSerializer):
             "last_seen",
             "phone_number",
             "phone_number_updated_at",
+            "device_role",
+            "master_id",
+            "master_hardware_identifier",
+            "master_device_name",
+            "master_last_seen",
+            "originating_order_id",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
         )
 
     @extend_schema_field(OpenApiTypes.FLOAT)
@@ -191,6 +200,13 @@ class DeviceRegisterSerializer(serializers.Serializer):
         source="originating_order",
         help_text=(
             "Optional order to link this device to. Must be one of your paid orders with available slots."
+        ),
+    )
+    target_user_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Admin-only: user ID to register this device for. Ignored for non-admins."
         ),
     )
 

@@ -182,6 +182,15 @@ class DeviceViewSet(viewsets.ModelViewSet):
             {"detail": "Use /devices/register to create/claim devices"}, status=405
         )
 
+    def partial_update(self, request, *args, **kwargs):
+        """Patch a device's editable fields.
+
+        Permissions:
+        - Admins (superuser or role=superadmin) can patch any device.
+        - Normal users can patch only their own devices (enforced by IsOwnerOrSuperadmin).
+        """
+        return super().partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         instance: Device = self.get_object()
         instance.soft_delete(acting_user=request.user)
@@ -315,6 +324,20 @@ class DeviceViewSet(viewsets.ModelViewSet):
         role = validated.get("device_role") or Device.DeviceRole.MASTER
         master = validated.get("master")  # set in serializer when role==slave
         preferred_order = validated.get("originating_order")
+        target_user_id = validated.get("target_user_id")
+
+        owner = request.user
+        if target_user_id and (
+            request.user.is_superuser
+            or getattr(request.user, "role", None) == "superadmin"
+            or getattr(request.user, "is_staff", False)
+        ):
+            from django.contrib.auth import get_user_model
+
+            User = get_user_model()
+            owner = User.objects.filter(pk=target_user_id).first()
+            if not owner:
+                return Response({"detail": "Target user not found."}, status=400)
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
@@ -329,7 +352,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         if existing:
             # Active device exists - update it if allowed
-            if existing.user != request.user and not (
+            if existing.user != owner and not (
                 request.user.is_superuser
                 or getattr(request.user, "role", None) == "superadmin"
             ):
@@ -376,17 +399,17 @@ class DeviceViewSet(viewsets.ModelViewSet):
         ).first()
 
         if soft_deleted:
-            # Only allow restore if it belonged to the requesting user
-            if soft_deleted.user != request.user and not (
+            # Only allow restore if it belonged to the target owner
+            if soft_deleted.user != owner and not (
                 request.user.is_superuser
                 or getattr(request.user, "role", None) == "superadmin"
             ):
                  return Response({"detail": "Device not found or not assigned to you"}, status=404)
 
-            # Un-delete (restore) the device and reassign to current user
+            # Un-delete (restore) the device and reassign to owner
             soft_deleted.deleted_at = None
             soft_deleted.deleted_by = None
-            # soft_deleted.user = request.user # Already checked
+            soft_deleted.user = owner
             soft_deleted.updated_by = request.user
             soft_deleted.updated_at = timezone.now()
             # soft_deleted.registered_at = timezone.now() # Keep original registration date? Or update?
@@ -429,7 +452,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         
         # Check OrderFulfillment
         fulfillment = OrderFulfillment.objects.filter(
-            hardware_identifier=hid, 
+            hardware_identifier=hid,
             deleted_at__isnull=True
         ).first()
 
@@ -439,15 +462,17 @@ class DeviceViewSet(viewsets.ModelViewSet):
                  return Response({"detail": "Device ID not authorized. Please contact support."}, status=400)
         
         if fulfillment:
-            if fulfillment.is_claimed:
-                 return Response({"detail": "Device ID already claimed."}, status=409)
-            if fulfillment.order.user != request.user and not (request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"):
-                 return Response({"detail": "Device ID belongs to another user."}, status=403)
+              if fulfillment.is_claimed:
+                  return Response({"detail": "Device ID already claimed."}, status=409)
+              if fulfillment.order.user != owner and not (
+                 request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"
+              ):
+                  return Response({"detail": "Device ID belongs to another user."}, status=403)
 
         try:
             with transaction.atomic():
                 device_kwargs = dict(
-                    user=request.user,
+                    user=owner,
                     hardware_identifier=hid,
                     device_name=name,
                     latitude=lat_dec,
@@ -467,12 +492,19 @@ class DeviceViewSet(viewsets.ModelViewSet):
                     fulfillment.is_claimed = True
                     fulfillment.save(update_fields=["is_claimed"])
                 else:
-                    if preferred_order:
-                        services.assign_device_to_order(
-                            device, preferred_order=preferred_order
-                        )
-                    else:
-                        services.assign_device_to_order(device)
+                    # Only auto-attach to an order for non-admin users; admins can
+                    # register devices (gifts, manual deployments, etc.) without
+                    # tying them to an Order.
+                    if not (
+                        request.user.is_superuser
+                        or getattr(request.user, "role", None) == "superadmin"
+                    ):
+                        if preferred_order:
+                            services.assign_device_to_order(
+                                device, preferred_order=preferred_order
+                            )
+                        else:
+                            services.assign_device_to_order(device)
                 
                 _ensure_subscription(device)
                 _broadcast_new_device(device)

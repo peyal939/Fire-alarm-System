@@ -896,6 +896,37 @@ paths:
           description: ''
     patch:
       operationId: devices_partial_update
+      summary: Partially update a device's editable fields
+      description: |-
+        Update mutable fields of a device.
+
+        **Permissions**
+        - Admins (superuser or role="superadmin") can patch any device.
+        - Normal users can patch only their own devices.
+
+        **Editable fields**
+        - `hardware_identifier`
+        - `device_name`
+        - `latitude`
+        - `longitude`
+        - `status`
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDevice'
+            example:
+              hardware_identifier: "APS-DEVICE-1234"
+              device_name: "Kitchen Sensor"
+              latitude: 23.7776
+              longitude: 90.4054
+              status: "alive"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDevice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDevice'
       parameters:
       - in: path
         name: id
@@ -2927,15 +2958,15 @@ components:
             Mesh is defined as: the master + all its slaves. For masters, master=self; for slaves, master=obj.master.
           readOnly: true
         latitude:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          type: number
+          format: double
           nullable: true
+          example: 23.7776
         longitude:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          type: number
+          format: double
           nullable: true
+          example: 90.4054
         phone_number:
           type: string
           readOnly: true

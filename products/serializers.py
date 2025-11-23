@@ -139,3 +139,13 @@ class OrderCreateSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         return OrderSerializer(instance).data
+
+
+class OrderPaymentInitSerializer(serializers.Serializer):
+    """Serializer for initializing order payment from the client.
+
+    This keeps the schema explicit for OrderPaymentInitView without
+    changing its runtime behavior.
+    """
+
+    order_id = serializers.IntegerField(help_text="ID of the order to initiate payment for")
