@@ -103,7 +103,7 @@ class OrderListAllView(APIView):
             .order_by("-ordered_at")
         )
         status_param = request.query_params.get("status")
-        if status_param in {s for s, _ in Order.Status.choices}:
+        if status_param in {s for s, _ in OrderStatus.choices}:
             qs = qs.filter(order_status=status_param)
         package_id = request.query_params.get("package")
         if package_id:
@@ -502,7 +502,7 @@ class OrderPaymentInitView(APIView):
             )
         except Order.DoesNotExist:
             return Response({"detail": "Not found"}, status=404)
-        if order.order_status == Order.Status.PAID:
+        if order.order_status == OrderStatus.PAID:
             return Response({"detail": "Order is already paid."}, status=400)
         if order.amount is None or order.amount <= 0:
             return Response(

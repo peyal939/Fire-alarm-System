@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
 from products.models import Order, Package
+from products.enums import OrderStatus
 from subscriptions.enums import DeviceSubscriptionStatus
 from subscriptions.models import DeviceSubscription
 from devices.models import Device
@@ -83,7 +84,7 @@ class DeviceOwnershipTests(APITestCase):
             number_of_slave_devices=0,
             quantity=1,
             amount=Decimal("2500.00"),
-            order_status=Order.Status.PAID,
+            order_status=OrderStatus.PAID,
         )
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
@@ -123,7 +124,7 @@ class DeviceOwnershipTests(APITestCase):
             number_of_slave_devices=2,
             quantity=3,
             amount=Decimal("7500.00"),
-            order_status=Order.Status.PAID,
+            order_status=OrderStatus.PAID,
         )
         Device.objects.create(
             user=self.user_a,
@@ -169,7 +170,7 @@ class DeviceOwnershipTests(APITestCase):
             number_of_slave_devices=3,
             quantity=5,
             amount=Decimal("12500.00"),
-            order_status=Order.Status.PAID,
+            order_status=OrderStatus.PAID,
         )
         Device.objects.create(
             user=self.user_a,
@@ -223,7 +224,7 @@ class DeviceOwnershipTests(APITestCase):
             number_of_slave_devices=1,
             quantity=3,
             amount=Decimal("7500.00"),
-            order_status=Order.Status.PAID,
+            order_status=OrderStatus.PAID,
         )
         master = Device.objects.create(
             user=self.user_a,

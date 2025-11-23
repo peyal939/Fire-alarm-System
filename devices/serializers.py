@@ -11,6 +11,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from .services import order_has_capacity
 from products.models import Order
+from products.enums import OrderStatus
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -35,6 +36,8 @@ class DeviceSerializer(serializers.ModelSerializer):
     )
     mesh_alert = serializers.SerializerMethodField(read_only=True)
     effective_status = serializers.SerializerMethodField(read_only=True)
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
@@ -69,6 +72,16 @@ class DeviceSerializer(serializers.ModelSerializer):
             "phone_number",
             "phone_number_updated_at",
         )
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_latitude(self, obj: Device) -> float:
+        val = obj.latitude if obj.latitude is not None else Decimal("23.810300")
+        return float(val)
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_longitude(self, obj: Device) -> float:
+        val = obj.longitude if obj.longitude is not None else Decimal("90.412500")
+        return float(val)
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:
@@ -189,7 +202,7 @@ class DeviceRegisterSerializer(serializers.Serializer):
             self.fields["originating_order_id"].queryset = (
                 Order.objects.filter(
                     user=user,
-                    order_status=Order.Status.PAID,
+                    order_status=OrderStatus.PAID,
                     deleted_at__isnull=True,
                     package__deleted_at__isnull=True,
                 )
@@ -259,7 +272,7 @@ class DeviceRegisterSerializer(serializers.Serializer):
                 Order.objects.filter(
                     pk=selected_order.pk,
                     user=user,
-                    order_status=Order.Status.PAID,
+                    order_status=OrderStatus.PAID,
                     deleted_at__isnull=True,
                     package__deleted_at__isnull=True,
                 )
@@ -270,9 +283,28 @@ class DeviceRegisterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "originating_order_id is not available for assignment"
                 )
-            can_assign, _, message = order_has_capacity(order, role=str(role))
-            if not can_assign:
-                raise serializers.ValidationError(message)
+            
+            # Check if we can skip capacity check (if device is already assigned or fulfilled)
+            hid = attrs.get("hardware_identifier")
+            skip_capacity_check = False
+            
+            # 1. Check existing device
+            existing_device = Device.objects.filter(hardware_identifier=hid, deleted_at__isnull=True).first()
+            if existing_device and existing_device.originating_order_id == order.pk:
+                skip_capacity_check = True
+            
+            # 2. Check fulfillment
+            if not skip_capacity_check:
+                from products.models import OrderFulfillment
+                fulfillment = OrderFulfillment.objects.filter(hardware_identifier=hid, deleted_at__isnull=True).first()
+                if fulfillment and fulfillment.order_id == order.pk:
+                    skip_capacity_check = True
+
+            if not skip_capacity_check:
+                can_assign, _, message = order_has_capacity(order, role=str(role))
+                if not can_assign:
+                    raise serializers.ValidationError(message)
+            
             attrs["originating_order"] = order
 
         return attrs
@@ -295,6 +327,8 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
     device_role = serializers.CharField(read_only=True)
     master_id = serializers.IntegerField(source="master.id", read_only=True)
     effective_status = serializers.SerializerMethodField(read_only=True)
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
@@ -324,6 +358,16 @@ class DeviceNodeSerializer(serializers.ModelSerializer):
             "phone_number",
             "phone_number_updated_at",
         )
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_latitude(self, obj: Device) -> float:
+        val = obj.latitude if obj.latitude is not None else Decimal("23.810300")
+        return float(val)
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_longitude(self, obj: Device) -> float:
+        val = obj.longitude if obj.longitude is not None else Decimal("90.412500")
+        return float(val)
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_online(self, obj: Device) -> bool:

@@ -114,7 +114,7 @@ def assign_device_to_order(
                     .filter(
                         pk=preferred_order.pk,
                         user_id=user_id,
-                        order_status=Order.Status.PAID,
+                        order_status=OrderStatus.PAID,
                         deleted_at__isnull=True,
                         package__deleted_at__isnull=True,
                     )

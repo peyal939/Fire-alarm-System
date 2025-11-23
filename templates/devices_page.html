@@ -850,14 +850,16 @@
       populateProvisionedLists();
       slaveModal.show();
     });
-    claimDeviceBtn.addEventListener('click', () => {
-      claimDeviceForm.reset();
-      mapPickerClaimWrap.style.display = 'none';
-      claimError.classList.add('d-none');
-      claimError.textContent = '';
-      populateClaimDeviceSelect();
-      claimDeviceModal.show();
-    });
+    if (claimDeviceBtn) {
+      claimDeviceBtn.addEventListener('click', () => {
+        claimDeviceForm.reset();
+        mapPickerClaimWrap.style.display = 'none';
+        claimError.classList.add('d-none');
+        claimError.textContent = '';
+        populateClaimDeviceSelect();
+        claimDeviceModal.show();
+      });
+    }
     pickOnMapMasterBtn.addEventListener('click', () => {
       mapPickerMasterWrap.style.display = '';
       setTimeout(() => { ensureMapMaster(); mapMaster.invalidateSize(); }, 200);

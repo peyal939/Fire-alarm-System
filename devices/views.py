@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 import logging
 
 from django.db import models, transaction, IntegrityError
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -34,10 +35,12 @@ from .serializers import (
     DevicePhoneUpdateSerializer,
 )
 from .constants import DeviceConfigurationPublishError
+from .services import OrderAssignmentError
 from .alarm_state import reset_state_for_alert, schedule_next_reminder
 from subscriptions.enums import DeviceSubscriptionStatus
 from subscriptions.models import DeviceSubscription
 from subscriptions.services import ensure_device_subscription
+from products.models import OrderFulfillment
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +185,66 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         instance: Device = self.get_object()
         instance.soft_delete(acting_user=request.user)
+        
+        # Reset fulfillment status if exists so it can be reclaimed
+        OrderFulfillment.objects.filter(
+            hardware_identifier=instance.hardware_identifier
+        ).update(is_claimed=False)
+
         _broadcast_device_removed(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="List unclaimed devices",
+        description="List devices assigned to the user (e.g. via Order) but not yet registered/setup.",
+        responses={200: DeviceSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"], url_path="unclaimed")
+    def unclaimed(self, request):
+        """List fulfilled but unclaimed devices for the user."""
+        qs = OrderFulfillment.objects.filter(
+            order__user=request.user,
+            is_claimed=False,
+            deleted_at__isnull=True
+        ).select_related('order')
+        
+        # Create dummy Device instances to ensure serialization consistency
+        dummy_devices = []
+        for item in qs:
+            # Create a transient Device instance (not saved to DB)
+            d = Device(
+                id=-item.id,  # Negative ID to avoid collision
+                hardware_identifier=item.hardware_identifier,
+                device_name="",
+                device_role=item.device_role,
+                latitude=Decimal("23.810300"), # Default location for map pin
+                longitude=Decimal("90.412500"),
+                status="unknown",
+                user=request.user,
+                originating_order=item.order,
+            )
+            # Manually attach attributes expected by serializer that aren't on the model instance
+            # d.is_online is a property, so we can't set it directly on the instance.
+            # However, DeviceSerializer uses getattr(obj, "is_online", False).
+            # Since d.last_seen is None, d.is_online will return False automatically.
+            # d.is_online = False 
+            
+            d.master = None # Unclaimed devices don't have a linked master device record yet
+            
+            # For master_hardware_identifier, we need to trick the serializer
+            # DeviceSerializer uses source='master.hardware_identifier'
+            # Since d.master is None, this would be None.
+            # But OrderFulfillment has the info.
+            # We can't easily inject it into d.master without a dummy master object.
+            if item.master_hardware_identifier:
+                # Create a dummy master just for the identifier
+                d.master = Device(hardware_identifier=item.master_hardware_identifier, device_name="")
+            
+            dummy_devices.append(d)
+
+        serializer = DeviceSerializer(dummy_devices, many=True)
+        return Response(serializer.data)
 
     @extend_schema(
         tags=["Devices"],
@@ -246,13 +307,14 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def register(self, request):
         ser = DeviceRegisterSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
-        hid = ser.validated_data["hardware_identifier"].strip()
-        name = ser.validated_data.get("device_name", "").strip()
-        lat_dec = ser.validated_data.get("latitude")
-        lon_dec = ser.validated_data.get("longitude")
-        role = ser.validated_data.get("device_role") or Device.DeviceRole.MASTER
-        master = ser.validated_data.get("master")  # set in serializer when role==slave
-        preferred_order = ser.validated_data.get("originating_order")
+        validated = ser.validated_data
+        hid = validated["hardware_identifier"].strip()
+        name = validated.get("device_name", "").strip()
+        lat_dec = validated.get("latitude")
+        lon_dec = validated.get("longitude")
+        role = validated.get("device_role") or Device.DeviceRole.MASTER
+        master = validated.get("master")  # set in serializer when role==slave
+        preferred_order = validated.get("originating_order")
 
         if not hid:
             return Response({"detail": "hardware_identifier is required"}, status=400)
@@ -363,11 +425,67 @@ class DeviceViewSet(viewsets.ModelViewSet):
             _broadcast_new_device(soft_deleted)
             return Response(DeviceSerializer(soft_deleted).data, status=201)
 
-        # If neither active nor soft-deleted found, reject registration
-        return Response(
-            {"detail": "Device not found. Please ensure the device ID is correct and has been assigned to your order."},
-            status=404
-        )
+        # If neither active nor soft-deleted found, create new device
+        
+        # Check OrderFulfillment
+        fulfillment = OrderFulfillment.objects.filter(
+            hardware_identifier=hid, 
+            deleted_at__isnull=True
+        ).first()
+
+        if not fulfillment:
+             # Strict mode: only allow registration if fulfilled (unless superadmin)
+             if not (request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"):
+                 return Response({"detail": "Device ID not authorized. Please contact support."}, status=400)
+        
+        if fulfillment:
+            if fulfillment.is_claimed:
+                 return Response({"detail": "Device ID already claimed."}, status=409)
+            if fulfillment.order.user != request.user and not (request.user.is_superuser or getattr(request.user, "role", None) == "superadmin"):
+                 return Response({"detail": "Device ID belongs to another user."}, status=403)
+
+        try:
+            with transaction.atomic():
+                device_kwargs = dict(
+                    user=request.user,
+                    hardware_identifier=hid,
+                    device_name=name,
+                    latitude=lat_dec,
+                    longitude=lon_dec,
+                    device_role=role,
+                    registered_at=timezone.now(),
+                    created_by=request.user,
+                )
+                if role == Device.DeviceRole.SLAVE and master:
+                    device_kwargs["master"] = master
+
+                device = Device.objects.create(**device_kwargs)
+
+                if fulfillment:
+                    device.originating_order = fulfillment.order
+                    device.save(update_fields=["originating_order"])
+                    fulfillment.is_claimed = True
+                    fulfillment.save(update_fields=["is_claimed"])
+                else:
+                    if preferred_order:
+                        services.assign_device_to_order(
+                            device, preferred_order=preferred_order
+                        )
+                    else:
+                        services.assign_device_to_order(device)
+                
+                _ensure_subscription(device)
+                _broadcast_new_device(device)
+                return Response(DeviceSerializer(device).data, status=201)
+        except ValidationError as exc:
+            # Surface model validation errors (e.g. missing master for slave) as 400 responses
+            return Response(exc.message_dict, status=400)
+        except IntegrityError:
+             return Response(
+                {"detail": "Device already registered by another user"}, status=409
+            )
+        except OrderAssignmentError as exc:
+            return Response({"detail": str(exc)}, status=400)
 
     @extend_schema(
         tags=["Devices"],

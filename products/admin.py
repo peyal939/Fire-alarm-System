@@ -5,6 +5,7 @@ from django.utils.html import format_html
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from .models import Package, Order
+from .enums import OrderStatus
 from .forms import OrderFulfillmentForm
 from .services import fulfill_order
 
@@ -22,7 +23,7 @@ class OrderAdminForm(forms.ModelForm):
 
     def clean_order_status(self):
         status = self.cleaned_data['order_status']
-        if status == Order.Status.DELIVERED:
+        if status == OrderStatus.DELIVERED:
             expected = self.instance.number_of_master_devices + self.instance.number_of_slave_devices
             if self.instance.assigned_devices < expected:
                 raise forms.ValidationError("Cannot mark as Delivered until all devices are assigned (Fulfilled).")
@@ -93,7 +94,7 @@ class OrderAdmin(admin.ModelAdmin):
     def fulfillment_actions(self, obj):
         if obj.assigned_devices > 0:
             return "Fulfilled"
-        if obj.order_status != Order.Status.PAID:
+        if obj.order_status != OrderStatus.PAID:
              return "Not Paid"
         return format_html(
             '<a class="button" href="{}">Fulfill Order</a>',

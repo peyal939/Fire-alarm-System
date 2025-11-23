@@ -108,3 +108,26 @@ class Order(AuditSoftDeleteModel):
         """Return how many device registrations can still be linked to this order."""
         remaining = (self.quantity or 0) - (self.assigned_devices or 0)
         return remaining if remaining > 0 else 0
+
+
+class OrderFulfillment(AuditSoftDeleteModel):
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="fulfillments"
+    )
+    hardware_identifier = models.CharField(max_length=64, unique=True)
+    device_role = models.CharField(
+        max_length=10,
+        choices=[("master", "Master"), ("slave", "Slave")],
+        default="master",
+    )
+    master_hardware_identifier = models.CharField(max_length=64, null=True, blank=True)
+    is_claimed = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["hardware_identifier"]),
+            models.Index(fields=["order", "is_claimed"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.hardware_identifier} ({self.device_role})"

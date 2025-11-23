@@ -10,9 +10,11 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 
 from shurjopay import services as shurjopay_services
+from shurjopay.enums import PaymentTransactionStatus
 from shurjopay.models import PaymentTransaction
 
-from .models import Order
+from .enums import OrderStatus
+from .models import Order, OrderFulfillment
 from devices.models import Device
 
 logger = logging.getLogger(__name__)
@@ -87,7 +89,7 @@ def initiate_payment_for_order(
             .select_related("user", "package")
             .get(pk=order.pk)
         )
-        if order_locked.order_status == Order.Status.PAID:
+        if order_locked.order_status == OrderStatus.PAID:
             logger.info("Order %s already paid; skipping payment initiation", order_locked.pk)
             return None
         amount = order_locked.amount or Decimal("0")
@@ -101,7 +103,7 @@ def initiate_payment_for_order(
             reference=_build_reference(order_locked),
             amount=amount,
             currency=currency,
-            status=PaymentTransaction.Status.INITIATED,
+            status=PaymentTransactionStatus.INITIATED,
             request_payload={
                 "order_id": order_locked.pk,
                 "client_ip": client_ip,
@@ -123,7 +125,7 @@ def initiate_payment_for_order(
         details = None
 
     if not details:
-        txn.status = PaymentTransaction.Status.FAILED
+        txn.status = PaymentTransactionStatus.FAILED
         txn.save(update_fields=["status", "updated_at"])
         _record_gateway_state(order_id, None, {"error": "initiate_failed"}, actor)
         return None
@@ -133,9 +135,9 @@ def initiate_payment_for_order(
     txn.customer_order_id = getattr(details, "customer_order_id", f"ORD-{order_id}-{txn.pk}")
     has_checkout = bool(txn.checkout_url)
     txn.status = (
-        PaymentTransaction.Status.REDIRECTED
+        PaymentTransactionStatus.REDIRECTED
         if has_checkout
-        else PaymentTransaction.Status.FAILED
+        else PaymentTransactionStatus.FAILED
     )
     txn.response_payload = getattr(details, "__dict__", None)
     txn.save()
@@ -234,9 +236,9 @@ def sync_order_from_transaction(transaction_obj: PaymentTransaction) -> Optional
             if "gateway_response" not in updates:
                 updates.append("gateway_response")
 
-        if transaction_obj.status == PaymentTransaction.Status.SUCCESS:
-            if order_locked.order_status != Order.Status.PAID:
-                order_locked.order_status = Order.Status.PAID
+        if transaction_obj.status == PaymentTransactionStatus.SUCCESS:
+            if order_locked.order_status != OrderStatus.PAID:
+                order_locked.order_status = OrderStatus.PAID
                 updates.append("order_status")
         if transaction_obj.user and getattr(transaction_obj.user, "pk", None):
             order_locked.updated_by = transaction_obj.user
@@ -284,44 +286,33 @@ def fulfill_order(order: Order, master_ids: list[str], slave_data: list[dict], a
         found = ", ".join([d.hardware_identifier for d in existing])
         raise ValidationError(f"The following devices are already registered: {found}")
 
+    # Check if any ID is already fulfilled (OrderFulfillment)
+    existing_fulfillment = OrderFulfillment.objects.filter(hardware_identifier__in=all_ids, deleted_at__isnull=True)
+    if existing_fulfillment.exists():
+        found = ", ".join([f.hardware_identifier for f in existing_fulfillment])
+        raise ValidationError(f"The following devices are already fulfilled: {found}")
+
     with transaction.atomic():
         # Create Masters
-        created_masters = {}
         for hid in master_ids:
-            d = Device.objects.create(
-                user=order.user,
+            OrderFulfillment.objects.create(
+                order=order,
                 hardware_identifier=hid,
-                device_role=Device.DeviceRole.MASTER,
-                originating_order=order,
+                device_role="master",
                 created_by=actor,
-                # registered_at is None until user claims it
             )
-            created_masters[hid] = d
         
         # Create Slaves
         for item in slave_data:
             hid = item['id']
             master_hid = item.get('master_id')
-            master_device = None
             
-            if master_hid:
-                # Try to find in currently created masters
-                master_device = created_masters.get(master_hid)
-                if not master_device:
-                    # Try to find in existing active masters
-                    master_device = Device.objects.filter(
-                        hardware_identifier=master_hid, 
-                        device_role=Device.DeviceRole.MASTER,
-                        deleted_at__isnull=True
-                    ).first()
-            
-            Device.objects.create(
-                user=order.user,
+            OrderFulfillment.objects.create(
+                order=order,
                 hardware_identifier=hid,
-                device_role=Device.DeviceRole.SLAVE,
-                originating_order=order,
+                device_role="slave",
+                master_hardware_identifier=master_hid,
                 created_by=actor,
-                master=master_device
             )
         
         # Update order assigned count
