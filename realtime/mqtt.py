@@ -313,6 +313,37 @@ def process_payload(payload: dict) -> None:
     Supports both legacy single-device and composite master/slave payloads.
     Safe to call from tests.
     """
+    # --- MongoDB Historical Data Recording (Sidecar) ---
+    try:
+        from utils.mongo_client import mongo_client
+        # We clone the payload to avoid side effects if the main logic modifies it
+        # We also add a server-side timestamp for strict ordering
+        mongo_doc = payload.copy() if isinstance(payload, dict) else {"raw": payload}
+        
+        # Ensure there is a timestamp field (required for Time Series)
+        if "timestamp" not in mongo_doc or not mongo_doc["timestamp"]:
+            mongo_doc["timestamp"] = timezone.now()
+        else:
+            # Convert Unix timestamp to datetime if needed, because Mongo Time Series
+            # requires the timeField to be a BSON Date (datetime object)
+            ts_val = mongo_doc["timestamp"]
+            if isinstance(ts_val, (int, float, str)):
+                _, ts_dt = _to_ts_dt(ts_val)
+                mongo_doc["timestamp"] = ts_dt
+
+        # Add metadata
+        mongo_doc["metadata"] = {
+            "ingested_at": timezone.now(),
+            "source": "mqtt_process_payload"
+        }
+        
+        # Fire-and-forget insert
+        mongo_client.insert_one(mongo_doc)
+    except Exception as e:
+        # NEVER break the main loop for historical data errors
+        logger.error(f"Failed to record to MongoDB: {e}")
+    # ---------------------------------------------------
+
     try:
         # Ensure background thread holds a fresh DB connection
         close_old_connections()

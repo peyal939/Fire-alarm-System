@@ -1,6 +1,15 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
+import warnings
+
+# Suppress harmless CryptographyDeprecationWarning from pymongo/pyopenssl
+try:
+    from cryptography.utils import CryptographyDeprecationWarning
+    warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
+except ImportError:
+    pass
 
 # Ensure PyMySQL is used as MySQLdb before Django imports DB backend
 try:
@@ -31,6 +40,11 @@ MQTT_TOPIC = os.getenv("MQTT_TOPIC", "aps/fire/data")
 MQTT_DEVICE_REG_TOPIC = os.getenv("MQTT_DEVICE_REG_TOPIC", "aps/fire/reg")
 MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASS = os.getenv("MQTT_PASS", "")
+
+# MongoDB Configuration (Historical Data)
+MONGO_URI = os.getenv("MONGO_URI", "")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "firealarm")
+MONGO_COLLECTION_NAME = os.getenv("MONGO_COLLECTION_NAME", "sensordata")
 
 # SMS / OTP configuration
 SMS_GATEWAY = {
