@@ -260,7 +260,15 @@
 <div class="subscriptions-page">
   <div class="container">
     <div class="page-header">
-      <h1><i class="bi bi-credit-card-2-front me-2"></i>My Device Subscriptions</h1>
+      <h1>
+        <i class="bi bi-credit-card-2-front me-2"></i>
+        {% if showing_delegated %}My & Delegated Device Subscriptions{% else %}My Device Subscriptions{% endif %}
+      </h1>
+      {% if showing_delegated %}
+      <p class="text-muted mb-0">
+        You can pay for devices you've assigned to teammates. Charges will apply to your company account.
+      </p>
+      {% endif %}
     </div>
     
     {% if cards %}
@@ -312,6 +320,18 @@
                   ৳{{ card.subscription.monthly_amount }}
                 </span>
               </div>
+
+              {% if card.delegated_owner %}
+              <div class="subscription-info-item">
+                <span class="subscription-info-label">
+                  <i class="bi bi-people"></i>
+                  Assigned user
+                </span>
+                <span class="subscription-info-value">
+                  {{ card.delegated_owner.email|default:card.delegated_owner.phone_number }}
+                </span>
+              </div>
+              {% endif %}
               
               <div class="subscription-payment-section">
                 <form method="post" action="{% url 'subscriptions:user-pay' card.subscription.pk %}" class="subscription-payment-form">

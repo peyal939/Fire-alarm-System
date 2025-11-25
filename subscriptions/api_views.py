@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from common.permissions import IsSuperAdmin
+from common.permissions import IsSuperAdmin, IsSuperAdminOrCompanyAdmin
 from .models import DeviceSubscription, SubscriptionCharge
 from . import services
 from .serializers import (
@@ -32,14 +32,15 @@ class UserSubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return (
-            DeviceSubscription.objects.select_related(
-                "device",
-                "device__user",
-            )
-            .filter(device__user=self.request.user, device__deleted_at__isnull=True)
-            .order_by("-next_due_at", "pk")
-        )
+        qs = DeviceSubscription.objects.select_related(
+            "device",
+            "device__user",
+        ).filter(device__deleted_at__isnull=True)
+        user = self.request.user
+        filters = Q(device__user=user)
+        if getattr(user, "role", "") == "company_admin":
+            filters |= Q(device__originating_order__user=user)
+        return qs.filter(filters).order_by("-next_due_at", "pk")
 
     @action(detail=True, methods=["get"], url_path="charges", url_name="charges")
     def list_charges(self, request, pk=None):
@@ -121,24 +122,34 @@ class AdminSubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     """Superadmin endpoints for managing billing state."""
 
     serializer_class = AdminDeviceSubscriptionSerializer
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    permission_classes = [IsAuthenticated, IsSuperAdminOrCompanyAdmin]
 
     def get_queryset(self):
         qs = DeviceSubscription.objects.select_related(
             "device",
             "device__user",
         ).order_by("-next_due_at", "pk")
+        user = self.request.user
+        role = getattr(user, "role", "")
+        if user.is_superuser or role == "superadmin":
+            base = qs
+        elif role == "company_admin":
+            base = qs.filter(
+                Q(device__user=user) | Q(device__originating_order__user=user)
+            )
+        else:
+            base = qs.none()
         status_q = self.request.query_params.get("status")
         query = self.request.query_params.get("q", "").strip()
         if status_q:
-            qs = qs.filter(status=status_q)
+            base = base.filter(status=status_q)
         if query:
-            qs = qs.filter(
+            base = base.filter(
                 Q(device__hardware_identifier__icontains=query)
                 | Q(device__device_name__icontains=query)
                 | Q(device__user__email__icontains=query)
             )
-        return qs
+        return base
 
     @action(detail=True, methods=["post"], url_path="override", url_name="override")
     def set_override(self, request, pk=None):

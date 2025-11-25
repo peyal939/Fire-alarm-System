@@ -16,7 +16,8 @@
 {% endblock %}
 {% block content %}
 <div class="py-3" id="devicesPage"
-  data-is-admin="{% if request.user.is_superuser or request.user.role == 'superadmin' %}true{% else %}false{% endif %}">
+  data-is-admin="{% if request.user.is_superuser or request.user.role == 'superadmin' %}true{% else %}false{% endif %}"
+  data-is-company-admin="{% if request.user.role == 'company_admin' %}true{% else %}false{% endif %}">
   <div class="d-flex align-items-center justify-content-between mb-2">
     <h1 class="h4 mb-0">Devices</h1>
     <div class="devices-toolbar">
@@ -31,6 +32,9 @@
       <button id="registerSlaveBtn" class="btn btn-outline-success">Register Slave</button>
       {% if request.user.is_superuser or request.user.role == 'superadmin' %}
       <button id="registerForUserBtn" class="btn btn-outline-warning">Register For User</button>
+      {% endif %}
+      {% if request.user.is_superuser or request.user.role == 'superadmin' or request.user.role == 'company_admin' %}
+      <button id="delegateDeviceBtn" class="btn btn-outline-warning">Delegate Device</button>
       {% endif %}
     </div>
   </div>
@@ -195,6 +199,39 @@
       </div>
     </div>
    </div>
+
+  <!-- Delegate Device Modal -->
+  <div class="modal fade" id="delegateDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="delegateDeviceModalTitle">Delegate Device</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-danger d-none" id="errDelegateDevice"></div>
+          <form id="delegateDeviceForm">
+            <div class="mb-3" id="delegateDeviceSelectWrap">
+              <label class="form-label" for="delegateDeviceSelect">Choose device to delegate</label>
+              <select class="form-select" id="delegateDeviceSelect" name="device_id">
+                <option value="">Loading devices…</option>
+              </select>
+              <div class="form-text">Choose the hardware you want to reassign, or use the per-row Delegate button in the table to autofill this field.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="delegatePhoneInput">Recipient phone number</label>
+              <input type="tel" class="form-control" id="delegatePhoneInput" name="phone_number" placeholder="017XXXXXXXX" maxlength="20" required />
+              <div class="form-text">We'll look up an existing user by this verified phone number.</div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" form="delegateDeviceForm" class="btn btn-warning" id="submitDelegateDeviceBtn">Delegate access</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
     <!-- Edit Device Modal -->
     <div class="modal fade" id="editDeviceModal" tabindex="-1" aria-hidden="true">
@@ -367,6 +404,8 @@
   <script>
     const pageRoot = document.getElementById('devicesPage');
     const isAdminFlag = pageRoot && pageRoot.dataset.isAdmin === 'true';
+    const isCompanyAdminFlag = pageRoot && pageRoot.dataset.isCompanyAdmin === 'true';
+    const canDelegateDevices = isAdminFlag || isCompanyAdminFlag;
     const tableBody = document.querySelector('#devicesTable tbody');
     const emptyState = document.getElementById('devicesEmpty');
   const searchInput = document.getElementById('searchInput');
@@ -376,6 +415,7 @@
     const registerSlaveBtn = document.getElementById('registerSlaveBtn');
     const claimDeviceBtn = document.getElementById('claimDeviceBtn');
     const registerForUserBtn = document.getElementById('registerForUserBtn');
+    const delegateDeviceBtn = document.getElementById('delegateDeviceBtn');
 
     const masterModalEl = document.getElementById('registerMasterModal');
     const slaveModalEl = document.getElementById('registerSlaveModal');
@@ -392,6 +432,17 @@
   const assignPhoneInput = document.getElementById('assignPhoneInput');
   const assignPhoneModalTitle = document.getElementById('assignPhoneModalTitle');
   let phoneTargetDevice = null;
+
+  const delegateModalEl = document.getElementById('delegateDeviceModal');
+  const delegateModal = delegateModalEl ? new bootstrap.Modal(delegateModalEl) : null;
+  const delegateForm = document.getElementById('delegateDeviceForm');
+  const delegatePhoneInput = document.getElementById('delegatePhoneInput');
+  const delegateError = document.getElementById('errDelegateDevice');
+  const delegateSubmitBtn = document.getElementById('submitDelegateDeviceBtn');
+  const delegateModalTitle = document.getElementById('delegateDeviceModalTitle');
+  const delegateDeviceSelect = document.getElementById('delegateDeviceSelect');
+  const delegateDeviceSelectWrap = document.getElementById('delegateDeviceSelectWrap');
+  let delegateTargetDevice = null;
 
   const editDeviceModalEl = document.getElementById('editDeviceModal');
   const editDeviceModal = editDeviceModalEl ? new bootstrap.Modal(editDeviceModalEl) : null;
@@ -433,6 +484,33 @@
     let markerMaster = null, markerSlave = null, markerClaim = null;
 
     let allDevices = [];
+
+    function refreshDelegateDeviceSelect(preselectId = null) {
+      if (!delegateDeviceSelect) {
+        return;
+      }
+      delegateDeviceSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = canDelegateDevices ? 'Select device…' : 'Delegation unavailable';
+      delegateDeviceSelect.appendChild(placeholder);
+      if (!canDelegateDevices) {
+        delegateDeviceSelect.disabled = true;
+        return;
+      }
+      allDevices.forEach((device) => {
+        const option = document.createElement('option');
+        option.value = device.id;
+        const labelParts = [];
+        labelParts.push(device.hardware_identifier || `Device #${device.id}`);
+        if (device.device_name) {
+          labelParts.push(`— ${device.device_name}`);
+        }
+        option.textContent = labelParts.join(' ');
+        delegateDeviceSelect.appendChild(option);
+      });
+      delegateDeviceSelect.value = preselectId ? String(preselectId) : '';
+    }
 
     if (!window.apiDelete) {
       const fallbackGetCookie = (name) => {
@@ -554,17 +632,21 @@
         const phoneActionLabel = d.phone_number ? 'Update phone' : 'Add phone';
         const phoneDisabled = d.online ? '' : 'disabled';
         const phoneTitle = d.online ? '' : 'Device must be online';
+        const actionButtons = [
+          `<button type="button" class="btn btn-outline-primary" data-action="phone" data-device-id="${d.id}" title="${phoneTitle}" ${phoneDisabled}>${phoneActionLabel}</button>`,
+          `<button type="button" class="btn btn-outline-secondary" data-action="edit" data-device-id="${d.id}">Edit</button>`,
+        ];
+        if (canDelegateDevices) {
+          actionButtons.push(
+            `<button type="button" class="btn btn-outline-warning" data-action="delegate" data-device-id="${d.id}">Delegate</button>`
+          );
+        }
+        actionButtons.push(
+          `<button type="button" class="btn btn-outline-danger" data-action="delete" data-device-id="${d.id}">Remove</button>`
+        );
         const actions = `
           <div class="btn-group btn-group-sm" role="group">
-            <button type="button" class="btn btn-outline-primary" data-action="phone" data-device-id="${d.id}" title="${phoneTitle}" ${phoneDisabled}>
-              ${phoneActionLabel}
-            </button>
-            <button type="button" class="btn btn-outline-secondary" data-action="edit" data-device-id="${d.id}">
-              Edit
-            </button>
-            <button type="button" class="btn btn-outline-danger" data-action="delete" data-device-id="${d.id}">
-              Remove
-            </button>
+            ${actionButtons.join('\n')}
           </div>
         `;
         tr.innerHTML = `
@@ -591,6 +673,7 @@
         tableBody.appendChild(tr);
       });
       emptyState.style.display = roleFiltered.length ? 'none' : '';
+      refreshDelegateDeviceSelect();
     }
 
     function ensureMapMaster() {
@@ -763,6 +846,34 @@
       setTimeout(() => assignPhoneInput.focus({ preventScroll: true }), 200);
     }
 
+    function openDelegateModal(device) {
+      if (!canDelegateDevices || !delegateModal || !delegateForm) {
+        alert('You do not have permission to delegate devices.');
+        return;
+      }
+      delegateTargetDevice = device;
+      delegateForm.reset();
+      const preselectId = device ? device.id : null;
+      refreshDelegateDeviceSelect(preselectId);
+      if (delegateDeviceSelect) {
+        delegateDeviceSelect.disabled = Boolean(device);
+      }
+      if (delegateError) {
+        delegateError.classList.add('d-none');
+        delegateError.textContent = '';
+      }
+      if (delegateModalTitle) {
+        const label = device
+          ? `Delegate Device · ${device.hardware_identifier || device.id}`
+          : 'Delegate Device';
+        delegateModalTitle.textContent = label;
+      }
+      delegateModal.show();
+      if (delegatePhoneInput) {
+        setTimeout(() => delegatePhoneInput.focus({ preventScroll: true }), 200);
+      }
+    }
+
     function openEditDeviceModal(device) {
       if (!editDeviceModal || !editDeviceForm) return;
       editDeviceForm.reset();
@@ -820,6 +931,51 @@
         assignPhoneError.classList.remove('d-none');
       } finally {
         assignPhoneSubmitBtn.disabled = false;
+      }
+    }
+
+    async function onSubmitDelegateDevice(event) {
+      event.preventDefault();
+      let deviceId = delegateTargetDevice ? delegateTargetDevice.id : null;
+      if (!deviceId && delegateDeviceSelect) {
+        deviceId = parseInt(delegateDeviceSelect.value, 10) || null;
+      }
+      if (!deviceId) {
+        if (delegateError) {
+          delegateError.textContent = 'Select a device to delegate.';
+          delegateError.classList.remove('d-none');
+        }
+        return;
+      }
+      const raw = (delegatePhoneInput && delegatePhoneInput.value || '').trim();
+      if (!raw) {
+        if (delegateError) {
+          delegateError.textContent = 'Please enter the teammate\'s phone number.';
+          delegateError.classList.remove('d-none');
+        }
+        return;
+      }
+      if (delegateError) {
+        delegateError.classList.add('d-none');
+        delegateError.textContent = '';
+      }
+      if (delegateSubmitBtn) {
+        delegateSubmitBtn.disabled = true;
+      }
+      try {
+        await apiPost(`/devices/${deviceId}/delegate_access/`, { phone_number: raw });
+        if (delegateModal) delegateModal.hide();
+        await fetchAllDevices();
+      } catch (err) {
+        console.error(err);
+        if (delegateError) {
+          delegateError.textContent = extractApiError(err, 'Unable to delegate device. Confirm the phone number matches an existing user.');
+          delegateError.classList.remove('d-none');
+        }
+      } finally {
+        if (delegateSubmitBtn) {
+          delegateSubmitBtn.disabled = false;
+        }
       }
     }
 
@@ -1114,6 +1270,17 @@
         return;
       }
 
+      if (action === 'delegate') {
+        const deviceId = parseInt(btn.getAttribute('data-device-id'), 10);
+        const device = allDevices.find(d => d.id === deviceId);
+        if (!device) {
+          alert('Device not found. Please refresh.');
+          return;
+        }
+        openDelegateModal(device);
+        return;
+      }
+
       if (action === 'edit') {
         const deviceId = parseInt(btn.getAttribute('data-device-id'), 10);
         const device = allDevices.find(d => d.id === deviceId);
@@ -1149,6 +1316,16 @@
         claimError.textContent = '';
         populateClaimDeviceSelect();
         claimDeviceModal.show();
+      });
+    }
+    if (delegateDeviceBtn) {
+      delegateDeviceBtn.addEventListener('click', () => {
+        delegateTargetDevice = null;
+        if (delegateDeviceSelect) {
+          delegateDeviceSelect.disabled = false;
+        }
+        refreshDelegateDeviceSelect();
+        openDelegateModal(null);
       });
     }
     pickOnMapMasterBtn.addEventListener('click', () => {
@@ -1260,6 +1437,18 @@
       phoneTargetDevice = null;
       assignPhoneError.classList.add('d-none');
     });
+    if (delegateForm) {
+      delegateForm.addEventListener('submit', onSubmitDelegateDevice);
+    }
+    if (delegateModalEl) {
+      delegateModalEl.addEventListener('hidden.bs.modal', () => {
+        delegateTargetDevice = null;
+        if (delegateError) {
+          delegateError.classList.add('d-none');
+          delegateError.textContent = '';
+        }
+      });
+    }
 
     // Initial load
     fetchAllDevices();

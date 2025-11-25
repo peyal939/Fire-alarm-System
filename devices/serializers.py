@@ -525,3 +525,13 @@ class AlertSerializer(serializers.ModelSerializer):
             "last_reminder_at",
             "reminder_count",
         )
+
+
+class DeviceDelegationSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=20)
+
+    def validate_phone_number(self, value: str) -> str:
+        try:
+            return normalize_bd_phone_number(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
