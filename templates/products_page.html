@@ -1,99 +1,647 @@
 {% extends "base.html" %}
 {% block title %}Products · apS Fire Alarm{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+<style>
+  #productsPage {
+    background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
+    min-height: calc(100vh - 200px);
+  }
+  
+  .page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 3px solid #198754;
+  }
+  
+  .page-header h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #198754;
+    margin: 0;
+  }
+  
+  .page-header p {
+    color: #6c757d;
+    margin: 0.5rem 0 0 0;
+  }
+  
+  .packages-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .packages-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+  }
+  
+  .packages-card .card-header {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 1.1rem;
+    padding: 1rem 1.5rem;
+    border: none;
+  }
+  
+  .packages-card .table {
+    margin: 0;
+  }
+  
+  .packages-card .table thead th {
+    background-color: #f8f9fa;
+    font-weight: 700;
+    color: #495057;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    padding: 1rem;
+    border-bottom: 2px solid #dee2e6;
+  }
+  
+  .packages-card .table tbody td {
+    padding: 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .packages-card .table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .packages-card .table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .order-form-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .order-form-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+  }
+  
+  .order-form-card .card-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 1.1rem;
+    padding: 1rem 1.5rem;
+    border: none;
+  }
+  
+  .order-form-card .card-body {
+    padding: 1.5rem;
+  }
+  
+  .order-form-card .form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+  
+  .order-form-card .form-control,
+  .order-form-card .form-select {
+    border-radius: 8px;
+    border: 1px solid #ced4da;
+    padding: 0.6rem 0.75rem;
+    transition: all 0.2s;
+  }
+  
+  .order-form-card .form-control:focus,
+  .order-form-card .form-select:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.15);
+  }
+  
+  .order-form-card hr {
+    margin: 1.5rem 0;
+    opacity: 0.3;
+  }
+  
+  .total-display {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 1rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #198754;
+    text-align: center;
+    margin: 1rem 0;
+  }
+  
+  .order-form-card .btn-primary {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  
+  .order-form-card .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(25, 135, 84, 0.4);
+  }
+  
+  .order-form-card .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  .orders-section {
+    margin-top: 2rem;
+  }
+  
+  .orders-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #dee2e6;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .orders-section-header h5 {
+    font-weight: 600;
+    color: #198754;
+    margin: 0;
+    font-size: 1.25rem;
+  }
+  
+  .order-filter-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  
+  .order-filter-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #dee2e6;
+    background: white;
+    color: #6c757d;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .order-filter-btn:hover {
+    border-color: #198754;
+    color: #198754;
+    background: #f8f9fa;
+  }
+  
+  .order-filter-btn.active {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    color: white;
+    border-color: #198754;
+  }
+  
+  .order-form-dynamic-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .order-form-dynamic-section.admin-view {
+    grid-template-columns: 1fr;
+  }
+  
+  @media (max-width: 991px) {
+    .order-form-dynamic-section {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .packages-card .card-header {
+    position: relative;
+  }
+  
+  .package-actions-header {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  
+  .package-action-btn {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .package-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  .btn-add-package {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .btn-add-package:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+  }
+  
+  .btn-edit-package {
+    background: #0d6efd;
+    color: white;
+  }
+  
+  .btn-edit-package:hover {
+    background: #0b5ed7;
+    color: white;
+  }
+  
+  .btn-delete-package {
+    background: #dc3545;
+    color: white;
+  }
+  
+  .btn-delete-package:hover {
+    background: #bb2d3b;
+    color: white;
+  }
+  
+  .package-form-modal .modal-body {
+    padding: 1.5rem;
+  }
+  
+  .package-form-modal .form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+  
+  .package-form-modal .form-label.fw-bold {
+    font-weight: 700;
+  }
+  
+  .package-form-modal .form-control,
+  .package-form-modal .form-select {
+    border-radius: 8px;
+    border: 1px solid #ced4da;
+    padding: 0.6rem 0.75rem;
+    transition: all 0.2s;
+  }
+  
+  .package-form-modal .form-control:focus,
+  .package-form-modal .form-select:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.15);
+  }
+  
+  .orders-table-wrapper {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+  
+  .orders-table {
+    width: 100%;
+    margin: 0;
+  }
+  
+  .orders-table thead {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  }
+  
+  .orders-table thead th {
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    padding: 1rem;
+    border-bottom: 2px solid #dee2e6;
+  }
+  
+  .orders-table tbody td {
+    padding: 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .orders-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .orders-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .order-card-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+  
+  .order-card-item:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+    border-color: #198754;
+  }
+  
+  .order-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .order-card-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  
+  .order-card-info-item {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .order-card-info-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+  }
+  
+  .order-card-info-value {
+    font-weight: 500;
+    color: #212529;
+  }
+  
+  .order-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+  }
+  
+  #noOrdersNote {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6c757d;
+    font-style: italic;
+  }
+  
+  #pkgLoading {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+  }
+  
+  #pkgEmpty {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+  }
+  
+  .badge {
+    padding: 0.5em 0.75em;
+    font-weight: 500;
+    border-radius: 6px;
+  }
+  
+  @media (max-width: 991px) {
+    .order-card-info {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
 {% block content %}
-<div class="py-3" id="productsPage"
+<div class="py-4" id="productsPage"
   data-user-id="{{ request.user.id }}"
   data-is-admin="{% if request.user.is_superuser or request.user.role == 'superadmin' %}true{% else %}false{% endif %}">
 
-  <div class="row g-4">
-    <div class="col-12 col-lg-7">
-      <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <strong>Available Packages</strong>
+  <div class="page-header">
+    <h1>Products & Orders</h1>
+    <p>{% if request.user.is_superuser or request.user.role == 'superadmin' %}Manage packages and view all orders{% else %}Browse available packages and manage your orders{% endif %}</p>
+  </div>
+
+  <div class="order-form-dynamic-section {% if request.user.is_superuser or request.user.role == 'superadmin' %}admin-view{% endif %}">
+    <div class="card packages-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-box-seam me-2"></i>Available Packages</span>
+        {% if request.user.is_superuser or request.user.role == 'superadmin' %}
+        <button class="package-action-btn btn-add-package" id="addPackageBtn" type="button">
+          <i class="bi bi-plus-circle"></i> Add Package
+        </button>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        <div id="pkgLoading" class="p-3 text-muted small">Loading packages…</div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle" id="packagesTable" style="display:none;">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th class="text-end">Min</th>
+                <th class="text-end">Max</th>
+                <th class="text-end">Price/Device</th>
+                <th class="text-end">MRF</th>
+                <th>Description</th>
+                {% if request.user.is_superuser or request.user.role == 'superadmin' %}
+                <th class="text-center">Actions</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody id="packagesTbody"></tbody>
+          </table>
         </div>
-        <div class="card-body p-0">
-          <div id="pkgLoading" class="p-3 text-muted small">Loading packages…</div>
-          <div class="table-responsive">
-            <table class="table table-sm mb-0 align-middle" id="packagesTable" style="display:none;">
-              <thead class="table-light">
-                <tr>
-                  <th>Name</th>
-                  <th class="text-end">Min</th>
-                  <th class="text-end">Max</th>
-                  <th class="text-end">Price/Device</th>
-                  <th class="text-end">MRF</th>
-                  <th>Description</th>
-                </tr>
-              </thead>
-              <tbody id="packagesTbody"></tbody>
-            </table>
-          </div>
-          <div id="pkgEmpty" class="p-3 text-muted small" style="display:none;">No packages.</div>
-        </div>
+        <div id="pkgEmpty" class="p-3 text-muted small" style="display:none;">No packages available.</div>
       </div>
     </div>
 
-    <div class="col-12 col-lg-5">
-      <div class="card shadow-sm">
-        <div class="card-header">
-          <strong>Create Order</strong>
+    {% if not request.user.is_superuser and request.user.role != 'superadmin' %}
+    <div class="card order-form-card">
+      <div class="card-header">
+        <span><i class="bi bi-cart-plus me-2"></i>Create Order</span>
+      </div>
+      <div class="card-body">
+        <form id="orderForm" novalidate>
+          <div class="mb-3">
+            <label class="form-label">Package</label>
+            <select class="form-select" id="orderPackage" required></select>
+            <div class="form-text" id="pkgRangeHelp"></div>
+            <div class="invalid-feedback">Select a package.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Quantity</label>
+            <input type="number" class="form-control" id="orderQty" min="1" required />
+            <div class="invalid-feedback" id="qtyError">Enter valid quantity.</div>
+          </div>
+          <div class="mb-3">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">Master devices</label>
+                <input type="number" class="form-control" id="orderMaster" min="0" value="0" />
+                <div class="invalid-feedback" id="masterError"></div>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Slave devices</label>
+                <input type="number" class="form-control" id="orderSlave" min="0" value="0" />
+                <div class="invalid-feedback" id="slaveError"></div>
+              </div>
+            </div>
+            <div class="text-danger small" id="deviceTotalError" style="display:none; margin-top: 0.5rem;"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Shipping Address</label>
+            <textarea class="form-control" rows="2" id="orderAddr" placeholder="Please provide your device address"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Currency</label>
+            <input class="form-control" id="orderCurrency" value="BDT" maxlength="8" />
+          </div>
+          <hr />
+          <h6 class="small mb-3 fw-semibold text-muted">Customer (optional)</h6>
+          <div class="mb-3">
+            <input class="form-control mb-2" id="customerName" placeholder="Name" />
+            <input class="form-control mb-2" id="customerPhone" placeholder="Phone" />
+            <input class="form-control mb-2" id="customerCity" placeholder="City" />
+            <input class="form-control mb-2" id="customerPostCode" placeholder="Post code" />
+            <input class="form-control mb-2" id="customerEmail" placeholder="Email" />
+            <textarea class="form-control" rows="2" id="customerAddress" placeholder="Customer address"></textarea>
+          </div>
+          <div class="total-display" id="calcTotal">Total: —</div>
+          <button class="btn btn-primary w-100" type="submit" id="orderSubmit" disabled>Create Order</button>
+          <div class="mt-3 small" id="orderMsg"></div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="orders-section">
+    <div class="orders-section-header">
+      <h5><i class="bi bi-receipt me-2"></i>Placed Orders</h5>
+      <div class="order-filter-buttons">
+        <button class="order-filter-btn active" data-filter="all">All</button>
+        <button class="order-filter-btn" data-filter="pending">Pending</button>
+        <button class="order-filter-btn" data-filter="paid">Paid</button>
+        <button class="order-filter-btn" data-filter="delivered">Delivered</button>
+      </div>
+    </div>
+    <div id="ordersPlaced" class="d-flex flex-column gap-2"></div>
+    <div id="noOrdersNote" class="text-muted small">No orders placed yet.</div>
+  </div>
+
+  <!-- Package Form Modal (Add/Edit) -->
+  <div class="modal fade package-form-modal" id="packageFormModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="packageFormModalTitle">Add Package</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="card-body">
-          <form id="orderForm" novalidate>
+        <div class="modal-body">
+          <form id="packageForm" novalidate>
+            <input type="hidden" id="packageFormId" />
             <div class="mb-3">
-              <label class="form-label">Package</label>
-              <select class="form-select" id="orderPackage" required></select>
-              <div class="form-text" id="pkgRangeHelp"></div>
-              <div class="invalid-feedback">Select a package.</div>
+              <label class="form-label fw-bold">Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="packageFormName" required maxlength="64" />
+              <div class="invalid-feedback">Package name is required.</div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Quantity</label>
-              <input type="number" class="form-control" id="orderQty" min="1" required />
-              <div class="invalid-feedback" id="qtyError">Enter valid quantity.</div>
-            </div>
-            <div class="mb-3">
-              <div class="row g-2">
-                <div class="col-6">
-                  <label class="form-label">Master devices</label>
-                  <input type="number" class="form-control" id="orderMaster" min="0" value="0" />
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Min Quantity <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="packageFormMinQty" min="1" required />
+                  <div class="invalid-feedback">Minimum quantity is required.</div>
                 </div>
-                <div class="col-6">
-                  <label class="form-label">Slave devices</label>
-                  <input type="number" class="form-control" id="orderSlave" min="0" value="0" />
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Max Quantity <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="packageFormMaxQty" min="1" required />
+                  <div class="invalid-feedback">Maximum quantity is required.</div>
+                </div>
+              </div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Price/Device <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="packageFormPrice" step="0.01" min="0" required />
+                  <div class="invalid-feedback">Price per device is required.</div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">MRF (Monthly Recurring Fee)</label>
+                  <input type="number" class="form-control" id="packageFormMrf" step="0.01" min="0" value="0" />
                 </div>
               </div>
             </div>
             <div class="mb-3">
-              <label class="form-label">Shipping Address</label>
-              <textarea class="form-control" rows="2" id="orderAddr" placeholder="Please provide your device address"></textarea>
+              <label class="form-label fw-bold">Description</label>
+              <textarea class="form-control" id="packageFormDescription" rows="3"></textarea>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Currency</label>
-              <input class="form-control" id="orderCurrency" value="BDT" maxlength="8" />
-            </div>
-            <hr />
-            <h6 class="small mb-2">Customer (optional)</h6>
-            <div class="mb-3">
-              <input class="form-control mb-2" id="customerName" placeholder="Name" />
-              <input class="form-control mb-2" id="customerPhone" placeholder="Phone" />
-              <input class="form-control mb-2" id="customerCity" placeholder="City" />
-              <input class="form-control mb-2" id="customerPostCode" placeholder="Post code" />
-              <input class="form-control mb-2" id="customerEmail" placeholder="Email" />
-              <textarea class="form-control" rows="2" id="customerAddress" placeholder="Customer address"></textarea>
-            </div>
-            <div class="mb-3">
-              <div class="text-muted small" id="calcTotal">Total: —</div>
-            </div>
-            <button class="btn btn-primary w-100" type="submit" id="orderSubmit" disabled>Create Order</button>
-            <div class="mt-3 small" id="orderMsg"></div>
+            <div class="alert alert-danger d-none" id="packageFormError"></div>
+            <div class="alert alert-success d-none" id="packageFormSuccess"></div>
           </form>
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="packageFormSubmit">Save Package</button>
+        </div>
       </div>
+    </div>
+  </div>
 
-      <div class="mt-4">
-        <h6 class="mb-2">Placed Orders</h6>
-        <div id="ordersPlaced" class="d-flex flex-column gap-2"></div>
-        <div id="noOrdersNote" class="text-muted small">No orders placed yet.</div>
+  <!-- Package Delete Confirmation Modal -->
+  <div class="modal fade" id="packageDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Delete Package</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete the package "<strong id="packageDeleteName"></strong>"?</p>
+          <p class="text-muted small mb-0">This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="packageDeleteConfirm">Delete</button>
+        </div>
       </div>
     </div>
   </div>
@@ -165,6 +713,8 @@
 
   let packages = [];
   let pkgMap = {};
+  let allOrders = [];
+  let currentFilter = 'all';
   const statusBadgeClass = {
     pending: 'bg-warning text-dark',
     paid: 'bg-info text-dark',
@@ -184,6 +734,7 @@
   }
 
   async function fetchPackages() {
+    if (!pkgLoading) return;
     pkgLoading.style.display = '';
     try {
       const data = await apiGet('/packages/');
@@ -193,9 +744,18 @@
       renderPackages();
       populateSelect();
     } catch (e) {
-      pkgLoading.textContent = 'Failed to load packages.';
+      console.error('Error fetching packages:', e);
+      if (pkgLoading) {
+        pkgLoading.textContent = 'Failed to load packages. Please refresh the page.';
+        pkgLoading.style.display = '';
+      }
+      if (pkgEmpty) {
+        pkgEmpty.textContent = 'Failed to load packages. Please check your connection and refresh.';
+        pkgEmpty.style.display = '';
+      }
+      if (packagesTable) packagesTable.style.display = 'none';
     } finally {
-      pkgLoading.style.display = 'none';
+      if (pkgLoading) pkgLoading.style.display = 'none';
     }
   }
 
@@ -210,45 +770,155 @@
   }
 
   async function fetchUserOrders() {
+    if (!ordersPlaced || !noOrdersNote) return;
     ordersPlaced.innerHTML = '';
     noOrdersNote.style.display = '';
     try {
       const orders = await apiGet(isAdmin ? '/orders/' : `/orders/${userId}/`);
       if (Array.isArray(orders) && orders.length) {
-        orders.forEach(order => appendOrderCard(order));
-        noOrdersNote.style.display = 'none';
+        allOrders = orders;
+        renderOrders();
+      } else {
+        allOrders = [];
+        if (noOrdersNote) {
+          noOrdersNote.textContent = 'No orders placed yet.';
+          noOrdersNote.style.display = '';
+        }
       }
     } catch (e) {
-      noOrdersNote.textContent = 'Failed to load orders.';
+      console.error('Error fetching orders:', e);
+      allOrders = [];
+      if (noOrdersNote) {
+        const errorMsg = e?.message || e?.body?.detail || 'Unknown error';
+        noOrdersNote.textContent = `Failed to load orders: ${errorMsg}. Please refresh the page.`;
+        noOrdersNote.style.display = '';
+      }
     }
+  }
+  
+  function renderOrders() {
+    if (!ordersPlaced || !noOrdersNote) return;
+    ordersPlaced.innerHTML = '';
+    noOrdersNote.style.display = '';
+    
+    let filteredOrders = allOrders;
+    if (currentFilter !== 'all') {
+      filteredOrders = allOrders.filter(order => {
+        const statusNorm = (order.order_status || '').toLowerCase();
+        return statusNorm === currentFilter;
+      });
+    }
+    
+    if (filteredOrders.length === 0) {
+      if (noOrdersNote) {
+        noOrdersNote.style.display = '';
+        if (currentFilter === 'all') {
+          noOrdersNote.textContent = 'No orders placed yet.';
+        } else {
+          noOrdersNote.textContent = `No ${currentFilter} orders found.`;
+        }
+      }
+      return;
+    }
+    
+    if (noOrdersNote) noOrdersNote.style.display = 'none';
+    filteredOrders.forEach(order => appendOrderCard(order));
+  }
+  
+  function setupOrderFilters() {
+    const filterButtons = document.querySelectorAll('.order-filter-btn');
+    filterButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderOrders();
+      });
+    });
   }
 
   function renderPackages() {
+    if (!packagesTbody) return;
     if (!packages.length) {
-      pkgEmpty.style.display = '';
-      packagesTable.style.display = 'none';
+      if (pkgEmpty) pkgEmpty.style.display = '';
+      if (packagesTable) packagesTable.style.display = 'none';
       return;
     }
-    pkgEmpty.style.display = 'none';
-    packagesTable.style.display = '';
-    packagesTbody.innerHTML = packages.map(p => `
-      <tr>
-        <td>${escapeHtml(p.name)}</td>
-        <td class="text-end">${p.min_quantity}</td>
-        <td class="text-end">${p.max_quantity}</td>
-        <td class="text-end">${formatMoney(p.price_per_device)}</td>
-        <td class="text-end">${formatMoney(p.mrf)}</td>
-        <td>${p.description ? escapeHtml(p.description) : ''}</td>
-      </tr>
-    `).join('');
+    if (pkgEmpty) pkgEmpty.style.display = 'none';
+    if (packagesTable) packagesTable.style.display = 'table';
+    packagesTbody.innerHTML = packages.map(p => {
+      let actionsCell = '';
+      if (isAdmin) {
+        actionsCell = `
+          <td class="text-center">
+            <div class="package-actions-header justify-content-center">
+              <button class="package-action-btn btn-edit-package" data-package-id="${p.id}" data-action="edit" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="package-action-btn btn-delete-package" data-package-id="${p.id}" data-action="delete" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </td>
+        `;
+      }
+      return `
+        <tr>
+          <td>${escapeHtml(p.name)}</td>
+          <td class="text-end">${p.min_quantity}</td>
+          <td class="text-end">${p.max_quantity}</td>
+          <td class="text-end">${formatMoney(p.price_per_device)}</td>
+          <td class="text-end">${formatMoney(p.mrf)}</td>
+          <td>${p.description ? escapeHtml(p.description) : ''}</td>
+          ${actionsCell}
+        </tr>
+      `;
+    }).join('');
+    
+    // Attach event listeners for edit/delete buttons
+    if (isAdmin) {
+      packagesTbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pkgId = parseInt(btn.dataset.packageId, 10);
+          const pkg = pkgMap[pkgId];
+          if (pkg) openPackageEditModal(pkg);
+        });
+      });
+      
+      packagesTbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pkgId = parseInt(btn.dataset.packageId, 10);
+          const pkg = pkgMap[pkgId];
+          if (pkg) openPackageDeleteModal(pkg);
+        });
+      });
+    }
   }
 
   // Removed placeholder option completely
   function populateSelect() {
-    orderPackage.innerHTML =
-      packages.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-    // Do not auto-select; keep disabled until user picks one
-    orderPackage.selectedIndex = -1;
+    if (!isAdmin && orderPackage) {
+      orderPackage.innerHTML =
+        packages.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+      // Do not auto-select; keep disabled until user picks one
+      orderPackage.selectedIndex = -1;
+      validateForm();
+    }
+  }
+
+  function setDefaultDeviceValues() {
+    if (isAdmin || !orderPackage || !orderMaster || !orderSlave) return;
+    const pkg = pkgMap[orderPackage.value];
+    if (!pkg) return;
+    
+    const pkgName = (pkg.name || '').toLowerCase();
+    if (pkgName.includes('basic')) {
+      orderMaster.value = '1';
+      orderSlave.value = '0';
+    } else if (pkgName.includes('master') && pkgName.includes('slave')) {
+      orderMaster.value = '1';
+      orderSlave.value = '1';
+    }
     validateForm();
   }
 
@@ -265,39 +935,79 @@
   }
 
   function updateCalc() {
+    if (isAdmin || !orderPackage || !orderQty || !calcTotal) return;
     const pkg = pkgMap[orderPackage.value];
     const qty = parseInt(orderQty.value, 10);
     const total = computePackageTotal(pkg, qty);
     if (total !== null) {
-      calcTotal.textContent = `Total: ${formatMoney(total)}`;
+      calcTotal.innerHTML = `<strong>Total:</strong> ${formatMoney(total)}`;
     } else {
-      calcTotal.textContent = 'Total: —';
+      calcTotal.innerHTML = '<strong>Total:</strong> —';
     }
   }
 
   function validateForm() {
+    if (isAdmin || !orderForm) return;
     const pkg = pkgMap[orderPackage.value];
     let valid = true;
     if (!pkg) valid = false;
     const qty = parseInt(orderQty.value, 10);
+    const master = parseInt(orderMaster.value, 10) || 0;
+    const slave = parseInt(orderSlave.value, 10) || 0;
+    const totalDevices = master + slave;
+    
+    // Clear previous device errors
+    const deviceTotalError = document.getElementById('deviceTotalError');
+    const masterError = document.getElementById('masterError');
+    const slaveError = document.getElementById('slaveError');
+    
+    if (deviceTotalError) {
+      deviceTotalError.style.display = 'none';
+      deviceTotalError.textContent = '';
+    }
+    if (masterError) {
+      masterError.textContent = '';
+      orderMaster.classList.remove('is-invalid');
+    }
+    if (slaveError) {
+      slaveError.textContent = '';
+      orderSlave.classList.remove('is-invalid');
+    }
+    
     if (pkg) {
-      pkgRangeHelp.textContent = `Allowed quantity: ${pkg.min_quantity} – ${pkg.max_quantity}`;
+      if (pkgRangeHelp) {
+        pkgRangeHelp.textContent = `Allowed quantity: ${pkg.min_quantity} – ${pkg.max_quantity}`;
+      }
       if (!Number.isFinite(qty) || qty < pkg.min_quantity || qty > pkg.max_quantity) {
         valid = false;
-        qtyError.textContent = `Quantity must be between ${pkg.min_quantity} and ${pkg.max_quantity}.`;
-        orderQty.classList.add('is-invalid');
+        if (qtyError) {
+          qtyError.textContent = `Quantity must be between ${pkg.min_quantity} and ${pkg.max_quantity}.`;
+        }
+        if (orderQty) orderQty.classList.add('is-invalid');
       } else {
-        orderQty.classList.remove('is-invalid');
+        if (orderQty) orderQty.classList.remove('is-invalid');
+      }
+      
+      // Validate device totals
+      if (Number.isFinite(qty) && totalDevices > qty) {
+        valid = false;
+        if (deviceTotalError) {
+          deviceTotalError.textContent = `Total devices (${totalDevices}) cannot exceed quantity (${qty}).`;
+          deviceTotalError.style.display = 'block';
+        }
+        if (orderMaster) orderMaster.classList.add('is-invalid');
+        if (orderSlave) orderSlave.classList.add('is-invalid');
       }
     } else {
-      pkgRangeHelp.textContent = '';
+      if (pkgRangeHelp) pkgRangeHelp.textContent = '';
     }
-    orderSubmit.disabled = !valid;
+    if (orderSubmit) orderSubmit.disabled = !valid;
     updateCalc();
   }
 
   function appendOrderCard(order) {
-    noOrdersNote.style.display = 'none';
+    if (!ordersPlaced) return;
+    if (noOrdersNote) noOrdersNote.style.display = 'none';
     const pkgData = (order.package && order.package.name)
         ? order.package
         : pkgMap[order.package];
@@ -312,8 +1022,11 @@
     const statusNorm = (order.order_status || '').toLowerCase();
     const orderUserId = resolveOrderUserId(order);
     const belongsToViewer = orderUserId !== null && String(orderUserId) === String(userId);
-    const canMarkDelivered = statusNorm === 'paid' && isAdmin;
-    const canFulfill = isAdmin && statusNorm === 'paid' && (order.assigned_devices || 0) < (nMaster + nSlave);
+    const assignedDevices = order.assigned_devices || 0;
+    const totalDevicesNeeded = (nMaster || 0) + (nSlave || 0);
+    const isFulfilled = assignedDevices >= totalDevicesNeeded && totalDevicesNeeded > 0;
+    const canFulfill = isAdmin && statusNorm === 'paid' && !isFulfilled;
+    const canMarkDelivered = isAdmin && statusNorm === 'paid' && isFulfilled;
     const basePayNow = statusNorm === 'pending' || statusNorm === 'failed';
     const amountValue = Number(order.amount);
     const payEligible = belongsToViewer && basePayNow && (!Number.isFinite(amountValue) || amountValue > 0);
@@ -329,29 +1042,94 @@
       actions.push(`<button class="btn btn-sm btn-outline-success" data-action="mark-delivered" data-order-id="${order.id}">Mark delivered</button>`);
     }
     const actionsHtml = actions.length
-      ? `<div class="d-flex justify-content-end gap-2 mt-2">${actions.join('')}</div>`
+      ? `<div class="order-card-actions">${actions.join('')}</div>`
       : '';
+    
+    // Format date for display
+    let formattedDate = '';
+    if (created) {
+      try {
+        const date = new Date(created);
+        formattedDate = date.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        formattedDate = created;
+      }
+    }
+    
     const card = document.createElement('div');
-    card.className = 'card border-success-subtle';
+    card.className = 'order-card-item';
+    card.dataset.orderStatus = statusNorm;
     card.innerHTML = `
-      <div class="card-body py-2">
-        <div class="small">
-          <div><span class="text-muted">Status:</span> <span class="badge ${badgeClass} order-status-badge" data-status="${statusNorm}">${escapeHtml(order.order_status || 'created')}</span></div>
-          <div><span class="text-muted">Package:</span> ${escapeHtml(pkgName)}</div>
-          <div><span class="text-muted">Quantity:</span> ${order.quantity}</div>
-          ${Number.isFinite(nMaster) ? `<div><span class="text-muted">Master devices:</span> ${nMaster}</div>` : ''}
-          ${Number.isFinite(nSlave) ? `<div><span class="text-muted">Slave devices:</span> ${nSlave}</div>` : ''}
-          <div><span class="text-muted">Total:</span> ${total}</div>
-          ${order.customer_name ? `<div><span class="text-muted">Customer:</span> ${escapeHtml(order.customer_name)}</div>` : ''}
-          ${order.customer_phone ? `<div><span class="text-muted">Phone:</span> ${escapeHtml(order.customer_phone)}</div>` : ''}
-          ${isAdmin && !belongsToViewer && orderUserId !== null ? `<div><span class="text-muted">User ID:</span> ${escapeHtml(orderUserId)}</div>` : ''}
-          ${order.shipping_address ? `<div><span class="text-muted">Address:</span> ${escapeHtml(order.shipping_address)}</div>` : ''}
-          ${created ? `<div class="text-muted">Time: ${escapeHtml(created)}</div>` : ''}
-          ${(order.assigned_devices || 0) > 0 ? `<div class="text-success fw-bold">Fulfilled (${order.assigned_devices} devices)</div>` : ''}
+      <div class="order-card-header">
+        <div>
+          <span class="badge ${badgeClass} order-status-badge" data-status="${statusNorm}">${escapeHtml(order.order_status || 'created')}</span>
+          ${formattedDate ? `<span class="text-muted ms-3 small">${escapeHtml(formattedDate)}</span>` : ''}
         </div>
-        ${actionsHtml}
-        <div class="text-danger small order-card-error" style="display:none;"></div>
       </div>
+      <div class="order-card-info">
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Package</span>
+          <span class="order-card-info-value">${escapeHtml(pkgName)}</span>
+        </div>
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Quantity</span>
+          <span class="order-card-info-value">${order.quantity}</span>
+        </div>
+        ${Number.isFinite(nMaster) ? `
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Master Devices</span>
+          <span class="order-card-info-value">${nMaster}</span>
+        </div>
+        ` : ''}
+        ${Number.isFinite(nSlave) ? `
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Slave Devices</span>
+          <span class="order-card-info-value">${nSlave}</span>
+        </div>
+        ` : ''}
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Total Amount</span>
+          <span class="order-card-info-value fw-bold text-success">${total}</span>
+        </div>
+        ${order.customer_name ? `
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Customer</span>
+          <span class="order-card-info-value">${escapeHtml(order.customer_name)}</span>
+        </div>
+        ` : ''}
+        ${order.customer_phone ? `
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">Phone</span>
+          <span class="order-card-info-value">${escapeHtml(order.customer_phone)}</span>
+        </div>
+        ` : ''}
+        ${isAdmin && !belongsToViewer && orderUserId !== null ? `
+        <div class="order-card-info-item">
+          <span class="order-card-info-label">User ID</span>
+          <span class="order-card-info-value">${escapeHtml(orderUserId)}</span>
+        </div>
+        ` : ''}
+        ${order.shipping_address ? `
+        <div class="order-card-info-item" style="grid-column: 1 / -1;">
+          <span class="order-card-info-label">Shipping Address</span>
+          <span class="order-card-info-value">${escapeHtml(order.shipping_address)}</span>
+        </div>
+        ` : ''}
+        ${(order.assigned_devices || 0) > 0 ? `
+        <div class="order-card-info-item" style="grid-column: 1 / -1;">
+          <span class="order-card-info-label">Fulfillment Status</span>
+          <span class="order-card-info-value text-success fw-bold">✓ Fulfilled (${order.assigned_devices} devices)</span>
+        </div>
+        ` : ''}
+      </div>
+      ${actionsHtml}
+      <div class="text-danger small order-card-error" style="display:none; margin-top: 0.5rem;"></div>
     `;
     const badgeEl = card.querySelector('.order-status-badge');
     const errorEl = card.querySelector('.order-card-error');
@@ -427,6 +1205,13 @@
       badgeEl.className = `badge ${statusBadgeClass[statusNorm] || 'bg-success'}`;
       badgeEl.dataset.status = statusNorm;
       button.remove();
+      
+      // Update order in allOrders array
+      const orderIndex = allOrders.findIndex(o => o.id === order.id);
+      if (orderIndex !== -1) {
+        allOrders[orderIndex].order_status = newStatus;
+        renderOrders();
+      }
     } catch (err) {
       button.disabled = false;
       button.textContent = originalText;
@@ -435,65 +1220,299 @@
     }
   }
 
-  orderPackage.addEventListener('change', validateForm);
-  orderQty.addEventListener('input', validateForm);
-  orderCurrency.addEventListener('input', () => {
-    // Keep uppercase and within maxlength to match backend constraints
-    orderCurrency.value = (orderCurrency.value || '').toUpperCase().slice(0, 8);
-  });
+  // Package Management Functions (Admin only)
+  let packageFormModal = null;
+  let packageDeleteModal = null;
+  let currentDeletePackageId = null;
 
-  orderForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    validateForm();
-    if (orderSubmit.disabled) return;
-    orderMsg.textContent = '';
-    orderMsg.className = 'mt-3 small';
-  const pkgId = orderPackage.value;
-  const qty = parseInt(orderQty.value, 10);
-  const master = parseInt(orderMaster.value, 10);
-  const slave = parseInt(orderSlave.value, 10);
-  const addr = orderAddr.value.trim();
-  const currency = orderCurrency.value.trim() || 'BDT';
-  const cName = customerName.value.trim();
-  const cAddr = customerAddress.value.trim();
-  const cPhone = customerPhone.value.trim();
-  const cCity = customerCity.value.trim();
-  const cPost = customerPostCode.value.trim();
-  const cEmail = customerEmail.value.trim();
-    orderSubmit.disabled = true;
-    orderSubmit.textContent = 'Creating…';
+  if (isAdmin) {
+    try {
+      const packageFormModalEl = document.getElementById('packageFormModal');
+      const packageDeleteModalEl = document.getElementById('packageDeleteModal');
+      if (packageFormModalEl && window.bootstrap) {
+        packageFormModal = new bootstrap.Modal(packageFormModalEl);
+      }
+      if (packageDeleteModalEl && window.bootstrap) {
+        packageDeleteModal = new bootstrap.Modal(packageDeleteModalEl);
+      }
+    } catch (e) {
+      console.warn('Bootstrap modal init failed for package modals', e);
+    }
+
+    const addPackageBtn = document.getElementById('addPackageBtn');
+    if (addPackageBtn) {
+      addPackageBtn.addEventListener('click', () => {
+        openPackageAddModal();
+      });
+    }
+
+    const packageFormSubmit = document.getElementById('packageFormSubmit');
+    if (packageFormSubmit) {
+      packageFormSubmit.addEventListener('click', async () => {
+        await submitPackageForm();
+      });
+    }
+
+    const packageDeleteConfirm = document.getElementById('packageDeleteConfirm');
+    if (packageDeleteConfirm) {
+      packageDeleteConfirm.addEventListener('click', async () => {
+        await deletePackage();
+      });
+    }
+  }
+
+  function openPackageAddModal() {
+    if (!packageFormModal) return;
+    const title = document.getElementById('packageFormModalTitle');
+    const form = document.getElementById('packageForm');
+    const formId = document.getElementById('packageFormId');
+    const formName = document.getElementById('packageFormName');
+    const formMinQty = document.getElementById('packageFormMinQty');
+    const formMaxQty = document.getElementById('packageFormMaxQty');
+    const formPrice = document.getElementById('packageFormPrice');
+    const formMrf = document.getElementById('packageFormMrf');
+    const formDescription = document.getElementById('packageFormDescription');
+    const formError = document.getElementById('packageFormError');
+    const formSuccess = document.getElementById('packageFormSuccess');
+
+    if (title) title.textContent = 'Add Package';
+    if (formId) formId.value = '';
+    if (form) form.reset();
+    if (formError) {
+      formError.classList.add('d-none');
+      formError.textContent = '';
+    }
+    if (formSuccess) {
+      formSuccess.classList.add('d-none');
+      formSuccess.textContent = '';
+    }
+    if (formMrf) formMrf.value = '0';
+    packageFormModal.show();
+  }
+
+  function openPackageEditModal(pkg) {
+    if (!packageFormModal || !pkg) return;
+    const title = document.getElementById('packageFormModalTitle');
+    const formId = document.getElementById('packageFormId');
+    const formName = document.getElementById('packageFormName');
+    const formMinQty = document.getElementById('packageFormMinQty');
+    const formMaxQty = document.getElementById('packageFormMaxQty');
+    const formPrice = document.getElementById('packageFormPrice');
+    const formMrf = document.getElementById('packageFormMrf');
+    const formDescription = document.getElementById('packageFormDescription');
+    const formError = document.getElementById('packageFormError');
+    const formSuccess = document.getElementById('packageFormSuccess');
+
+    if (title) title.textContent = 'Edit Package';
+    if (formId) formId.value = pkg.id;
+    if (formName) formName.value = pkg.name || '';
+    if (formMinQty) formMinQty.value = pkg.min_quantity || 1;
+    if (formMaxQty) formMaxQty.value = pkg.max_quantity || '';
+    if (formPrice) formPrice.value = pkg.price_per_device || '';
+    if (formMrf) formMrf.value = pkg.mrf || 0;
+    if (formDescription) formDescription.value = pkg.description || '';
+    if (formError) {
+      formError.classList.add('d-none');
+      formError.textContent = '';
+    }
+    if (formSuccess) {
+      formSuccess.classList.add('d-none');
+      formSuccess.textContent = '';
+    }
+    packageFormModal.show();
+  }
+
+  function openPackageDeleteModal(pkg) {
+    if (!packageDeleteModal || !pkg) return;
+    const deleteName = document.getElementById('packageDeleteName');
+    if (deleteName) deleteName.textContent = pkg.name || '';
+    currentDeletePackageId = pkg.id;
+    packageDeleteModal.show();
+  }
+
+  async function submitPackageForm() {
+    const formId = document.getElementById('packageFormId');
+    const formName = document.getElementById('packageFormName');
+    const formMinQty = document.getElementById('packageFormMinQty');
+    const formMaxQty = document.getElementById('packageFormMaxQty');
+    const formPrice = document.getElementById('packageFormPrice');
+    const formMrf = document.getElementById('packageFormMrf');
+    const formDescription = document.getElementById('packageFormDescription');
+    const formError = document.getElementById('packageFormError');
+    const formSuccess = document.getElementById('packageFormSuccess');
+    const formSubmit = document.getElementById('packageFormSubmit');
+
+    if (!formName || !formMinQty || !formMaxQty || !formPrice) return;
+
+    // Validate
+    if (!formName.value.trim()) {
+      if (formError) {
+        formError.textContent = 'Package name is required.';
+        formError.classList.remove('d-none');
+      }
+      formName.classList.add('is-invalid');
+      return;
+    }
+
+    const pkgId = formId ? formId.value : null;
+    const isEdit = pkgId && pkgId !== '';
+
+    if (formError) {
+      formError.classList.add('d-none');
+      formError.textContent = '';
+    }
+    if (formSuccess) {
+      formSuccess.classList.add('d-none');
+      formSuccess.textContent = '';
+    }
+
+    const originalText = formSubmit ? formSubmit.textContent : '';
+    if (formSubmit) {
+      formSubmit.disabled = true;
+      formSubmit.textContent = isEdit ? 'Updating...' : 'Creating...';
+    }
+
     try {
       const body = {
-        package_id: parseInt(pkgId, 10),
-        quantity: qty,
-        number_of_master_devices: Number.isFinite(master) ? master : 1,
-        number_of_slave_devices: Number.isFinite(slave) ? slave : 1,
-        currency: currency,
+        name: formName.value.trim(),
+        min_quantity: parseInt(formMinQty.value, 10),
+        max_quantity: parseInt(formMaxQty.value, 10),
+        price_per_device: parseFloat(formPrice.value),
+        mrf: parseFloat(formMrf ? formMrf.value : 0) || 0,
+        description: formDescription ? formDescription.value.trim() : ''
       };
-      if (addr) body.shipping_address = addr;
-      if (cName) body.customer_name = cName;
-      if (cAddr) body.customer_address = cAddr;
-      if (cPhone) body.customer_phone = cPhone;
-      if (cCity) body.customer_city = cCity;
-      if (cPost) body.customer_post_code = cPost;
-      if (cEmail) body.customer_email = cEmail;
-      const res = await apiPost(`/orders/${userId}/`, body);
-      orderMsg.classList.add('text-success');
-      orderMsg.textContent = `Order ${res.id} created.`;
-      appendOrderCard(res);
-      orderForm.reset();
-      // repopulate to clear selection state
-      populateSelect();
-      calcTotal.textContent = 'Total: ';
+
+      let result;
+      if (isEdit) {
+        result = await apiPatch(`/packages/${pkgId}/`, body);
+      } else {
+        result = await apiPost('/packages/', body);
+      }
+
+      if (formSuccess) {
+        formSuccess.textContent = isEdit ? 'Package updated successfully!' : 'Package created successfully!';
+        formSuccess.classList.remove('d-none');
+      }
+
+      // Refresh packages
+      await fetchPackages();
+
+      setTimeout(() => {
+        if (packageFormModal) packageFormModal.hide();
+      }, 1500);
+
     } catch (err) {
-      orderMsg.classList.add('text-danger');
-      const backendMsg = err?.body?.detail || (typeof err?.body === 'string' ? err.body : null);
-      orderMsg.textContent = backendMsg && backendMsg.trim() ? backendMsg : (err?.message || 'Failed to create order.');
+      if (formError) {
+        const msg = (err && err.body && err.body.detail) || 
+                   (typeof err.body === 'string' ? err.body : null) ||
+                   err?.detail || 
+                   err?.message || 
+                   (isEdit ? 'Failed to update package.' : 'Failed to create package.');
+        formError.textContent = msg;
+        formError.classList.remove('d-none');
+      }
     } finally {
-      orderSubmit.textContent = 'Create Order';
-      validateForm();
+      if (formSubmit) {
+        formSubmit.disabled = false;
+        formSubmit.textContent = originalText;
+      }
     }
-  });
+  }
+
+  async function deletePackage() {
+    if (!currentDeletePackageId) return;
+    const deleteConfirm = document.getElementById('packageDeleteConfirm');
+    if (!deleteConfirm) return;
+
+    const originalText = deleteConfirm.textContent;
+    deleteConfirm.disabled = true;
+    deleteConfirm.textContent = 'Deleting...';
+
+    try {
+      await apiDelete(`/packages/${currentDeletePackageId}/`);
+      if (packageDeleteModal) packageDeleteModal.hide();
+      await fetchPackages();
+    } catch (err) {
+      deleteConfirm.disabled = false;
+      deleteConfirm.textContent = originalText;
+      alert((err && err.body && err.body.detail) || err?.detail || err?.message || 'Failed to delete package.');
+    }
+  }
+
+  // Order form handlers (only for non-admin users)
+  if (!isAdmin) {
+    if (orderPackage) {
+      orderPackage.addEventListener('change', () => {
+        setDefaultDeviceValues();
+        validateForm();
+      });
+    }
+    if (orderQty) orderQty.addEventListener('input', validateForm);
+    if (orderMaster) orderMaster.addEventListener('input', validateForm);
+    if (orderSlave) orderSlave.addEventListener('input', validateForm);
+    if (orderCurrency) {
+      orderCurrency.addEventListener('input', () => {
+        // Keep uppercase and within maxlength to match backend constraints
+        orderCurrency.value = (orderCurrency.value || '').toUpperCase().slice(0, 8);
+      });
+    }
+
+    if (orderForm) {
+      orderForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        validateForm();
+        if (orderSubmit.disabled) return;
+        orderMsg.textContent = '';
+        orderMsg.className = 'mt-3 small';
+        const pkgId = orderPackage.value;
+        const qty = parseInt(orderQty.value, 10);
+        const master = parseInt(orderMaster.value, 10);
+        const slave = parseInt(orderSlave.value, 10);
+        const addr = orderAddr.value.trim();
+        const currency = orderCurrency.value.trim() || 'BDT';
+        const cName = customerName.value.trim();
+        const cAddr = customerAddress.value.trim();
+        const cPhone = customerPhone.value.trim();
+        const cCity = customerCity.value.trim();
+        const cPost = customerPostCode.value.trim();
+        const cEmail = customerEmail.value.trim();
+        orderSubmit.disabled = true;
+        orderSubmit.textContent = 'Creating…';
+        try {
+          const body = {
+            package_id: parseInt(pkgId, 10),
+            quantity: qty,
+            number_of_master_devices: Number.isFinite(master) ? master : 1,
+            number_of_slave_devices: Number.isFinite(slave) ? slave : 1,
+            currency: currency,
+          };
+          if (addr) body.shipping_address = addr;
+          if (cName) body.customer_name = cName;
+          if (cAddr) body.customer_address = cAddr;
+          if (cPhone) body.customer_phone = cPhone;
+          if (cCity) body.customer_city = cCity;
+          if (cPost) body.customer_post_code = cPost;
+          if (cEmail) body.customer_email = cEmail;
+          const res = await apiPost(`/orders/${userId}/`, body);
+          orderMsg.classList.add('text-success');
+          orderMsg.textContent = `Order ${res.id} created.`;
+          allOrders.unshift(res);
+          renderOrders();
+          orderForm.reset();
+          // repopulate to clear selection state
+          populateSelect();
+          calcTotal.innerHTML = '<strong>Total:</strong> —';
+        } catch (err) {
+          orderMsg.classList.add('text-danger');
+          const backendMsg = err?.body?.detail || (typeof err?.body === 'string' ? err.body : null);
+          orderMsg.textContent = backendMsg && backendMsg.trim() ? backendMsg : (err?.message || 'Failed to create order.');
+        } finally {
+          orderSubmit.textContent = 'Create Order';
+          validateForm();
+        }
+      });
+    }
+  }
 
   // --- Fulfillment Modal Logic ---
   const fulfillModalEl = document.getElementById('fulfillModal');
@@ -669,10 +1688,20 @@
                 slave_data: slaveData
             };
             
-            await apiPost(`/orders/${currentFulfillUserId}/${currentFulfillOrder.id}/fulfill/`, body);
+            const result = await apiPost(`/orders/${currentFulfillUserId}/${currentFulfillOrder.id}/fulfill/`, body);
             
             fulfillSuccess.classList.remove('d-none');
             fulfillSubmitBtn.textContent = 'Fulfilled';
+            
+            // Update the order in allOrders array with the response data
+            if (result && result.id) {
+                const orderIndex = allOrders.findIndex(o => o.id === result.id);
+                if (orderIndex !== -1) {
+                    allOrders[orderIndex] = result;
+                } else {
+                    allOrders.unshift(result);
+                }
+            }
             
             setTimeout(() => {
                 if (fulfillModal) fulfillModal.hide();
@@ -689,8 +1718,22 @@
     });
   }
 
-  fetchPackages();
-  fetchUserOrders();
+  // Initialize on page load
+  if (typeof apiGet === 'function') {
+    fetchPackages();
+    fetchUserOrders();
+    setupOrderFilters();
+  } else {
+    console.error('API functions not available. Make sure api.js is loaded.');
+    if (pkgLoading) {
+      pkgLoading.textContent = 'Error: API functions not loaded. Please refresh the page.';
+      pkgLoading.style.display = '';
+    }
+    if (noOrdersNote) {
+      noOrdersNote.textContent = 'Error: API functions not loaded. Please refresh the page.';
+      noOrdersNote.style.display = '';
+    }
+  }
 })();
 </script>
 {% endblock %}

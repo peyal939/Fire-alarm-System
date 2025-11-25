@@ -667,6 +667,8 @@ class OrderFulfillView(APIView):
 
         try:
             order_services.fulfill_order(order, master_ids, slave_data, actor=request.user)
-            return Response({"detail": "Order fulfilled successfully"}, status=status.HTTP_200_OK)
+            # Refresh order from database to get updated assigned_devices
+            order.refresh_from_db()
+            return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

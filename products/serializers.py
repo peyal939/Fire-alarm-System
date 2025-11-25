@@ -45,6 +45,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "gateway_response",
             "shipping_address",
             "ordered_at",
+            "assigned_devices",
         )
         read_only_fields = (
             "id",

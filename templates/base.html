@@ -26,7 +26,9 @@
             <li class="nav-item"><a class="nav-link" href="/app/firestations/">Fire Departments</a></li>
             <li class="nav-item"><a class="nav-link" href="/app/products/">Products</a></li>
             {% if request.user.is_authenticated %}
-              <li class="nav-item"><a class="nav-link" href="/app/subscriptions/me/">Subscriptions</a></li>
+              {% if not request.user.is_superuser and request.user.role != 'superadmin' %}
+                <li class="nav-item"><a class="nav-link" href="/app/subscriptions/me/">Subscriptions</a></li>
+              {% endif %}
               <li class="nav-item"><a class="nav-link" href="/app/account/">Account</a></li>
             {% endif %}
             {% if request.user.is_superuser or request.user.role == 'superadmin' %}
