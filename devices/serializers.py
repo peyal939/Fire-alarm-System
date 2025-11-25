@@ -83,6 +83,26 @@ class DeviceSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
 
+        # Check subscription status
+        # If suspended, hide sensitive/live data for non-admins
+        request = self.context.get("request")
+        user = request.user if request else None
+        is_admin = user and (
+            user.is_superuser or getattr(user, "role", "") == "superadmin"
+        )
+
+        sub = getattr(instance, "subscription", None)
+        is_suspended = sub and not sub.is_active_for_user
+
+        if is_suspended and not is_admin:
+            # Mask live data
+            ret["status"] = "suspended"
+            ret["effective_status"] = "suspended"
+            ret["online"] = False
+            ret["last_seen"] = None
+            ret["mesh_alert"] = None
+            # Keep static data (name, id, location) so they can identify the device to pay for it
+
         # Ensure latitude/longitude are floats and have defaults
         lat = ret.get("latitude")
         if lat is None:

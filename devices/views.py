@@ -150,8 +150,10 @@ class DeviceViewSet(viewsets.ModelViewSet):
             return Device.objects.none()
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
-        now = timezone.now()
-        return base.filter(user=user).filter(_subscription_access_q(now=now))
+
+        # For normal users, we return ALL their devices so they can see "Suspended" status.
+        # The serializer will handle hiding sensitive data if suspended.
+        return base.filter(user=user)
 
     def list(self, request, *args, **kwargs):
         """List all devices with ordering: online devices first, then offline.
@@ -174,7 +176,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             )
         ).order_by(
             "-has_last_seen",  # Those with last_seen (1) come first
-            "-last_seen",      # Then sort by recency
+            "-last_seen",  # Then sort by recency
             "-registered_at",  # Tie-breaker
         )
 

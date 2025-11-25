@@ -33,12 +33,12 @@ def _cycle_delta() -> timedelta:
 
 
 def _grace_delta() -> timedelta:
-    days_raw = getattr(settings, "SUBSCRIPTION_GRACE_DAYS", 7) or 7
+    days_raw = getattr(settings, "SUBSCRIPTION_GRACE_DAYS", 7)
     try:
         days = int(days_raw)
     except (TypeError, ValueError):
         days = 7
-    days = max(days, 1)
+    days = max(days, 0)
     return timedelta(days=days)
 
 
@@ -574,7 +574,7 @@ def send_due_soon_sms_reminders(
         due_local = timezone.localtime(subscription.next_due_at)
         message = (
             f"Reminder: Your fire alarm subscription for {device_name} is due on "
-            f"{due_local:%d %b %Y}. Pay within 5 days to avoid device deactivation."
+            f"{due_local:%d %b %Y}. Please renew to avoid service interruption."
         )
 
         try:

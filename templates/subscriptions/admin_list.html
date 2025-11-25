@@ -9,7 +9,7 @@
   <a class="btn btn-outline-secondary" href="{% url 'subscriptions:admin-list' %}">Refresh</a>
 </div>
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card border-success">
       <div class="card-body">
         <p class="fw-semibold text-success mb-1">Active</p>
@@ -17,7 +17,7 @@
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card border-warning">
       <div class="card-body">
         <p class="fw-semibold text-warning mb-1">Grace</p>
@@ -25,11 +25,19 @@
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card border-danger">
       <div class="card-body">
         <p class="fw-semibold text-danger mb-1">Suspended</p>
         <h4 class="mb-0">{{ stats.suspended }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-secondary">
+      <div class="card-body">
+        <p class="fw-semibold text-secondary mb-1">Cancelled</p>
+        <h4 class="mb-0">{{ stats.cancelled }}</h4>
       </div>
     </div>
   </div>

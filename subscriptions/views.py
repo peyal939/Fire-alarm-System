@@ -49,6 +49,9 @@ def admin_subscription_list(request):
         "suspended": _subscription_queryset()
         .filter(status=DeviceSubscriptionStatus.SUSPENDED)
         .count(),
+        "cancelled": _subscription_queryset()
+        .filter(status=DeviceSubscriptionStatus.CANCELLED)
+        .count(),
     }
     return render(
         request,

@@ -130,9 +130,7 @@ def assign_device_to_order(
                         "Selected order is not available for assignment."
                     )
 
-                ok, counts, message = order_has_capacity(
-                    order, role=device.device_role
-                )
+                ok, counts, message = order_has_capacity(order, role=device.device_role)
                 if not ok:
                     logger.info(
                         "Preferred order %s rejected device %s: %s",
@@ -181,9 +179,7 @@ def assign_device_to_order(
             saw_order = False
             for order in orders:
                 saw_order = True
-                ok, counts, message = order_has_capacity(
-                    order, role=device.device_role
-                )
+                ok, counts, message = order_has_capacity(order, role=device.device_role)
                 if not ok:
                     if message:
                         rejection_message = message
@@ -414,6 +410,16 @@ def apply_mesh_alert(master: Device, *, group_alarm: bool) -> None:
 
                     for alert in created_alerts:
                         device_obj = alert.device
+
+                        # Check subscription status before sending notification
+                        sub = getattr(device_obj, "subscription", None)
+                        if sub and not sub.is_active_for_user:
+                            logger.info(
+                                "Skipping mesh notification for suspended device %s",
+                                device_obj.id,
+                            )
+                            continue
+
                         device_name = (
                             device_obj.device_name or device_obj.hardware_identifier
                         )
@@ -671,13 +677,21 @@ def ingest_telemetry(
                 try:
                     from notifications.services import FCMService
 
-                    device_name = device.device_name or device.hardware_identifier
-                    FCMService.send_alert_notification(
-                        user=device.user,
-                        device_name=device_name,
-                        alert_type=AlertType.SMOKE_HIGH,
-                        alert_id=alert.id,
-                    )
+                    # Check subscription status before sending notification
+                    sub = getattr(device, "subscription", None)
+                    if sub and not sub.is_active_for_user:
+                        logger.info(
+                            "Skipping smoke_high notification for suspended device %s",
+                            device.id,
+                        )
+                    else:
+                        device_name = device.device_name or device.hardware_identifier
+                        FCMService.send_alert_notification(
+                            user=device.user,
+                            device_name=device_name,
+                            alert_type=AlertType.SMOKE_HIGH,
+                            alert_id=alert.id,
+                        )
                 except Exception as e:
                     logger.error(
                         "Failed to send notification for alert %s: %s",
@@ -742,20 +756,28 @@ def ingest_telemetry(
                 try:
                     from notifications.services import FCMService
 
-                    device_name = device.device_name or device.hardware_identifier
-                    FCMService.send_to_user(
-                        user=device.user,
-                        title="⚠️ Device Status Alert",
-                        body=f"{device_name} reported status: {status_lower}",
-                        data={
-                            "type": "device_status",
-                            "alert_id": str(alert.id),
-                            "alert_type": AlertType.DEVICE_STATUS,
-                            "device_name": device_name,
-                            "device_status": status_lower,
-                        },
-                        sound="default",
-                    )
+                    # Check subscription status before sending notification
+                    sub = getattr(device, "subscription", None)
+                    if sub and not sub.is_active_for_user:
+                        logger.info(
+                            "Skipping device_status notification for suspended device %s",
+                            device.id,
+                        )
+                    else:
+                        device_name = device.device_name or device.hardware_identifier
+                        FCMService.send_to_user(
+                            user=device.user,
+                            title="⚠️ Device Status Alert",
+                            body=f"{device_name} reported status: {status_lower}",
+                            data={
+                                "type": "device_status",
+                                "alert_id": str(alert.id),
+                                "alert_type": AlertType.DEVICE_STATUS,
+                                "device_name": device_name,
+                                "device_status": status_lower,
+                            },
+                            sound="default",
+                        )
                 except Exception as e:
                     logger.error(
                         f"Failed to send notification for device status alert {alert.id}: {e}"
