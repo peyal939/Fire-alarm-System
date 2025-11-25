@@ -144,7 +144,12 @@
 
       countsLabel.textContent = `${masters.length} masters · ${slaves.length} slaves`;
 
-      masters.sort((a,b) => (a.device_name || a.deviceID).localeCompare(b.device_name || b.deviceID));
+      masters.sort((a, b) => {
+        const lastA = lastSeenAt[a.deviceID] || 0;
+        const lastB = lastSeenAt[b.deviceID] || 0;
+        if (lastB !== lastA) return lastB - lastA;
+        return (a.device_name || a.deviceID).localeCompare(b.device_name || b.deviceID);
+      });
       masters.forEach(m => {
         const smoke = Number(m.smoke) || 0;
         const online = isOnline(m.deviceID);
@@ -178,7 +183,12 @@
         `;
 
         const slaveUl = li.querySelector('.slave-list');
-        const kids = (byMasterId[m.device_pk] || []).sort((a,b) => (a.device_name || a.deviceID).localeCompare(b.device_name || b.deviceID));
+        const kids = (byMasterId[m.device_pk] || []).sort((a, b) => {
+          const lastA = lastSeenAt[a.deviceID] || 0;
+          const lastB = lastSeenAt[b.deviceID] || 0;
+          if (lastB !== lastA) return lastB - lastA;
+          return (a.device_name || a.deviceID).localeCompare(b.device_name || b.deviceID);
+        });
         kids.forEach(s => {
           const sSmoke = Number(s.smoke) || 0;
           const sOnline = isOnline(s.deviceID);

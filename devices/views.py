@@ -164,9 +164,18 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         # Order by last_seen descending (most recent first), nulls last
         # This puts online devices (recently seen) at the top
-        queryset = queryset.order_by(
-            models.F("last_seen").desc(nulls_last=True),
-            "-registered_at",  # Secondary sort by registration time
+        # Robust ordering: Force devices with a last_seen value to the top
+        # This avoids DB-specific NULL handling quirks
+        queryset = queryset.annotate(
+            has_last_seen=models.Case(
+                models.When(last_seen__isnull=False, then=1),
+                default=0,
+                output_field=models.IntegerField(),
+            )
+        ).order_by(
+            "-has_last_seen",  # Those with last_seen (1) come first
+            "-last_seen",      # Then sort by recency
+            "-registered_at",  # Tie-breaker
         )
 
         page = self.paginate_queryset(queryset)
@@ -786,8 +795,16 @@ class DeviceViewSet(viewsets.ModelViewSet):
             .select_related("master", "user")
             .prefetch_related("slaves")
         )
-        masters = qs.filter(device_role=Device.DeviceRole.MASTER).order_by(
-            models.F("last_seen").desc(nulls_last=True), "-registered_at"
+        masters = (
+            qs.filter(device_role=Device.DeviceRole.MASTER)
+            .annotate(
+                has_last_seen=models.Case(
+                    models.When(last_seen__isnull=False, then=1),
+                    default=0,
+                    output_field=models.IntegerField(),
+                )
+            )
+            .order_by("-has_last_seen", "-last_seen", "-registered_at")
         )
         ser = DeviceTreeSerializer(masters, many=True)
         return Response(ser.data)

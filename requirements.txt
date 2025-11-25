@@ -16,3 +16,5 @@ bijoy2unicode==0.1.1
 bangla==0.0.5
 celery[redis]==5.3.6
 requests==2.32.3
+pymongo==4.6.1
+dnspython==2.4.2
