@@ -47,6 +47,7 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
         USER = "user", "User"
+        COMPANY_ADMIN = "company_admin", "Company Admin"
         SUPERADMIN = "superadmin", "Super Admin"
 
     email = models.EmailField(unique=True)

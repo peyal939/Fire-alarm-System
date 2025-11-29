@@ -215,6 +215,7 @@ def register_init(request):
         "password_hash": make_password(data["password"]),
         "client_ip": request.META.get("REMOTE_ADDR"),
         "user_agent": request.META.get("HTTP_USER_AGENT"),
+        "role": data.get("role", "user"),
     }
 
     manager = OTPSessionManager(purpose=PhoneOTP.Purpose.REGISTER)
@@ -283,6 +284,7 @@ def register_verify(request):
             phone_number=metadata.get("phone_number", ""),
             full_name=metadata.get("full_name", ""),
             address=metadata.get("address", ""),
+            role=metadata.get("role", "user"),
         )
         user.password = password_hash
         user.save()

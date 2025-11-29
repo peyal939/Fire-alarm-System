@@ -75,6 +75,9 @@ class RegistrationInitSerializer(serializers.Serializer):
     confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
     full_name = serializers.CharField(required=False, allow_blank=True)
     address = serializers.CharField(required=False, allow_blank=True)
+    role = serializers.ChoiceField(
+        choices=["user", "company_admin"], required=False, default="user"
+    )
 
     def validate_email(self, value: str) -> str:
         email = value.strip().lower()
