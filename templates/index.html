@@ -5,54 +5,304 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     html, body { height: 100%; margin: 0; padding: 0; }
-    /* Fixed grid below the navbar: [tab | sidebar | map] */
-    .map-layout { position: fixed; top: 56px; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 36px 320px 1fr; gap: 0; }
-    .map-layout.collapsed { grid-template-columns: 36px 0 1fr; }
+    
+    /* Map takes full screen, sidebar overlays */
+    .map-layout { 
+      position: fixed; 
+      top: 52px; 
+      left: 0; 
+      right: 0; 
+      bottom: 0; 
+    }
+    
+    #map { 
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
 
-    .drawer-tab { border-right: 1px solid #e9ecef; background: #ffffffb0; display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; }
-    .drawer-tab button { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); padding: 6px 4px; }
+    /* Floating toggle button - always visible */
+    .drawer-tab { 
+      position: fixed;
+      top: 62px;
+      left: 10px;
+      z-index: 1001;
+      transition: left 0.3s ease;
+    }
+    .drawer-tab button { 
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      background: #198754;
+      border: 2px solid white;
+      color: white;
+      font-size: 1.2rem;
+      border-radius: 10px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+    .drawer-tab button:hover {
+      background: #157347;
+      transform: scale(1.1);
+    }
+    
+    /* Move button when sidebar is open */
+    .map-layout:not(.collapsed) .drawer-tab {
+      left: 310px;
+    }
 
-    .sidebar { background: rgba(255,255,255,0.97); box-shadow: 2px 0 12px rgba(0,0,0,0.08); padding: 14px 0; overflow-y: auto; }
-    .sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 0 18px 10px 18px; }
-    .sidebar h2 { font-size: 1.1rem; margin: 0; color: #263169; font-weight: 600; }
-    .device-list { list-style: none; padding: 0 12px 10px 12px; margin: 0; }
-    .device-item { border-radius: 10px; margin-bottom: 12px; background: #eef1ff; box-shadow: 0 1px 4px #0001; padding: 10px 12px; border-left: 6px solid #4251c5; }
-    .device-item.alert { background: #ffeaea; border-left-color: #e53935; animation: blink 1.5s linear infinite; }
-    .device-item.offline { background: #fff7dd; border-left-color: #f0ad4e; }
-    .device-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #263169; font-size: 1rem; cursor: default; }
-    .device-sub { font-size: 0.92em; color: #5a5a5a; }
-    .badge-role { font-size: 0.7rem; letter-spacing: .3px; }
+    /* Sidebar slides in from left */
+    .sidebar { 
+      position: fixed;
+      top: 52px;
+      left: 0;
+      bottom: 0;
+      width: 300px;
+      background: #ffffff;
+      box-shadow: 3px 0 15px rgba(0,0,0,0.15); 
+      padding: 0; 
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      transform: translateX(0);
+      transition: transform 0.3s ease;
+    }
+    
+    .map-layout.collapsed .sidebar {
+      transform: translateX(-100%);
+    }
+    
+    .map-layout.collapsed .drawer-tab {
+      left: 10px;
+    }
+    
+    /* Move Leaflet zoom control to right side */
+    .leaflet-top.leaflet-left {
+      left: auto;
+      right: 10px;
+    }
+
+    .sidebar { 
+      background: #ffffff;
+      box-shadow: 2px 0 15px rgba(0,0,0,0.1); 
+      padding: 0; 
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s ease;
+    }
+    
+    .map-layout.collapsed .sidebar {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .sidebar-header { 
+      background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+      color: white;
+      padding: 1rem 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .sidebar-header h2 { 
+      font-size: 1rem; 
+      margin: 0; 
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .sidebar-header h2 i {
+      font-size: 1.1rem;
+    }
+    
+    .sidebar-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+    
+    .sidebar-controls .device-counts {
+      font-size: 0.8rem;
+      opacity: 0.9;
+    }
+    
+    .sidebar-controls .btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
+    .sidebar-controls .btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    
+    .device-list { 
+      list-style: none; 
+      padding: 0.75rem; 
+      margin: 0;
+      flex: 1;
+    }
+    
+    .device-item { 
+      border-radius: 10px; 
+      margin-bottom: 10px; 
+      background: #f8f9fa;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); 
+      padding: 10px 12px; 
+      border-left: 4px solid #198754;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .device-item:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .device-item.alert { 
+      background: #fff5f5; 
+      border-left-color: #dc3545; 
+      animation: blink 1.5s linear infinite; 
+    }
+    .device-item.offline { 
+      background: #fffbeb; 
+      border-left-color: #ffc107; 
+    }
+    /* Live indicator for recently updated devices */
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #10b981;
+      margin-left: 8px;
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      animation: livePulse 1.5s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.3); }
+    }
+    .update-time {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.8rem;
+      color: #6b7280;
+      background: rgba(0,0,0,0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    /* Device status indicators - vibrant colors */
+    .status-online {
+      color: #059669;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-offline {
+      color: #9ca3af;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .device-title { 
+      display: flex; 
+      align-items: center; 
+      gap: 6px; 
+      font-weight: 600; 
+      color: #212529; 
+      font-size: 0.9rem; 
+      cursor: pointer; 
+    }
+    .device-sub { 
+      font-size: 0.8rem; 
+      color: #6c757d;
+      margin-top: 4px;
+    }
+    .badge-role { 
+      font-size: 0.65rem; 
+      letter-spacing: .3px;
+      padding: 0.2rem 0.4rem;
+    }
     .toggle { cursor: pointer; user-select: none; }
-    .toggle .chev { transition: transform .15s ease; display: inline-block; }
+    .toggle .chev { transition: transform .15s ease; display: inline-block; font-size: 0.8rem; }
     .toggle.collapsed .chev { transform: rotate(-90deg); }
 
-    .slave-list { list-style: none; padding-left: 0; margin: 10px 0 0 18px; border-left: 2px dashed #cbd3ff; }
-    .slave-item { padding: 8px 10px; margin: 8px 0 0 0; border-radius: 8px; background: #f4f6ff; }
-    .slave-item.alert { background: #ffeaea; }
-    .slave-item.offline { background: #fff7dd; }
+    .slave-list { 
+      list-style: none; 
+      padding-left: 0; 
+      margin: 8px 0 0 12px; 
+      border-left: 2px dashed #dee2e6; 
+    }
+    .slave-item { 
+      padding: 8px 10px; 
+      margin: 6px 0 0 0; 
+      border-radius: 8px; 
+      background: #ffffff;
+      border: 1px solid #e9ecef;
+      font-size: 0.85rem;
+    }
+    .slave-item.alert { background: #fff5f5; border-color: #f8d7da; }
+    .slave-item.offline { background: #fffbeb; border-color: #fff3cd; }
 
     #map { height: 100%; width: 100%; }
 
-    @keyframes blink { 0% { opacity: 1;} 50% { opacity: 0.2;} 100% { opacity: 1;} }
+    @keyframes blink { 0% { opacity: 1;} 50% { opacity: 0.3;} 100% { opacity: 1;} }
     .icon-green { filter: hue-rotate(90deg);} 
     .icon-blink, .leaflet-marker-icon.icon-blink { animation: blink 1s linear infinite; }
     .icon-offline { filter: grayscale(100%) brightness(0.85); opacity: 0.8; }
-    @media (max-width: 700px) { .map-layout { grid-template-columns: 36px 70vw 1fr; } .map-layout.collapsed { grid-template-columns: 36px 0 1fr; } }
-    @media (max-width: 520px) { .map-layout { grid-template-columns: 0 0 1fr; } }
+    
+    /* Tablet */
+    @media (max-width: 992px) { 
+      .sidebar { width: 260px; }
+      .map-layout:not(.collapsed) .drawer-tab { left: 270px; }
+    }
+    
+    /* Mobile */
+    @media (max-width: 768px) { 
+      .sidebar { width: 280px; }
+      .map-layout:not(.collapsed) .drawer-tab { left: 290px; }
+    }
+    
+    /* Small mobile */
+    @media (max-width: 400px) { 
+      .sidebar { width: 100%; }
+      .map-layout:not(.collapsed) .drawer-tab { 
+        left: auto;
+        right: 10px;
+      }
+    }
   </style>
 {% endblock %}
 
 {% block content %}
-  <div class="map-layout" id="mapLayout">
+  <div class="map-layout collapsed" id="mapLayout">
     <div class="drawer-tab">
-      <button id="sidebarToggleBtn" class="btn btn-outline-secondary btn-sm" title="Toggle devices">Devices</button>
+      <button id="sidebarToggleBtn" title="Toggle devices"><i class="bi bi-device-hdd"></i></button>
     </div>
     <div class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <h2>Devices</h2>
-        <div class="d-flex align-items-center gap-2">
-          <span id="deviceCounts" class="text-muted small"></span>
-          <button class="btn btn-sm btn-outline-secondary" id="collapseAllBtn">Collapse all</button>
+        <h2><i class="bi bi-device-hdd"></i> Devices</h2>
+        <div class="sidebar-controls">
+          <span id="deviceCounts" class="device-counts"></span>
+          <button class="btn" id="collapseAllBtn">Collapse all</button>
         </div>
       </div>
       <ul class="device-list" id="sidebarDeviceList"></ul>
@@ -73,6 +323,25 @@
   // Keep aligned with backend DEVICE_ONLINE_FRESHNESS_SECONDS (default 180s)
   const ONLINE_FRESHNESS_MS = 180 * 1000;
   const DHAKA_TZ = 'Asia/Dhaka';
+
+  // Debounce helper to batch rapid updates (multiple devices sending simultaneously)
+  let _renderTimeout = null;
+  let _bellTimeout = null;
+  function debouncedRender() {
+    if (_renderTimeout) clearTimeout(_renderTimeout);
+    _renderTimeout = setTimeout(() => {
+      _renderTimeout = null;
+      renderSidebarDevices();
+    }, 50); // 50ms delay batches simultaneous updates
+  }
+  function debouncedBell() {
+    if (_bellTimeout) clearTimeout(_bellTimeout);
+    _bellTimeout = setTimeout(() => {
+      _bellTimeout = null;
+      updateNotificationBell();
+    }, 50);
+  }
+
   // Unify time display with the MQTT-provided format: "DD Mon YYYY, hh:mm:ss am/pm" in Dhaka
   const dhaka12Fmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: DHAKA_TZ,
@@ -156,6 +425,10 @@
         const isAlarm = online && ((m.mesh_alert === true) || (smoke > SMOKE_ALERT_THRESHOLD));
         const tsRaw = m.received_at_iso || m.timestamp_iso;
         const ts = tsRaw ? (typeof tsRaw === 'string' && tsRaw.includes('T') ? formatDhaka(tsRaw) : tsRaw) : formatDhaka(m.timestamp);
+        // Show live indicator if device was updated in the last 10 seconds
+        const lastUpdate = lastSeenAt[m.deviceID] || 0;
+        const isRecent = (Date.now() - lastUpdate) < 10000;
+        const liveIndicator = (online && isRecent) ? '<span class="live-indicator"><span class="live-dot"></span>LIVE</span>' : '';
 
         const li = document.createElement('li');
         li.className = 'device-item';
@@ -176,8 +449,9 @@
             ${rolePill}
             <span>${m.deviceID}</span>
             <span class="text-muted">— ${m.device_name || ''}</span>
+            ${liveIndicator}
           </div>
-          <div class="device-sub"><b>Status:</b> ${online ? 'online' : 'offline'}${(!online && m.mesh_alert) ? ' · <span class="text-danger">mesh alert</span>' : ''} · <b>Smoke:</b> ${smoke} · <b>Updated:</b> ${ts}</div>
+          <div class="device-sub"><b>Status:</b> ${online ? '<span class="status-online">● online</span>' : '<span class="status-offline">○ offline</span>'}${(!online && m.mesh_alert) ? ' · <span class="text-danger">mesh alert</span>' : ''} · <b>Smoke:</b> ${smoke} · <b>Updated:</b> <span class="update-time">${ts}</span></div>
           ${ownerLine}
           <ul class="slave-list" style="display:${isExpanded ? 'block' : 'none'}"></ul>
         `;
@@ -195,6 +469,11 @@
           const sAlarm = sOnline && ((s.mesh_alert === true) || (sSmoke > SMOKE_ALERT_THRESHOLD));
           const sTsRaw = s.received_at_iso || s.timestamp_iso;
           const sTs = sTsRaw ? (typeof sTsRaw === 'string' && sTsRaw.includes('T') ? formatDhaka(sTsRaw) : sTsRaw) : formatDhaka(s.timestamp);
+          // Show live indicator if device was updated in the last 10 seconds
+          const sLastUpdate = lastSeenAt[s.deviceID] || 0;
+          const sIsRecent = (Date.now() - sLastUpdate) < 10000;
+          const sLiveIndicator = (sOnline && sIsRecent) ? '<span class="live-indicator"><span class="live-dot"></span>LIVE</span>' : '';
+          
           const sli = document.createElement('li');
           sli.className = 'slave-item';
           if (!sOnline) sli.classList.add('offline'); else if (sAlarm) sli.classList.add('alert');
@@ -205,8 +484,8 @@
             sOwnerLine = `<div class=\"text-muted small\">Owner: ${s.owner_email || ''}${s.owner_phone ? ' · ' + s.owner_phone : ''}</div>`;
           }
           sli.innerHTML = `
-            <div class="d-flex align-items-center gap-2"><span>${rolePillSlave}</span><span><b>${s.deviceID}</b> — ${s.device_name || ''}</span></div>
-            <div class="device-sub"><b>Master:</b> ${masterName} · <b>Status:</b> ${sOnline ? 'online' : 'offline'}${(!sOnline && s.mesh_alert) ? ' · <span class=\"text-danger\">mesh alert</span>' : ''} · <b>Smoke:</b> ${sSmoke} · <b>Updated:</b> ${sTs}</div>
+            <div class="d-flex align-items-center gap-2"><span>${rolePillSlave}</span><span><b>${s.deviceID}</b> — ${s.device_name || ''}</span>${sLiveIndicator}</div>
+            <div class="device-sub"><b>Master:</b> ${masterName} · <b>Status:</b> ${sOnline ? '<span class="status-online">● online</span>' : '<span class="status-offline">○ offline</span>'}${(!sOnline && s.mesh_alert) ? ' · <span class=\"text-danger\">mesh alert</span>' : ''} · <b>Smoke:</b> ${sSmoke} · <b>Updated:</b> <span class="update-time">${sTs}</span></div>
             ${sOwnerLine}
           `;
           slaveUl.appendChild(sli);
@@ -334,14 +613,14 @@
           const info = `
             <b>Device ID:</b> ${data.deviceID}<br>
             <b>Smoke:</b> ${smoke}<br>
-            <b>Status:</b> ${online ? 'online' : `<b>offline</b>`}<br>
+            <b>Status:</b> ${online ? '<span style="color:#059669;font-weight:700">● ONLINE</span>' : '<span style="color:#9ca3af">○ OFFLINE</span>'}<br>
             <b>Updated:</b> ${data.received_at_iso || data.timestamp_iso || formatDhaka(data.timestamp)}
           `;
           marker.getPopup().setContent(info);
         }
       }
-      renderSidebarDevices();
-      updateNotificationBell();
+      debouncedRender();
+      debouncedBell();
     };
 
     ws.onclose = function () {
@@ -383,7 +662,7 @@
       const info = `
         <b>Device ID:</b> ${d.deviceID}<br>
         <b>Smoke:</b> ${smoke}<br>
-        <b>Status:</b> ${online ? 'online' : `<b>offline</b>`}<br>
+        <b>Status:</b> ${online ? '<span style="color:#059669;font-weight:700">● ONLINE</span>' : '<span style="color:#9ca3af">○ OFFLINE</span>'}<br>
         <b>Updated:</b> ${ts}
       `;
       marker.getPopup().setContent(info);

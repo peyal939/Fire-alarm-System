@@ -316,10 +316,11 @@ def process_payload(payload: dict) -> None:
     # --- MongoDB Historical Data Recording (Sidecar) ---
     try:
         from utils.mongo_client import mongo_client
+
         # We clone the payload to avoid side effects if the main logic modifies it
         # We also add a server-side timestamp for strict ordering
         mongo_doc = payload.copy() if isinstance(payload, dict) else {"raw": payload}
-        
+
         # Ensure there is a timestamp field (required for Time Series)
         if "timestamp" not in mongo_doc or not mongo_doc["timestamp"]:
             mongo_doc["timestamp"] = timezone.now()
@@ -334,9 +335,9 @@ def process_payload(payload: dict) -> None:
         # Add metadata
         mongo_doc["metadata"] = {
             "ingested_at": timezone.now(),
-            "source": "mqtt_process_payload"
+            "source": "mqtt_process_payload",
         }
-        
+
         # Fire-and-forget insert
         mongo_client.insert_one(mongo_doc)
     except Exception as e:
@@ -400,10 +401,12 @@ def process_payload(payload: dict) -> None:
         # Track group alarm across all members
         threshold = int(getattr(settings, "SMOKE_ALERT_THRESHOLD", 50))
         group_alarm = (m_smoke or 0) > threshold
+        # Use canonical device ID from database for consistent WebSocket broadcasting
+        master_canonical_id = master_obj.hardware_identifier
         devices_for_broadcast = [
             (
                 master_obj,
-                master_id,
+                master_canonical_id,
                 m_ts_int,
                 m_ts_dt,
                 (m_smoke or 0),
@@ -471,10 +474,12 @@ def process_payload(payload: dict) -> None:
                 device_status=s_status or "alive",
                 timestamp=s_ts_dt,
             )
+            # Use canonical device ID from database for consistent WebSocket broadcasting
+            slave_canonical_id = s_obj.hardware_identifier
             devices_for_broadcast.append(
                 (
                     s_obj,
-                    sid,
+                    slave_canonical_id,
                     s_ts_int,
                     s_ts_dt,
                     (s_smoke or 0),
@@ -536,9 +541,11 @@ def process_payload(payload: dict) -> None:
         device_status=status,
         timestamp=ts_dt,
     )
+    # Use canonical device ID from database to ensure consistent matching with frontend
+    canonical_id = device_obj.hardware_identifier
     _broadcast_device_update(
         device_obj,
-        device_id=device_id,
+        device_id=canonical_id,
         ts_int=ts_int,
         ts_dt=ts_dt,
         smoke_val=smoke_int,

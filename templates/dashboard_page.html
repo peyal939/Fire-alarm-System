@@ -1,95 +1,263 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · apS Fire Alarm{% endblock %}
+{% block head_extra %}
+<style>
+	.dashboard-page {
+		background: linear-gradient(to bottom, var(--aps-gray-100, #f8f9fa) 0%, #ffffff 100%);
+		min-height: calc(100vh - 200px);
+		padding: 2rem 0;
+	}
+	
+	.page-header {
+		margin-bottom: 1.5rem;
+		padding-bottom: 1rem;
+		border-bottom: 3px solid #198754;
+	}
+	
+	.page-header h1 {
+		font-size: 1.75rem;
+		font-weight: 600;
+		color: #198754;
+		margin: 0;
+	}
+	
+	.kpi-card {
+		border: none;
+		border-radius: 12px;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+		transition: all 0.2s ease;
+		overflow: hidden;
+	}
+	
+	.kpi-card:hover {
+		transform: translateY(-3px);
+		box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+	}
+	
+	.kpi-card .card-body {
+		padding: 1.5rem;
+	}
+	
+	.kpi-card.devices { border-left: 4px solid #198754; }
+	.kpi-card.alerts { border-left: 4px solid #dc3545; }
+	.kpi-card.status { border-left: 4px solid #0d6efd; }
+	
+	.kpi-label {
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: #6c757d;
+		margin-bottom: 0.5rem;
+	}
+	
+	.kpi-value {
+		font-size: 2.25rem;
+		font-weight: 700;
+	}
+	
+	.data-card {
+		border: none;
+		border-radius: 12px;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+		overflow: hidden;
+	}
+	
+	.data-card .card-header {
+		background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+		color: white;
+		font-weight: 600;
+		padding: 1rem 1.25rem;
+		border: none;
+	}
+	
+	.data-card .card-header a {
+		color: rgba(255, 255, 255, 0.9);
+		text-decoration: none;
+		font-weight: 500;
+	}
+	
+	.data-card .card-header a:hover {
+		color: white;
+	}
+	
+	.data-card.alerts-card .card-header {
+		background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+	}
+	
+	.data-table thead th {
+		background-color: #f8f9fa;
+		font-weight: 600;
+		color: #495057;
+		text-transform: uppercase;
+		font-size: 0.7rem;
+		letter-spacing: 0.5px;
+		padding: 0.75rem;
+		border-bottom: 2px solid #dee2e6;
+		white-space: nowrap;
+	}
+	
+	.data-table tbody td {
+		padding: 0.75rem;
+		vertical-align: middle;
+		font-size: 0.85rem;
+	}
+	
+	.data-table tbody tr:hover {
+		background-color: #f8f9fa;
+	}
+	
+	/* Sortable table headers */
+	.sortable {
+		cursor: pointer;
+		user-select: none;
+		position: relative;
+		padding-right: 1.25rem !important;
+	}
+	
+	.sortable:hover {
+		background-color: #e9ecef;
+	}
+	
+	.sortable::after {
+		content: '\F282';
+		font-family: 'bootstrap-icons';
+		position: absolute;
+		right: 0.25rem;
+		opacity: 0.3;
+		font-size: 0.6rem;
+	}
+	
+	.sortable.asc::after {
+		content: '\F235';
+		opacity: 1;
+	}
+	
+	.sortable.desc::after {
+		content: '\F229';
+		opacity: 1;
+	}
+	
+	.empty-state {
+		text-align: center;
+		padding: 2rem;
+		color: #6c757d;
+	}
+	
+	.empty-state i {
+		font-size: 2rem;
+		margin-bottom: 0.5rem;
+		opacity: 0.5;
+	}
+	
+	.nav-btn {
+		border-radius: 20px;
+		padding: 0.4rem 1rem;
+	}
+</style>
+{% endblock %}
 {% block content %}
-<div class="py-3">
-	<div class="d-flex align-items-center justify-content-between mb-3">
-		<h1 class="h4 mb-0">Dashboard</h1>
-		<div>
-			<a href="/app/devices/" class="btn btn-outline-secondary btn-sm">Devices</a>
-			<a href="/app/alerts/" class="btn btn-outline-secondary btn-sm">Alerts</a>
-			<a href="/app/telemetry/" class="btn btn-outline-secondary btn-sm">Telemetry</a>
+<div class="dashboard-page">
+	<div class="container">
+		<div class="page-header d-flex flex-wrap align-items-center justify-content-between">
+			<div>
+				<h1>
+					<i class="bi bi-speedometer2 me-2"></i>
+					Dashboard
+				</h1>
+				<p class="text-muted mb-0">Overview of your fire alarm system status.</p>
+			</div>
+			<div class="d-flex gap-2 mt-2 mt-md-0">
+				<a href="/app/devices/" class="btn btn-outline-success nav-btn"><i class="bi bi-device-hdd me-1"></i>Devices</a>
+				<a href="/app/alerts/" class="btn btn-outline-danger nav-btn"><i class="bi bi-bell me-1"></i>Alerts</a>
+				<a href="/app/telemetry/" class="btn btn-outline-primary nav-btn"><i class="bi bi-graph-up me-1"></i>Telemetry</a>
+			</div>
 		</div>
-	</div>
 
-	<div class="row g-3 mb-3">
-		<div class="col-md-4">
-			<div class="card border-0 shadow-sm">
-				<div class="card-body">
-					<div class="text-muted">Total Devices</div>
-					<div class="display-6" id="kpiDevices">—</div>
+		<div class="row g-4 mb-4">
+			<div class="col-md-4">
+				<div class="card kpi-card devices">
+					<div class="card-body">
+						<div class="kpi-label"><i class="bi bi-device-hdd me-1"></i>Total Devices</div>
+						<div class="kpi-value text-success" id="kpiDevices">—</div>
+					</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="card kpi-card alerts">
+					<div class="card-body">
+						<div class="kpi-label"><i class="bi bi-exclamation-triangle me-1"></i>Open Alerts</div>
+						<div class="kpi-value text-danger" id="kpiOpenAlerts">—</div>
+					</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="card kpi-card status">
+					<div class="card-body">
+						<div class="kpi-label"><i class="bi bi-wifi me-1"></i>Online / Offline</div>
+						<div class="kpi-value text-primary" id="kpiOnlineOffline">—</div>
+					</div>
 				</div>
 			</div>
 		</div>
-		<div class="col-md-4">
-			<div class="card border-0 shadow-sm">
-				<div class="card-body">
-					<div class="text-muted">Open Alerts</div>
-					<div class="display-6 text-danger" id="kpiOpenAlerts">—</div>
-				</div>
-			</div>
-		</div>
-		<div class="col-md-4">
-			<div class="card border-0 shadow-sm">
-				<div class="card-body">
-					<div class="text-muted">Online / Offline</div>
-					<div class="display-6" id="kpiOnlineOffline">—</div>
-				</div>
-			</div>
-		</div>
-	</div>
 
-	<div class="row g-3">
-		<div class="col-lg-6">
-			<div class="card border-0 shadow-sm h-100">
-				<div class="card-header bg-white d-flex align-items-center justify-content-between">
-					<strong>Latest Alerts</strong>
-					<a href="/app/alerts/" class="small">View all</a>
-				</div>
-				<div class="card-body p-0">
-					<div class="table-responsive">
-						<table class="table table-hover align-middle mb-0" id="latestAlertsTable">
-							<thead>
-								<tr>
-									<th>Alert</th>
-									<th>Status</th>
-									<th>Acknowledgement</th>
-									<th>Timeline</th>
-									<th>Reminders</th>
-									<th class="text-end">Actions</th>
-								</tr>
-							</thead>
-							<tbody></tbody>
-						</table>
+		<div class="row g-4">
+			<div class="col-lg-6">
+				<div class="card data-card alerts-card h-100">
+					<div class="card-header d-flex align-items-center justify-content-between">
+						<span><i class="bi bi-bell-fill me-2"></i>Latest Alerts</span>
+						<a href="/app/alerts/">View all <i class="bi bi-arrow-right"></i></a>
 					</div>
-					<div id="alertsEmpty" class="p-3 text-muted" style="display:none">No recent alerts.</div>
+					<div class="card-body p-0">
+						<div class="table-responsive">
+							<table class="table data-table align-middle mb-0" id="latestAlertsTable">
+								<thead>
+									<tr>
+										<th class="sortable" data-col="0">Alert</th>
+										<th class="sortable" data-col="1">Status</th>
+										<th class="sortable" data-col="2">Acknowledgement</th>
+										<th class="sortable" data-col="3">Timeline</th>
+										<th class="sortable" data-col="4">Reminders</th>
+										<th class="text-end">Actions</th>
+									</tr>
+								</thead>
+								<tbody></tbody>
+							</table>
+						</div>
+						<div id="alertsEmpty" class="empty-state" style="display:none">
+							<i class="bi bi-check-circle d-block text-success"></i>
+							<p class="mb-0">No open alerts. All clear!</p>
+						</div>
+					</div>
 				</div>
 			</div>
-		</div>
-		<div class="col-lg-6">
-			<div class="card border-0 shadow-sm h-100">
-				<div class="card-header bg-white d-flex align-items-center justify-content-between">
-					<strong>Recent Devices</strong>
-					<a href="/app/devices/" class="small">View all</a>
-				</div>
-				<div class="card-body p-0">
-					<div class="table-responsive">
-						<table class="table table-hover mb-0" id="recentDevicesTable">
-							<thead>
-								<tr>
-									<th>ID</th>
-									<th>Hardware ID</th>
-									<th>Name</th>
-									<th>Role</th>
-									<th>Master</th>
-									<th>Status</th>
-									<th>Registered</th>
-									<th>Owner (email)</th>
-								</tr>
-							</thead>
-							<tbody></tbody>
-						</table>
+			<div class="col-lg-6">
+				<div class="card data-card h-100">
+					<div class="card-header d-flex align-items-center justify-content-between">
+						<span><i class="bi bi-device-hdd me-2"></i>Recent Devices</span>
+						<a href="/app/devices/">View all <i class="bi bi-arrow-right"></i></a>
 					</div>
-					<div id="devicesEmpty" class="p-3 text-muted" style="display:none">No devices yet.</div>
+					<div class="card-body p-0">
+						<div class="table-responsive">
+							<table class="table data-table mb-0" id="recentDevicesTable">
+								<thead>
+									<tr>
+										<th class="sortable" data-col="0">ID</th>
+										<th class="sortable" data-col="1">Hardware ID</th>
+										<th class="sortable" data-col="2">Name</th>
+										<th class="sortable" data-col="3">Role</th>
+										<th class="sortable" data-col="4">Master</th>
+										<th class="sortable" data-col="5">Status</th>
+										<th class="sortable" data-col="6">Registered</th>
+										<th class="sortable" data-col="7">Owner</th>
+									</tr>
+								</thead>
+								<tbody></tbody>
+							</table>
+						</div>
+						<div id="devicesEmpty" class="empty-state" style="display:none">
+							<i class="bi bi-inbox d-block"></i>
+							<p class="mb-0">No devices yet.</p>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -155,17 +323,17 @@
 
 	function buildAlertStatusCell(alert) {
 		const status = (alert.status || "").toLowerCase();
-		let badgeClass = "bg-secondary";
+		let badgeClass = "bg-secondary device-status-offline";
 		if (status === "open") {
-			badgeClass = alert.acknowledged_at ? "bg-warning text-dark" : "bg-danger";
+			badgeClass = alert.acknowledged_at ? "bg-warning device-status-warning" : "bg-danger device-status-alert";
 		} else if (status === "resolved") {
-			badgeClass = "bg-success";
+			badgeClass = "bg-success device-status-online";
 		}
 		const statusLabel = status ? status.toUpperCase() : "UNKNOWN";
 		const ackBadge = alert.acknowledged_at
 			? '<span class="badge bg-info text-dark ms-2">ACKNOWLEDGED</span>'
 			: "";
-		return `<span class="badge ${badgeClass}">${statusLabel}</span>${ackBadge}`;
+		return `<span class="badge ${badgeClass}" data-status="${status}">${statusLabel}</span>${ackBadge}`;
 	}
 
 	function buildAcknowledgementCell(alert) {
@@ -223,11 +391,11 @@
 			}
 
 			tr.innerHTML = `
-				<td>${buildAlertIdentityCell(a)}</td>
-				<td>${buildAlertStatusCell(a)}</td>
-				<td>${buildAcknowledgementCell(a)}</td>
-				<td>${buildTimelineCell(a)}</td>
-				<td>${buildReminderCell(a)}</td>
+				<td data-value="${a.alert_type || ''}">${buildAlertIdentityCell(a)}</td>
+				<td data-value="${(a.status || '').toLowerCase()}">${buildAlertStatusCell(a)}</td>
+				<td data-value="${a.acknowledged_at || ''}">${buildAcknowledgementCell(a)}</td>
+				<td data-value="${a.triggered_at || ''}">${buildTimelineCell(a)}</td>
+				<td data-value="${a.reminder_count || 0}">${buildReminderCell(a)}</td>
 				<td class="text-end">${actions.join('') || '<span class="text-muted">—</span>'}</td>
 			`;
 			alertsTbody.appendChild(tr);
@@ -278,17 +446,21 @@
 				: '—';
 			// Derive display status consistent with devices page
 			const displayStatus = (!d.online) ? 'offline' : (d.effective_status || d.status || 'unknown');
-			const statusBadgeClass = (!d.online) ? 'bg-secondary' : (displayStatus === 'alive' ? 'bg-success' : 'bg-warning text-dark');
-			const statusCell = `<span class="badge ${statusBadgeClass}">${displayStatus}</span>`;
+			const statusBadgeClass = (!d.online) ? 'bg-secondary device-status-offline' : 
+				(displayStatus === 'alive' ? 'bg-success device-status-online' : 
+				(displayStatus === 'alert' || displayStatus === 'fire' || displayStatus === 'alarm' ? 'bg-danger device-status-alert' : 
+				'bg-warning device-status-warning'));
+			const statusCell = `<span class="badge ${statusBadgeClass}" data-status="${displayStatus}">${displayStatus.toUpperCase()}</span>`;
+			const regSort = d.registered_at || '';
 			tr.innerHTML = `
-				<td>${d.id}</td>
-				<td><code>${d.hardware_identifier || ''}</code></td>
-				<td>${d.device_name || ''}</td>
-				<td>${roleBadge}</td>
-				<td>${masterLabel}</td>
-				<td>${statusCell}</td>
-				<td>${reg}</td>
-				<td>${d.owner_email || ''}</td>
+				<td data-value="${d.id}">${d.id}</td>
+				<td data-value="${d.hardware_identifier || ''}"><code>${d.hardware_identifier || ''}</code></td>
+				<td data-value="${d.device_name || ''}">${d.device_name || ''}</td>
+				<td data-value="${role}">${roleBadge}</td>
+				<td data-value="${masterLabel}">${masterLabel}</td>
+				<td data-value="${displayStatus}">${statusCell}</td>
+				<td data-value="${regSort}">${reg}</td>
+				<td data-value="${d.owner_email || ''}">${d.owner_email || ''}</td>
 			`;
 			devicesTbody.appendChild(tr);
 		});
@@ -297,7 +469,54 @@
 
 	async function init() {
 		await Promise.all([loadKPIs(), loadLatestAlerts(), loadRecentDevices()]);
+		initTableSort();
 	}
+	
+	function initTableSort() {
+		const tables = document.querySelectorAll('.data-table');
+		tables.forEach(table => {
+			const headers = table.querySelectorAll('th.sortable');
+			const tbody = table.querySelector('tbody');
+			
+			headers.forEach((header) => {
+				header.addEventListener('click', function() {
+					const colIndex = parseInt(this.dataset.col, 10);
+					const isAsc = this.classList.contains('asc');
+					
+					// Remove sort classes from all headers in this table
+					headers.forEach(h => h.classList.remove('asc', 'desc'));
+					
+					// Toggle sort direction
+					this.classList.add(isAsc ? 'desc' : 'asc');
+					
+					// Get rows and sort
+					const rows = Array.from(tbody.querySelectorAll('tr'));
+					
+					rows.sort((a, b) => {
+						const aCell = a.children[colIndex];
+						const bCell = b.children[colIndex];
+						let aVal = aCell?.dataset.value || aCell?.textContent?.trim() || '';
+						let bVal = bCell?.dataset.value || bCell?.textContent?.trim() || '';
+						
+						// Check if numeric
+						const aNum = parseFloat(aVal);
+						const bNum = parseFloat(bVal);
+						
+						if (!isNaN(aNum) && !isNaN(bNum)) {
+							return isAsc ? bNum - aNum : aNum - bNum;
+						}
+						
+						// String comparison
+						return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+					});
+					
+					// Re-append sorted rows
+					rows.forEach(row => tbody.appendChild(row));
+				});
+			});
+		});
+	}
+	
 	init();
 </script>
 {% endblock %}

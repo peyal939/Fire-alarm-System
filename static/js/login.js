@@ -141,16 +141,27 @@
       return error.body.detail;
     }
     if (error.body && typeof error.body === 'object') {
+      // Friendly field labels
+      const fieldLabels = {
+        phone_number: 'Phone number',
+        email: 'Email',
+        password: 'Password',
+        confirm_password: 'Confirm password',
+        full_name: 'Full name',
+        address: 'Address',
+        role: 'Account type',
+        otp_code: 'OTP code'
+      };
       const parts = [];
       Object.entries(error.body).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          parts.push(value.join(' '));
-        } else if (value) {
-          parts.push(String(value));
+        const label = fieldLabels[key] || key;
+        const errorText = Array.isArray(value) ? value.join(' ') : String(value);
+        if (errorText) {
+          parts.push(`${label}: ${errorText}`);
         }
       });
       if (parts.length) {
-        return parts.join(' ');
+        return parts.join('\n');
       }
     }
     return fallback;

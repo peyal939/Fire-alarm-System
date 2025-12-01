@@ -1,134 +1,421 @@
 {% extends "base.html" %}
 {% block title %}Subscription Detail | apS Fire{% endblock %}
+{% block head_extra %}
+<style>
+  .billing-detail-page {
+    background: linear-gradient(to bottom, var(--aps-gray-100, #f8f9fa) 0%, #ffffff 100%);
+    min-height: calc(100vh - 200px);
+    padding: 2rem 0;
+  }
+  
+  .page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 3px solid #198754;
+  }
+  
+  .page-header h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #198754;
+    margin: 0;
+  }
+  
+  .info-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    height: 100%;
+    transition: all 0.2s ease;
+  }
+  
+  .info-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+  }
+  
+  .info-card .card-header {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    color: white;
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+    border: none;
+    border-radius: 12px 12px 0 0;
+  }
+  
+  .info-card .card-body {
+    padding: 1.25rem;
+  }
+  
+  .info-card.secondary .card-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%);
+  }
+  
+  .info-card.success .card-header {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+  }
+  
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .info-item:last-of-type {
+    border-bottom: none;
+  }
+  
+  .info-label {
+    color: #6c757d;
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+  
+  .info-value {
+    font-weight: 600;
+    color: #212529;
+  }
+  
+  .danger-zone-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+  
+  .danger-zone-card.danger {
+    border-left: 4px solid #dc3545;
+  }
+  
+  .danger-zone-card.success {
+    border-left: 4px solid #198754;
+  }
+  
+  .charges-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+  
+  .charges-card .card-header {
+    background: linear-gradient(135deg, #495057 0%, #6c757d 100%);
+    color: white;
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+    border: none;
+  }
+  
+  .charges-table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    padding: 0.75rem;
+  }
+  
+  .charges-table tbody td {
+    padding: 0.75rem;
+    vertical-align: middle;
+    font-size: 0.9rem;
+  }
+  
+  .charges-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  /* Sortable table headers */
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 1.5rem !important;
+  }
+  
+  .sortable:hover {
+    background-color: #e9ecef;
+  }
+  
+  .sortable::after {
+    content: '\F282';
+    font-family: 'bootstrap-icons';
+    position: absolute;
+    right: 0.5rem;
+    opacity: 0.3;
+    font-size: 0.7rem;
+  }
+  
+  .sortable.asc::after {
+    content: '\F235';
+    opacity: 1;
+  }
+  
+  .sortable.desc::after {
+    content: '\F229';
+    opacity: 1;
+  }
+  
+  .status-badge-lg {
+    padding: 0.5rem 1.25rem;
+    border-radius: 25px;
+    font-weight: 600;
+    font-size: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #198754;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  
+  .back-link:hover {
+    color: #146c43;
+    gap: 0.75rem;
+  }
+</style>
+{% endblock %}
 {% block content %}
-<a class="text-decoration-none" href="{% url 'subscriptions:admin-list' %}">&larr; Back to subscriptions</a>
-<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
-  <div>
-    <h1 class="h3 mb-1">{{ subscription.device.device_name|default:"Device" }}</h1>
-    <p class="text-muted mb-0">{{ subscription.device.hardware_identifier }} • {{ subscription.device.user.email }}</p>
-  </div>
-  <span class="badge {% if subscription.status == 'active' %}bg-success{% elif subscription.status == 'grace' %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-6">{{ subscription.get_status_display }}</span>
-</div>
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h5 class="card-title">Coverage</h5>
-        <p class="mb-1"><strong>Last paid through:</strong> {{ subscription.last_paid_through|date:"Y-m-d" }}</p>
-        <p class="mb-1"><strong>Next due:</strong> {{ subscription.next_due_at|date:"Y-m-d" }}</p>
-        <p class="mb-0"><strong>Monthly fee:</strong> ৳{{ subscription.monthly_amount }}</p>
+<div class="billing-detail-page">
+  <div class="container">
+    <a class="back-link mb-3 d-inline-block" href="{% url 'subscriptions:admin-list' %}">
+      <i class="bi bi-arrow-left"></i> Back to subscriptions
+    </a>
+    
+    <div class="page-header d-flex flex-wrap justify-content-between align-items-center mt-3">
+      <div>
+        <h1>
+          <i class="bi bi-device-hdd me-2"></i>
+          {{ subscription.device.device_name|default:"Device" }}
+        </h1>
+        <p class="text-muted mb-0">
+          <span class="font-monospace">{{ subscription.device.hardware_identifier }}</span> • {{ subscription.device.user.email }}
+        </p>
       </div>
+      <span class="status-badge-lg mt-2 mt-md-0 {% if subscription.status == 'active' %}bg-success text-white{% elif subscription.status == 'grace' %}bg-warning text-dark{% else %}bg-danger text-white{% endif %}">
+        <i class="bi {% if subscription.status == 'active' %}bi-check-circle{% elif subscription.status == 'grace' %}bi-exclamation-triangle{% else %}bi-x-circle{% endif %} me-1"></i>
+        {{ subscription.get_status_display }}
+      </span>
     </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h5 class="card-title">Grace / Override</h5>
-        <p class="mb-1"><strong>Grace expires:</strong> {% if subscription.grace_expires_at %}{{ subscription.grace_expires_at|date:"Y-m-d" }}{% else %}—{% endif %}</p>
-        <p class="mb-3"><strong>Override active until:</strong> {% if subscription.admin_override_until %}{{ subscription.admin_override_until|date:"Y-m-d H:i" }}{% else %}—{% endif %}</p>
-        <form method="post" class="d-grid gap-2">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="override" />
-          {{ override_form.admin_override_until.label_tag }}
-          {{ override_form.admin_override_until }}
-          <small class="text-muted">{{ override_form.admin_override_until.help_text }}</small>
-          <button class="btn btn-outline-primary">Save override window</button>
-        </form>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h5 class="card-title">Record cash payment</h5>
-        <form method="post" class="d-grid gap-2">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="manual" />
-          <div class="mb-2">
-            <label class="form-label">Months covered</label>
-            {{ manual_form.months }}
+    
+    <div class="row g-4 mb-4">
+      <div class="col-md-4">
+        <div class="card info-card success">
+          <div class="card-header">
+            <i class="bi bi-calendar-check me-2"></i>Coverage
           </div>
-          <div class="mb-2">
-            <label class="form-label">Notes</label>
-            {{ manual_form.note }}
+          <div class="card-body">
+            <div class="info-item">
+              <span class="info-label">Last paid through</span>
+              <span class="info-value">{{ subscription.last_paid_through|date:"Y-m-d" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Next due</span>
+              <span class="info-value">{{ subscription.next_due_at|date:"Y-m-d" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Monthly fee</span>
+              <span class="info-value text-success">৳{{ subscription.monthly_amount }}</span>
+            </div>
           </div>
-          <button class="btn btn-success">Record manual payment</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-12">
-    <div class="card {% if subscription.status == 'active' or subscription.status == 'grace' %}border-danger{% else %}border-success{% endif %}">
-      <div class="card-body d-flex justify-content-between align-items-center">
-        <div>
-            {% if subscription.status == 'active' or subscription.status == 'grace' %}
-            <h5 class="card-title text-danger">Danger Zone</h5>
-            <p class="mb-0 text-muted">Halt this subscription immediately. This will stop service.</p>
-            {% else %}
-            <h5 class="card-title text-success">Activate Subscription</h5>
-            <p class="mb-0 text-muted">Reactivate this subscription. Service will resume immediately.</p>
-            {% endif %}
         </div>
-        <form method="post">
-            {% csrf_token %}
-            {% if subscription.status == 'active' or subscription.status == 'grace' %}
-            <input type="hidden" name="action" value="halt" />
-            <button class="btn btn-danger" onclick="return confirm('Are you sure you want to halt this subscription?')">Halt Subscription</button>
-            {% else %}
-            <input type="hidden" name="action" value="activate" />
-            <button class="btn btn-success" onclick="return confirm('Are you sure you want to activate this subscription?')">Activate Subscription</button>
-            {% endif %}
-        </form>
+      </div>
+      
+      <div class="col-md-4">
+        <div class="card info-card secondary">
+          <div class="card-header">
+            <i class="bi bi-shield-check me-2"></i>Grace / Override
+          </div>
+          <div class="card-body">
+            <div class="info-item">
+              <span class="info-label">Grace expires</span>
+              <span class="info-value">{% if subscription.grace_expires_at %}{{ subscription.grace_expires_at|date:"Y-m-d" }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="info-item mb-3">
+              <span class="info-label">Override until</span>
+              <span class="info-value">{% if subscription.admin_override_until %}{{ subscription.admin_override_until|date:"Y-m-d H:i" }}{% else %}—{% endif %}</span>
+            </div>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="override" />
+              <label class="form-label fw-semibold small">{{ override_form.admin_override_until.label }}</label>
+              {{ override_form.admin_override_until }}
+              <small class="text-muted d-block mb-2">{{ override_form.admin_override_until.help_text }}</small>
+              <button class="btn btn-primary btn-sm w-100"><i class="bi bi-save me-1"></i>Save override</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-4">
+        <div class="card info-card">
+          <div class="card-header">
+            <i class="bi bi-cash-stack me-2"></i>Record Cash Payment
+          </div>
+          <div class="card-body">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="manual" />
+              <div class="mb-3">
+                <label class="form-label fw-semibold small">Months covered</label>
+                {{ manual_form.months }}
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold small">Notes</label>
+                {{ manual_form.note }}
+              </div>
+              <button class="btn btn-success w-100"><i class="bi bi-plus-circle me-1"></i>Record payment</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="row g-4 mb-4">
+      <div class="col-12">
+        <div class="card danger-zone-card {% if subscription.status == 'active' or subscription.status == 'grace' %}danger{% else %}success{% endif %}">
+          <div class="card-body d-flex flex-wrap justify-content-between align-items-center p-4">
+            <div class="mb-3 mb-md-0">
+              {% if subscription.status == 'active' or subscription.status == 'grace' %}
+              <h5 class="text-danger mb-1"><i class="bi bi-exclamation-octagon me-2"></i>Danger Zone</h5>
+              <p class="mb-0 text-muted">Halt this subscription immediately. This will stop service.</p>
+              {% else %}
+              <h5 class="text-success mb-1"><i class="bi bi-check2-circle me-2"></i>Activate Subscription</h5>
+              <p class="mb-0 text-muted">Reactivate this subscription. Service will resume immediately.</p>
+              {% endif %}
+            </div>
+            <form method="post">
+              {% csrf_token %}
+              {% if subscription.status == 'active' or subscription.status == 'grace' %}
+              <input type="hidden" name="action" value="halt" />
+              <button class="btn btn-danger" onclick="return confirm('Are you sure you want to halt this subscription?')">
+                <i class="bi bi-stop-circle me-1"></i>Halt Subscription
+              </button>
+              {% else %}
+              <input type="hidden" name="action" value="activate" />
+              <button class="btn btn-success" onclick="return confirm('Are you sure you want to activate this subscription?')">
+                <i class="bi bi-play-circle me-1"></i>Activate Subscription
+              </button>
+              {% endif %}
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card charges-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-2"></i>Recent Charges</span>
+        <span class="badge bg-light text-dark">{{ recent_charges|length }} records</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table charges-table mb-0">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="period">Period</th>
+              <th class="sortable" data-sort="amount">Amount</th>
+              <th class="sortable" data-sort="status">Status</th>
+              <th class="sortable" data-sort="cycles">Cycles</th>
+              <th class="sortable" data-sort="method">Method</th>
+              <th class="sortable" data-sort="updated">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for charge in recent_charges %}
+            <tr>
+              <td data-value="{{ charge.period_start|date:'Y-m-d' }}">
+                <span class="text-nowrap">{{ charge.period_start|date:"Y-m-d" }}</span>
+                <i class="bi bi-arrow-right text-muted mx-1"></i>
+                <span class="text-nowrap">{{ charge.period_end|date:"Y-m-d" }}</span>
+              </td>
+              <td class="fw-semibold" data-value="{{ charge.amount }}">৳{{ charge.amount }}</td>
+              <td data-value="{{ charge.status }}">
+                <span class="badge {% if charge.status == 'paid' %}bg-success{% elif charge.status == 'pending' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                  {{ charge.get_status_display }}
+                </span>
+              </td>
+              <td data-value="{{ charge.cycles }}">{{ charge.cycles }}</td>
+              <td data-value="{% if charge.is_manual %}manual{% elif charge.payment_transaction %}online{% else %}none{% endif %}">
+                {% if charge.is_manual %}
+                  <span class="text-info"><i class="bi bi-person me-1"></i>Manual</span>
+                  <small class="text-muted d-block">{{ charge.recorded_by|default:"n/a" }}</small>
+                {% elif charge.payment_transaction %}
+                  <span class="text-primary"><i class="bi bi-credit-card me-1"></i>shurjoPay</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-muted" data-value="{{ charge.updated_at|date:'Y-m-d H:i' }}">{{ charge.updated_at|date:"Y-m-d H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size: 1.5rem;"></i>
+                <p class="mt-2 mb-0">No charges yet.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 </div>
+{% endblock %}
 
-<div class="card">
-  <div class="card-body">
-    <h5 class="card-title">Recent charges</h5>
-    <div class="table-responsive">
-      <table class="table table-sm">
-        <thead>
-          <tr>
-            <th>Period</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th>Cycles</th>
-            <th>Method</th>
-            <th>Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for charge in recent_charges %}
-          <tr>
-            <td>{{ charge.period_start|date:"Y-m-d" }} → {{ charge.period_end|date:"Y-m-d" }}</td>
-            <td>৳{{ charge.amount }}</td>
-            <td>{{ charge.get_status_display }}</td>
-            <td>{{ charge.cycles }}</td>
-            <td>
-              {% if charge.is_manual %}
-                Manual ({{ charge.recorded_by|default:"n/a" }})
-              {% elif charge.payment_transaction %}
-                shurjoPay
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td>{{ charge.updated_at|date:"Y-m-d H:i" }}</td>
-          </tr>
-          {% empty %}
-          <tr>
-            <td colspan="6" class="text-center text-muted">No charges yet.</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const table = document.querySelector('.charges-table');
+  if (!table) return;
+  
+  const headers = table.querySelectorAll('th.sortable');
+  const tbody = table.querySelector('tbody');
+  
+  headers.forEach((header, index) => {
+    header.addEventListener('click', function() {
+      const isAsc = this.classList.contains('asc');
+      
+      // Remove sort classes from all headers
+      headers.forEach(h => h.classList.remove('asc', 'desc'));
+      
+      // Toggle sort direction
+      this.classList.add(isAsc ? 'desc' : 'asc');
+      
+      // Get rows and sort
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      rows.sort((a, b) => {
+        const aCell = a.children[index];
+        const bCell = b.children[index];
+        let aVal = aCell?.dataset.value || aCell?.textContent?.trim() || '';
+        let bVal = bCell?.dataset.value || bCell?.textContent?.trim() || '';
+        
+        // Check if numeric
+        const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
+        const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return isAsc ? bNum - aNum : aNum - bNum;
+        }
+        
+        // String comparison
+        return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+      });
+      
+      // Re-append sorted rows
+      rows.forEach(row => tbody.appendChild(row));
+    });
+  });
+});
+</script>
 {% endblock %}
 *** End File

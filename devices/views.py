@@ -344,6 +344,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         master = validated.get("master")  # set in serializer when role==slave
         preferred_order = validated.get("originating_order")
         target_user_id = validated.get("target_user_id")
+        package = validated.get("package")  # admin-assigned package
 
         owner = request.user
         if target_user_id and (
@@ -392,6 +393,9 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 existing.master = master
             elif role == Device.DeviceRole.MASTER:
                 existing.master = None
+            # Update package if provided (admin feature)
+            if package and not existing.package_id:
+                existing.package = package
 
             # Mark as registered if this is the first claim
             if not existing.registered_at:
@@ -532,6 +536,8 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 )
                 if role == Device.DeviceRole.SLAVE and master:
                     device_kwargs["master"] = master
+                if package:
+                    device_kwargs["package"] = package
 
                 device = Device.objects.create(**device_kwargs)
 
@@ -567,6 +573,87 @@ class DeviceViewSet(viewsets.ModelViewSet):
             )
         except OrderAssignmentError as exc:
             return Response({"detail": str(exc)}, status=400)
+
+    @extend_schema(
+        tags=["Devices"],
+        summary="Admin register a device for any user",
+        description="Admin-only endpoint to register a device for any user by their email.",
+        request={
+            "type": "object",
+            "properties": {
+                "hardware_identifier": {"type": "string"},
+                "device_name": {"type": "string"},
+                "user_email": {"type": "string", "format": "email"},
+                "device_role": {"type": "string", "enum": ["master", "slave"]},
+                "package_id": {"type": "integer"},
+            },
+            "required": ["hardware_identifier", "user_email"],
+        },
+        responses={201: DeviceSerializer},
+    )
+    @action(detail=False, methods=["post"], url_path="admin-register")
+    def admin_register(self, request):
+        """Admin-only endpoint to register a device for any user."""
+        if not (
+            request.user.is_superuser
+            or getattr(request.user, "role", None) == "superadmin"
+        ):
+            return Response({"detail": "Admin access required"}, status=403)
+
+        user_email = request.data.get("user_email", "").strip().lower()
+        if not user_email:
+            return Response({"detail": "user_email is required"}, status=400)
+
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        target_user = User.objects.filter(email=user_email).first()
+        if not target_user:
+            return Response(
+                {"detail": f"User with email {user_email} not found"}, status=404
+            )
+
+        hid = request.data.get("hardware_identifier", "").strip()
+        if not hid:
+            return Response({"detail": "hardware_identifier is required"}, status=400)
+
+        # Check if device already exists
+        existing = Device.objects.filter(
+            hardware_identifier=hid, deleted_at__isnull=True
+        ).first()
+        if existing:
+            return Response({"detail": "Device already registered"}, status=409)
+
+        device_name = request.data.get("device_name", "").strip()
+        device_role = request.data.get("device_role", Device.DeviceRole.MASTER)
+        package_id = request.data.get("package_id")
+
+        package = None
+        if package_id:
+            from products.models import Package
+
+            package = Package.objects.filter(
+                pk=package_id, deleted_at__isnull=True
+            ).first()
+
+        try:
+            with transaction.atomic():
+                device = Device.objects.create(
+                    user=target_user,
+                    hardware_identifier=hid,
+                    device_name=device_name,
+                    device_role=device_role,
+                    package=package,
+                    latitude=Decimal("23.810300"),  # Default Dhaka location
+                    longitude=Decimal("90.412500"),
+                    registered_at=timezone.now(),
+                    created_by=request.user,
+                )
+                _ensure_subscription(device)
+                _broadcast_new_device(device)
+                return Response(DeviceSerializer(device).data, status=201)
+        except IntegrityError:
+            return Response({"detail": "Device registration failed"}, status=409)
 
     @extend_schema(
         tags=["Devices"],

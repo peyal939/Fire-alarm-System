@@ -253,28 +253,78 @@
     .subscription-card-header {
       padding: 1rem;
     }
+    
+    .sort-controls {
+      width: 100%;
+      margin-top: 1rem;
+    }
+    
+    .sort-controls select {
+      width: 100% !important;
+    }
+  }
+  
+  .sort-controls select {
+    border-radius: 8px;
+    border: 2px solid #dee2e6;
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .sort-controls select:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.15);
+  }
+  
+  .sort-controls select:hover {
+    border-color: #198754;
   }
 </style>
 {% endblock %}
 {% block content %}
 <div class="subscriptions-page">
   <div class="container">
-    <div class="page-header">
-      <h1>
-        <i class="bi bi-credit-card-2-front me-2"></i>
-        {% if showing_delegated %}My & Delegated Device Subscriptions{% else %}My Device Subscriptions{% endif %}
-      </h1>
-      {% if showing_delegated %}
-      <p class="text-muted mb-0">
-        You can pay for devices you've assigned to teammates. Charges will apply to your company account.
-      </p>
+    <div class="page-header d-flex flex-wrap justify-content-between align-items-center">
+      <div>
+        <h1>
+          <i class="bi bi-credit-card-2-front me-2"></i>
+          {% if showing_delegated %}My & Delegated Device Subscriptions{% else %}My Device Subscriptions{% endif %}
+        </h1>
+        {% if showing_delegated %}
+        <p class="text-muted mb-0">
+          You can pay for devices you've assigned to teammates. Charges will apply to your company account.
+        </p>
+        {% endif %}
+      </div>
+      {% if cards %}
+      <div class="sort-controls mt-2 mt-md-0">
+        <label class="me-2 text-muted small">Sort by:</label>
+        <select id="sortSelect" class="form-select form-select-sm d-inline-block" style="width: auto;">
+          <option value="status">Status</option>
+          <option value="days-asc">Days Remaining (Low → High)</option>
+          <option value="days-desc">Days Remaining (High → Low)</option>
+          <option value="due-asc">Next Bill (Soonest First)</option>
+          <option value="due-desc">Next Bill (Latest First)</option>
+          <option value="name-asc">Device Name (A → Z)</option>
+          <option value="name-desc">Device Name (Z → A)</option>
+          <option value="fee-asc">Monthly Fee (Low → High)</option>
+          <option value="fee-desc">Monthly Fee (High → Low)</option>
+        </select>
+      </div>
       {% endif %}
     </div>
     
     {% if cards %}
-      <div class="row g-4">
+      <div class="row g-4" id="subscriptionCards">
         {% for card in cards %}
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 subscription-card-wrapper"
+             data-status="{{ card.subscription.status }}"
+             data-days="{{ card.days_remaining }}"
+             data-due="{{ card.subscription.next_due_at|date:'Y-m-d' }}"
+             data-name="{{ card.device.device_name|default:'Device'|lower }}"
+             data-fee="{{ card.subscription.monthly_amount }}">
           <div class="subscription-card">
             <div class="subscription-card-header">
               <div class="subscription-card-header-content">
@@ -366,4 +416,68 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const sortSelect = document.getElementById('sortSelect');
+  const cardsContainer = document.getElementById('subscriptionCards');
+  if (!sortSelect || !cardsContainer) return;
+
+  const statusPriority = { 'suspended': 0, 'grace': 1, 'active': 2 };
+
+  function sortCards() {
+    const sortValue = sortSelect.value;
+    const cards = Array.from(cardsContainer.querySelectorAll('.subscription-card-wrapper'));
+
+    cards.sort((a, b) => {
+      switch (sortValue) {
+        case 'status':
+          // Suspended first, then grace, then active
+          const statusA = statusPriority[a.dataset.status] ?? 99;
+          const statusB = statusPriority[b.dataset.status] ?? 99;
+          if (statusA !== statusB) return statusA - statusB;
+          // Secondary sort by days remaining (ascending)
+          return parseInt(a.dataset.days) - parseInt(b.dataset.days);
+
+        case 'days-asc':
+          return parseInt(a.dataset.days) - parseInt(b.dataset.days);
+
+        case 'days-desc':
+          return parseInt(b.dataset.days) - parseInt(a.dataset.days);
+
+        case 'due-asc':
+          return a.dataset.due.localeCompare(b.dataset.due);
+
+        case 'due-desc':
+          return b.dataset.due.localeCompare(a.dataset.due);
+
+        case 'name-asc':
+          return a.dataset.name.localeCompare(b.dataset.name);
+
+        case 'name-desc':
+          return b.dataset.name.localeCompare(a.dataset.name);
+
+        case 'fee-asc':
+          return parseFloat(a.dataset.fee) - parseFloat(b.dataset.fee);
+
+        case 'fee-desc':
+          return parseFloat(b.dataset.fee) - parseFloat(a.dataset.fee);
+
+        default:
+          return 0;
+      }
+    });
+
+    // Re-append in sorted order
+    cards.forEach(card => cardsContainer.appendChild(card));
+  }
+
+  sortSelect.addEventListener('change', sortCards);
+
+  // Initial sort
+  sortCards();
+})();
+</script>
 {% endblock %}

@@ -62,6 +62,11 @@ def ensure_device_subscription(
     if originating_order and getattr(originating_order, "package", None):
         monthly_amount = originating_order.package.mrf or Decimal("0.00")
 
+    # Fallback: check if device has a direct package link (admin-registered devices)
+    device_package = getattr(device, "package", None)
+    if monthly_amount <= 0 and device_package:
+        monthly_amount = device_package.mrf or Decimal("0.00")
+
     # Default to 30-day coverage for the first prepaid month
     first_cycle_end = activation_time + timedelta(days=30)
 

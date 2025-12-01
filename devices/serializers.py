@@ -10,7 +10,7 @@ from django.db import models
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from .services import order_has_capacity
-from products.models import Order
+from products.models import Order, Package
 from products.enums import OrderStatus
 
 
@@ -241,6 +241,16 @@ class DeviceRegisterSerializer(serializers.Serializer):
             "Admin-only: user ID to register this device for. Ignored for non-admins."
         ),
     )
+    package_id = serializers.PrimaryKeyRelatedField(
+        queryset=Package.objects.filter(deleted_at__isnull=True),
+        required=False,
+        allow_null=True,
+        source="package",
+        help_text=(
+            "Admin-only: package to assign to this device. Required when registering without an order. "
+            "The device will inherit the package's MRF (monthly recurring fee) for subscription billing."
+        ),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -356,6 +366,15 @@ class DeviceRegisterSerializer(serializers.Serializer):
                     raise serializers.ValidationError(message)
 
             attrs["originating_order"] = order
+
+        # Admin-only: validate package_id when no order is provided
+        selected_package = attrs.get("package")
+        target_user_id = attrs.get("target_user_id")
+        if target_user_id and not selected_order and not selected_package:
+            # Admin is registering device for user without an order - require package
+            raise serializers.ValidationError(
+                "package_id is required when registering a device without an order"
+            )
 
         return attrs
 
