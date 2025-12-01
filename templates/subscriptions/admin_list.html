@@ -1,110 +1,323 @@
 {% extends "base.html" %}
 {% block title %}Subscription Admin | apS Fire{% endblock %}
+{% block head_extra %}
+<style>
+  .billing-admin-page {
+    background: linear-gradient(to bottom, var(--aps-gray-100, #f8f9fa) 0%, #ffffff 100%);
+    min-height: calc(100vh - 200px);
+    padding: 2rem 0;
+  }
+  
+  .stats-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease;
+    overflow: hidden;
+  }
+  
+  .stats-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+  }
+  
+  .stats-card .card-body {
+    padding: 1.25rem;
+  }
+  
+  .stats-card.active { border-left: 4px solid #198754; }
+  .stats-card.grace { border-left: 4px solid #ffc107; }
+  .stats-card.suspended { border-left: 4px solid #dc3545; }
+  .stats-card.cancelled { border-left: 4px solid #6c757d; }
+  
+  .stats-value {
+    font-size: 2rem;
+    font-weight: 700;
+  }
+  
+  .filter-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    padding: 1.5rem;
+    background: white;
+    margin-bottom: 1.5rem;
+  }
+  
+  .subscriptions-table-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+  
+  .subscriptions-table-card .card-header {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    color: white;
+    font-weight: 600;
+    padding: 1rem 1.5rem;
+    border: none;
+  }
+  
+  .subscriptions-table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    padding: 1rem;
+    border-bottom: 2px solid #dee2e6;
+  }
+  
+  .subscriptions-table tbody td {
+    padding: 1rem;
+    vertical-align: middle;
+  }
+  
+  .subscriptions-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .status-badge {
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  
+  .page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 3px solid #198754;
+  }
+  
+  .page-header h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #198754;
+    margin: 0;
+  }
+  
+  /* Sortable table headers */
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 1.5rem !important;
+  }
+  
+  .sortable:hover {
+    background-color: #e9ecef;
+  }
+  
+  .sortable::after {
+    content: '\F282';
+    font-family: 'bootstrap-icons';
+    position: absolute;
+    right: 0.5rem;
+    opacity: 0.3;
+    font-size: 0.7rem;
+  }
+  
+  .sortable.asc::after {
+    content: '\F235';
+    opacity: 1;
+  }
+  
+  .sortable.desc::after {
+    content: '\F229';
+    opacity: 1;
+  }
+</style>
+{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <div>
-    <h1 class="h3 mb-1">Subscription Billing - Admin</h1>
-    <p class="text-muted mb-0">Review device subscriptions, payment states, and upcoming renewals.</p>
+<div class="billing-admin-page">
+  <div class="container">
+    <div class="page-header d-flex flex-wrap justify-content-between align-items-center">
+      <div>
+        <h1>
+          <i class="bi bi-receipt-cutoff me-2"></i>
+          Subscription Billing - Admin
+        </h1>
+        <p class="text-muted mb-0">Review device subscriptions, payment states, and upcoming renewals.</p>
+      </div>
+      <a class="btn btn-outline-success mt-2 mt-md-0" href="{% url 'subscriptions:admin-list' %}">
+        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+      </a>
+    </div>
+    
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card stats-card active">
+          <div class="card-body text-center">
+            <p class="fw-semibold text-success mb-1"><i class="bi bi-check-circle me-1"></i>Active</p>
+            <div class="stats-value text-success">{{ stats.active }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stats-card grace">
+          <div class="card-body text-center">
+            <p class="fw-semibold text-warning mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Grace</p>
+            <div class="stats-value text-warning">{{ stats.grace }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stats-card suspended">
+          <div class="card-body text-center">
+            <p class="fw-semibold text-danger mb-1"><i class="bi bi-x-circle me-1"></i>Suspended</p>
+            <div class="stats-value text-danger">{{ stats.suspended }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stats-card cancelled">
+          <div class="card-body text-center">
+            <p class="fw-semibold text-secondary mb-1"><i class="bi bi-slash-circle me-1"></i>Cancelled</p>
+            <div class="stats-value text-secondary">{{ stats.cancelled }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="filter-card">
+      <form class="row g-3 align-items-end" method="get">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold"><i class="bi bi-search me-1"></i>Search</label>
+          <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Email, device ID, or name" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold"><i class="bi bi-funnel me-1"></i>Status</label>
+          <select name="status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for code,label in status_choices %}
+            <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-success w-100"><i class="bi bi-filter me-1"></i>Apply Filters</button>
+        </div>
+      </form>
+    </div>
+    
+    <div class="card subscriptions-table-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul me-2"></i>Subscriptions</span>
+        <span class="badge bg-light text-dark">{{ subscriptions|length }} results</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table subscriptions-table align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="device">Device</th>
+              <th class="sortable" data-sort="user">User</th>
+              <th class="sortable" data-sort="status">Status</th>
+              <th class="sortable" data-sort="last-paid">Last Paid Through</th>
+              <th class="sortable" data-sort="next-due">Next Due</th>
+              <th class="sortable" data-sort="grace">Grace Ends</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sub in subscriptions %}
+            <tr>
+              <td data-value="{{ sub.device.device_name|default:'' }}">
+                <div class="fw-semibold">{{ sub.device.device_name|default:"Unnamed" }}</div>
+                <small class="text-muted font-monospace">{{ sub.device.hardware_identifier }}</small>
+              </td>
+              <td data-value="{{ sub.device.user.email }}">
+                <div>{{ sub.device.user.email }}</div>
+                <small class="text-muted">{{ sub.device.user.phone_number }}</small>
+              </td>
+              <td data-value="{{ sub.status }}">
+                <span class="status-badge {% if sub.status == 'active' %}bg-success text-white{% elif sub.status == 'grace' %}bg-warning text-dark{% elif sub.status == 'suspended' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}">
+                  {{ sub.get_status_display }}
+                </span>
+              </td>
+              <td data-value="{{ sub.last_paid_through|date:'Y-m-d' }}">{{ sub.last_paid_through|date:"Y-m-d" }}</td>
+              <td data-value="{{ sub.next_due_at|date:'Y-m-d' }}">{{ sub.next_due_at|date:"Y-m-d" }}</td>
+              <td data-value="{{ sub.grace_expires_at|date:'Y-m-d'|default:'9999-12-31' }}">
+                {% if sub.grace_expires_at %}
+                  {{ sub.grace_expires_at|date:"Y-m-d" }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-success" href="{% url 'subscriptions:admin-detail' sub.pk %}">
+                  <i class="bi bi-gear me-1"></i>Manage
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-5">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p class="mt-2 mb-0">No subscriptions found.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
-  <a class="btn btn-outline-secondary" href="{% url 'subscriptions:admin-list' %}">Refresh</a>
 </div>
-<div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card border-success">
-      <div class="card-body">
-        <p class="fw-semibold text-success mb-1">Active</p>
-        <h4 class="mb-0">{{ stats.active }}</h4>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card border-warning">
-      <div class="card-body">
-        <p class="fw-semibold text-warning mb-1">Grace</p>
-        <h4 class="mb-0">{{ stats.grace }}</h4>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card border-danger">
-      <div class="card-body">
-        <p class="fw-semibold text-danger mb-1">Suspended</p>
-        <h4 class="mb-0">{{ stats.suspended }}</h4>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card border-secondary">
-      <div class="card-body">
-        <p class="fw-semibold text-secondary mb-1">Cancelled</p>
-        <h4 class="mb-0">{{ stats.cancelled }}</h4>
-      </div>
-    </div>
-  </div>
-</div>
-<form class="row g-2 align-items-end mb-4" method="get">
-  <div class="col-md-4">
-    <label class="form-label">Search</label>
-    <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Email, device ID, or name" />
-  </div>
-  <div class="col-md-3">
-    <label class="form-label">Status</label>
-    <select name="status" class="form-select">
-      <option value="">All</option>
-      {% for code,label in status_choices %}
-      <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-md-2">
-    <button class="btn btn-primary w-100">Apply</button>
-  </div>
-</form>
-<div class="table-responsive">
-  <table class="table table-striped align-middle">
-    <thead>
-      <tr>
-        <th>Device</th>
-        <th>User</th>
-        <th>Status</th>
-        <th>Last Paid Through</th>
-        <th>Next Due</th>
-        <th>Grace Ends</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for sub in subscriptions %}
-      <tr>
-        <td>
-          <div class="fw-semibold">{{ sub.device.device_name|default:"Unnamed" }}</div>
-          <small class="text-muted">{{ sub.device.hardware_identifier }}</small>
-        </td>
-        <td>
-          {{ sub.device.user.email }}<br />
-          <small class="text-muted">{{ sub.device.user.phone_number }}</small>
-        </td>
-        <td>{{ sub.get_status_display }}</td>
-        <td>{{ sub.last_paid_through|date:"Y-m-d" }}</td>
-        <td>{{ sub.next_due_at|date:"Y-m-d" }}</td>
-        <td>
-          {% if sub.grace_expires_at %}
-            {{ sub.grace_expires_at|date:"Y-m-d" }}
-          {% else %}
-            <span class="text-muted">—</span>
-          {% endif %}
-        </td>
-        <td class="text-end">
-          <a class="btn btn-sm btn-outline-primary" href="{% url 'subscriptions:admin-detail' sub.pk %}">Manage</a>
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="7" class="text-center text-muted py-5">No subscriptions found.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const table = document.querySelector('.subscriptions-table');
+  if (!table) return;
+  
+  const headers = table.querySelectorAll('th.sortable');
+  const tbody = table.querySelector('tbody');
+  
+  headers.forEach((header, index) => {
+    header.addEventListener('click', function() {
+      const isAsc = this.classList.contains('asc');
+      
+      // Remove sort classes from all headers
+      headers.forEach(h => h.classList.remove('asc', 'desc'));
+      
+      // Toggle sort direction
+      this.classList.add(isAsc ? 'desc' : 'asc');
+      
+      // Get rows and sort
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      rows.sort((a, b) => {
+        const aCell = a.children[index];
+        const bCell = b.children[index];
+        let aVal = aCell?.dataset.value || aCell?.textContent?.trim() || '';
+        let bVal = bCell?.dataset.value || bCell?.textContent?.trim() || '';
+        
+        // Check if date format (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(aVal) && /^\d{4}-\d{2}-\d{2}$/.test(bVal)) {
+          return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+        }
+        
+        // Check if numeric
+        const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
+        const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return isAsc ? bNum - aNum : aNum - bNum;
+        }
+        
+        // String comparison
+        return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+      });
+      
+      // Re-append sorted rows
+      rows.forEach(row => tbody.appendChild(row));
+    });
+  });
+});
+</script>
 {% endblock %}
 *** End File

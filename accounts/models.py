@@ -47,10 +47,11 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
         USER = "user", "User"
+        COMPANY_ADMIN = "company_admin", "Company Admin"
         SUPERADMIN = "superadmin", "Super Admin"
 
     email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=32, blank=True)
+    phone_number = models.CharField(max_length=32, blank=True, null=True, unique=True)
     full_name = models.CharField(max_length=255, blank=True)
     address = models.TextField(blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.USER)

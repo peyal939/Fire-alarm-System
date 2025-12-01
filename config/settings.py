@@ -7,6 +7,7 @@ import warnings
 # Suppress harmless CryptographyDeprecationWarning from pymongo/pyopenssl
 try:
     from cryptography.utils import CryptographyDeprecationWarning
+
     warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 except ImportError:
     pass

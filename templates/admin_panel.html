@@ -1,52 +1,859 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Admin Panel · apS Fire Alarm{% endblock %}
+
+{% block head_extra %}
+<style>
+  .admin-tabs .nav-link {
+    color: #495057;
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+  }
+  .admin-tabs .nav-link:hover {
+    border-bottom-color: #dee2e6;
+  }
+  .admin-tabs .nav-link.active {
+    color: #198754;
+    border-bottom-color: #198754;
+    background: transparent;
+  }
+  .stat-card {
+    border-left: 4px solid #198754;
+    transition: transform 0.2s;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+  }
+  .stat-card.users { border-left-color: #0d6efd; }
+  .stat-card.devices { border-left-color: #198754; }
+  .stat-card.subscriptions { border-left-color: #ffc107; }
+  .stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .table-admin th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #dee2e6;
+  }
+  .table-admin td {
+    vertical-align: middle;
+  }
+  .badge-role {
+    font-size: 0.7rem;
+    padding: 0.3em 0.6em;
+  }
+  .action-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+  }
+  .search-box {
+    max-width: 300px;
+  }
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #198754, #20c997);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  /* Sortable table styles */
+  .table-sortable th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 1.5rem;
+  }
+  .table-sortable th.sortable:hover {
+    background: #e9ecef;
+  }
+  .table-sortable th.sortable::after {
+    content: '⇅';
+    position: absolute;
+    right: 0.5rem;
+    opacity: 0.3;
+    font-size: 0.75rem;
+  }
+  .table-sortable th.sortable.asc::after {
+    content: '↑';
+    opacity: 1;
+    color: #198754;
+  }
+  .table-sortable th.sortable.desc::after {
+    content: '↓';
+    opacity: 1;
+    color: #198754;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="py-3">
-  <h1 class="h4 mb-4">Admin Panel</h1>
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-gear-fill text-success me-2"></i>Admin Panel</h1>
+    <a href="/admin/" target="_blank" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-box-arrow-up-right me-1"></i>Django Admin
+    </a>
+  </div>
 
-  <div class="row g-4">
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm">
-        <div class="card-header bg-success text-white">
-          <h2 class="h5 mb-0">Change Password</h2>
-        </div>
+  <!-- Stats Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card stat-card users shadow-sm">
         <div class="card-body">
-          <p class="text-muted">Update your account password. You will stay signed in after the change.</p>
-          <form id="changePasswordForm" data-change-password-form data-endpoint="/auth/change-password" novalidate>
-            <div class="mb-3" data-change-password-alerts></div>
-            <div class="mb-3">
-              <label for="currentPassword" class="form-label">Current password</label>
-              <input type="password" class="form-control" id="currentPassword" name="current_password" autocomplete="current-password" required />
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Total Users</div>
+              <div class="stat-number text-primary">{{ total_users }}</div>
             </div>
-            <div class="mb-3">
-              <label for="newPassword" class="form-label">New password</label>
-              <input type="password" class="form-control" id="newPassword" name="new_password" autocomplete="new-password" required />
-              <div class="form-text">Use at least six characters. Mix letters, numbers, and symbols for stronger security.</div>
+            <i class="bi bi-people-fill text-primary" style="font-size: 2.5rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card stat-card devices shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Total Devices</div>
+              <div class="stat-number text-success">{{ total_devices }}</div>
             </div>
-            <div class="mb-4">
-              <label for="confirmNewPassword" class="form-label">Confirm new password</label>
-              <input type="password" class="form-control" id="confirmNewPassword" name="confirm_new_password" autocomplete="new-password" required />
+            <i class="bi bi-device-hdd-fill text-success" style="font-size: 2.5rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card stat-card subscriptions shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Active Subscriptions</div>
+              <div class="stat-number text-warning">{{ active_subscriptions }}</div>
             </div>
-            <button type="submit" class="btn btn-success" data-change-password-submit>Save new password</button>
-          </form>
+            <i class="bi bi-credit-card-fill text-warning" style="font-size: 2.5rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav admin-tabs mb-3" id="adminTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#usersTab" type="button">
+        <i class="bi bi-people me-1"></i>Users
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#devicesTab" type="button">
+        <i class="bi bi-device-hdd me-1"></i>Devices
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#settingsTab" type="button">
+        <i class="bi bi-sliders me-1"></i>Settings
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- Users Tab -->
+    <div class="tab-pane fade show active" id="usersTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <div class="d-flex align-items-center gap-3">
+            <h5 class="mb-0">All Users</h5>
+            <span class="badge bg-secondary">{{ users|length }}</span>
+          </div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control form-control-sm search-box" id="userSearch" placeholder="Search users...">
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+              <i class="bi bi-plus-lg me-1"></i>Add User
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-admin table-hover table-sortable mb-0" id="usersTable">
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="name">User</th>
+                  <th class="sortable" data-sort="phone">Phone</th>
+                  <th class="sortable" data-sort="role">Role</th>
+                  <th class="sortable" data-sort="devices">Devices</th>
+                  <th class="sortable" data-sort="status">Status</th>
+                  <th class="sortable" data-sort="created">Created</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for user in users %}
+                <tr data-user-id="{{ user.id }}">
+                  <td data-value="{{ user.full_name|default:user.email|lower }}">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="user-avatar">{{ user.email|first|upper }}</div>
+                      <div>
+                        <div class="fw-semibold">{{ user.full_name|default:user.email }}</div>
+                        <small class="text-muted">{{ user.email }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td data-value="{{ user.phone_number|default:"" }}">{{ user.phone_number|default:"-" }}</td>
+                  <td data-value="{{ user.role }}">
+                    {% if user.role == 'superadmin' %}
+                      <span class="badge bg-danger badge-role">Super Admin</span>
+                    {% elif user.role == 'company_admin' %}
+                      <span class="badge bg-warning text-dark badge-role">Company Admin</span>
+                    {% else %}
+                      <span class="badge bg-secondary badge-role">User</span>
+                    {% endif %}
+                  </td>
+                  <td data-value="{{ user.devices.count }}">
+                    <span class="badge bg-success">{{ user.devices.count }}</span>
+                  </td>
+                  <td data-value="{% if user.is_active %}1{% else %}0{% endif %}">
+                    {% if user.is_active %}
+                      <span class="badge bg-success-subtle text-success">Active</span>
+                    {% else %}
+                      <span class="badge bg-danger-subtle text-danger">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td data-value="{{ user.created_at|date:"Y-m-d" }}">
+                    <small>{{ user.created_at|date:"d M Y" }}</small>
+                  </td>
+                  <td class="text-end">
+                    <button class="btn btn-outline-primary action-btn" onclick="editUser({{ user.id }})" title="Edit">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-info action-btn" onclick="viewUserDevices({{ user.id }})" title="View Devices">
+                      <i class="bi bi-device-hdd"></i>
+                    </button>
+                    {% if not user.is_superuser %}
+                    <button class="btn btn-outline-danger action-btn" onclick="deleteUser({{ user.id }})" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="7" class="text-center py-4 text-muted">No users found</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="col-12 col-lg-6">
-      <div class="card border-0 bg-light h-100">
-        <div class="card-body">
-          <h2 class="h5">Coming soon</h2>
-          <p class="mb-1">User management, system settings, and audit logs will appear here in upcoming releases.</p>
-          <p class="text-muted mb-0">Have feedback? Email <a href="mailto:support@pranisheba.com">support@pranisheba.com</a>.</p>
+    <!-- Devices Tab -->
+    <div class="tab-pane fade" id="devicesTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <div class="d-flex align-items-center gap-3">
+            <h5 class="mb-0">All Devices</h5>
+            <span class="badge bg-secondary">{{ devices|length }}</span>
+          </div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control form-control-sm search-box" id="deviceSearch" placeholder="Search devices...">
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addDeviceModal">
+              <i class="bi bi-plus-lg me-1"></i>Add Device
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-admin table-hover table-sortable mb-0" id="devicesTable">
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="device">Device</th>
+                  <th class="sortable" data-sort="owner">Owner</th>
+                  <th class="sortable" data-sort="role">Role</th>
+                  <th class="sortable" data-sort="package">Package</th>
+                  <th class="sortable" data-sort="location">Location</th>
+                  <th class="sortable" data-sort="created">Created</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for device in devices %}
+                <tr data-device-id="{{ device.id }}">
+                  <td data-value="{{ device.device_name|default:device.hardware_identifier|lower }}">
+                    <div>
+                      <div class="fw-semibold">{{ device.device_name|default:device.hardware_identifier }}</div>
+                      <small class="text-muted font-monospace">{{ device.hardware_identifier }}</small>
+                    </div>
+                  </td>
+                  <td data-value="{{ device.user.email|lower }}">
+                    <small>{{ device.user.email }}</small>
+                  </td>
+                  <td data-value="{{ device.device_role }}">
+                    {% if device.device_role == 'master' %}
+                      <span class="badge bg-primary badge-role">Master</span>
+                    {% else %}
+                      <span class="badge bg-info badge-role">Slave</span>
+                    {% endif %}
+                  </td>
+                  <td data-value="{{ device.package.name|default:"" }}">
+                    {% if device.package %}
+                      <span class="badge bg-success-subtle text-success">{{ device.package.name }}</span>
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td data-value="{{ device.latitude|default:0 }}">
+                    {% if device.latitude and device.longitude %}
+                      <small class="text-muted">{{ device.latitude|floatformat:4 }}, {{ device.longitude|floatformat:4 }}</small>
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td data-value="{{ device.created_at|date:"Y-m-d" }}">
+                    <small>{{ device.created_at|date:"d M Y" }}</small>
+                  </td>
+                  <td class="text-end">
+                    <button class="btn btn-outline-primary action-btn" onclick="editDevice({{ device.id }})" title="Edit">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-danger action-btn" onclick="deleteDevice({{ device.id }})" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="7" class="text-center py-4 text-muted">No devices found</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-pane fade" id="settingsTab">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0"><i class="bi bi-key me-2"></i>Change Password</h5>
+            </div>
+            <div class="card-body">
+              <form id="changePasswordForm" data-change-password-form data-endpoint="/auth/change-password" novalidate>
+                <div class="mb-3" data-change-password-alerts></div>
+                <div class="mb-3">
+                  <label for="currentPassword" class="form-label">Current password</label>
+                  <input type="password" class="form-control" id="currentPassword" name="current_password" autocomplete="current-password" required />
+                </div>
+                <div class="mb-3">
+                  <label for="newPassword" class="form-label">New password</label>
+                  <input type="password" class="form-control" id="newPassword" name="new_password" autocomplete="new-password" required />
+                </div>
+                <div class="mb-4">
+                  <label for="confirmNewPassword" class="form-label">Confirm new password</label>
+                  <input type="password" class="form-control" id="confirmNewPassword" name="confirm_new_password" autocomplete="new-password" required />
+                </div>
+                <button type="submit" class="btn btn-success" data-change-password-submit>Save new password</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card shadow-sm h-100">
+            <div class="card-header bg-light">
+              <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Quick Links</h5>
+            </div>
+            <div class="card-body">
+              <div class="list-group list-group-flush">
+                <a href="/admin/" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                  <span><i class="bi bi-box-arrow-up-right me-2"></i>Django Admin</span>
+                  <i class="bi bi-chevron-right"></i>
+                </a>
+                <a href="/app/subscriptions/admin/" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                  <span><i class="bi bi-credit-card me-2"></i>Billing Admin</span>
+                  <i class="bi bi-chevron-right"></i>
+                </a>
+                <a href="/app/devices/" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                  <span><i class="bi bi-device-hdd me-2"></i>Devices Page</span>
+                  <i class="bi bi-chevron-right"></i>
+                </a>
+                <a href="/app/alerts/" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                  <span><i class="bi bi-bell me-2"></i>Alerts</span>
+                  <i class="bi bi-chevron-right"></i>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>Add New User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="addUserForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Email *</label>
+            <input type="email" class="form-control" name="email" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" name="full_name">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Phone Number</label>
+            <input type="tel" class="form-control" name="phone_number">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password *</label>
+            <input type="password" class="form-control" name="password" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role">
+              <option value="user">User</option>
+              <option value="company_admin">Company Admin</option>
+              <option value="superadmin">Super Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Create User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="editUserForm">
+        <input type="hidden" name="user_id" id="editUserId">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" name="email" id="editUserEmail" readonly>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" name="full_name" id="editUserFullName">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Phone Number</label>
+            <input type="tel" class="form-control" name="phone_number" id="editUserPhone">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Address</label>
+            <textarea class="form-control" name="address" id="editUserAddress" rows="2"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role" id="editUserRole">
+              <option value="user">User</option>
+              <option value="company_admin">Company Admin</option>
+              <option value="superadmin">Super Admin</option>
+            </select>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="is_active" id="editUserActive">
+            <label class="form-check-label" for="editUserActive">Active</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Device Modal -->
+<div class="modal fade" id="addDeviceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-device-hdd me-2"></i>Add New Device</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="addDeviceForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Hardware Identifier *</label>
+            <input type="text" class="form-control" name="hardware_identifier" required placeholder="e.g., APS-001">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Device Name</label>
+            <input type="text" class="form-control" name="device_name" placeholder="e.g., Main Entrance Sensor">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Owner Email *</label>
+            <input type="email" class="form-control" name="user_email" required placeholder="user@example.com">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Device Role</label>
+            <select class="form-select" name="device_role">
+              <option value="master">Master</option>
+              <option value="slave">Slave</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Package</label>
+            <select class="form-select" name="package_id">
+              <option value="">-- Select Package --</option>
+              {% for pkg in packages %}
+              <option value="{{ pkg.id }}">{{ pkg.name }} (MRF: {{ pkg.mrf }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Create Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="{% static 'js/change-password.js' %}"></script>
+<script>
+// ===== CSRF Token Helper =====
+function getCsrfToken() {
+  const cookieValue = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('csrftoken='))
+    ?.split('=')[1];
+  return cookieValue || '';
+}
+
+// ===== Error Message Parser =====
+function parseApiError(error) {
+  if (!error) return 'Something went wrong. Please try again.';
+  
+  // Handle error with body (from API response)
+  if (error.body) {
+    const body = error.body;
+    
+    // Direct detail message
+    if (body.detail) return body.detail;
+    
+    // Field-specific errors
+    const messages = [];
+    const fieldLabels = {
+      phone_number: 'Phone number',
+      email: 'Email',
+      password: 'Password',
+      full_name: 'Full name',
+      address: 'Address',
+      role: 'Role'
+    };
+    
+    for (const [field, errors] of Object.entries(body)) {
+      if (field === 'detail') continue;
+      const label = fieldLabels[field] || field;
+      const errorText = Array.isArray(errors) ? errors.join(' ') : errors;
+      messages.push(`${label}: ${errorText}`);
+    }
+    
+    if (messages.length) return messages.join('\n');
+  }
+  
+  // Fallback to error message
+  if (error.message) return error.message;
+  
+  return 'Something went wrong. Please try again.';
+}
+
+// ===== Sortable Tables =====
+function initSortableTables() {
+  document.querySelectorAll('.table-sortable').forEach(table => {
+    const headers = table.querySelectorAll('th.sortable');
+    headers.forEach(header => {
+      header.addEventListener('click', () => {
+        const sortKey = header.dataset.sort;
+        const isAsc = header.classList.contains('asc');
+        
+        // Clear all sort classes
+        headers.forEach(h => h.classList.remove('asc', 'desc'));
+        
+        // Set new sort direction
+        header.classList.add(isAsc ? 'desc' : 'asc');
+        
+        // Sort the table
+        sortTable(table, sortKey, !isAsc);
+      });
+    });
+  });
+}
+
+function sortTable(table, sortKey, asc) {
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr[data-user-id], tr[data-device-id]'));
+  const headerCells = Array.from(table.querySelectorAll('th'));
+  const colIndex = headerCells.findIndex(th => th.dataset.sort === sortKey);
+  
+  if (colIndex === -1) return;
+  
+  rows.sort((a, b) => {
+    const aCell = a.querySelectorAll('td')[colIndex];
+    const bCell = b.querySelectorAll('td')[colIndex];
+    
+    let aVal = aCell?.dataset.value ?? aCell?.textContent.trim().toLowerCase() ?? '';
+    let bVal = bCell?.dataset.value ?? bCell?.textContent.trim().toLowerCase() ?? '';
+    
+    // Check if it's a date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateRegex.test(aVal) && dateRegex.test(bVal)) {
+      const aDate = new Date(aVal);
+      const bDate = new Date(bVal);
+      return asc ? aDate - bDate : bDate - aDate;
+    }
+    
+    // Try numeric comparison
+    const aNum = parseFloat(aVal);
+    const bNum = parseFloat(bVal);
+    
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      return asc ? aNum - bNum : bNum - aNum;
+    }
+    
+    // String comparison
+    return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  });
+  
+  // Re-append sorted rows
+  rows.forEach(row => tbody.appendChild(row));
+}
+
+// Initialize sorting on page load
+document.addEventListener('DOMContentLoaded', function() {
+  initSortableTables();
+  
+  // Search functionality
+  const userSearch = document.getElementById('userSearch');
+  const deviceSearch = document.getElementById('deviceSearch');
+  
+  if (userSearch) {
+    userSearch.addEventListener('input', function(e) {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('#usersTable tbody tr[data-user-id]').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
+    });
+  }
+  
+  if (deviceSearch) {
+    deviceSearch.addEventListener('input', function(e) {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('#devicesTable tbody tr[data-device-id]').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
+    });
+  }
+});
+
+// User Management Functions
+async function editUser(userId) {
+  try {
+    const resp = await fetch(`/auth/users/${userId}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch user');
+    const user = await resp.json();
+    
+    document.getElementById('editUserId').value = user.id;
+    document.getElementById('editUserEmail').value = user.email;
+    document.getElementById('editUserFullName').value = user.full_name || '';
+    document.getElementById('editUserPhone').value = user.phone_number || '';
+    document.getElementById('editUserAddress').value = user.address || '';
+    document.getElementById('editUserRole').value = user.role;
+    document.getElementById('editUserActive').checked = user.is_active;
+    
+    new bootstrap.Modal(document.getElementById('editUserModal')).show();
+  } catch (err) {
+    alert('Error loading user: ' + err.message);
+  }
+}
+
+document.getElementById('editUserForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const userId = document.getElementById('editUserId').value;
+  const formData = new FormData(this);
+  const data = {
+    full_name: formData.get('full_name'),
+    phone_number: formData.get('phone_number') || null,
+    address: formData.get('address'),
+    role: formData.get('role'),
+    is_active: formData.get('is_active') === 'on'
+  };
+  
+  try {
+    const resp = await fetch(`/auth/users/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw { body: err };
+    }
+    location.reload();
+  } catch (err) {
+    const msg = parseApiError(err);
+    alert(msg);
+  }
+});
+
+document.getElementById('addUserForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  const data = {
+    email: formData.get('email'),
+    full_name: formData.get('full_name'),
+    phone_number: formData.get('phone_number') || null,
+    password: formData.get('password'),
+    role: formData.get('role')
+  };
+  
+  try {
+    const resp = await fetch('/auth/users/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw { body: err };
+    }
+    location.reload();
+  } catch (err) {
+    const msg = parseApiError(err);
+    alert(msg);
+  }
+});
+
+async function deleteUser(userId) {
+  if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+  
+  try {
+    const resp = await fetch(`/auth/users/${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      }
+    });
+    if (!resp.ok) throw new Error('Failed to delete user');
+    location.reload();
+  } catch (err) {
+    alert('Error deleting user: ' + err.message);
+  }
+}
+
+function viewUserDevices(userId) {
+  // Switch to devices tab and filter
+  document.querySelector('[data-bs-target="#devicesTab"]').click();
+}
+
+// Device Management Functions
+async function editDevice(deviceId) {
+  window.location.href = `/app/devices/?edit=${deviceId}`;
+}
+
+async function deleteDevice(deviceId) {
+  if (!confirm('Are you sure you want to delete this device?')) return;
+  
+  try {
+    const resp = await fetch(`/devices/${deviceId}/`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      }
+    });
+    if (!resp.ok) throw new Error('Failed to delete device');
+    location.reload();
+  } catch (err) {
+    alert('Error deleting device: ' + err.message);
+  }
+}
+
+document.getElementById('addDeviceForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  const data = {
+    hardware_identifier: formData.get('hardware_identifier'),
+    device_name: formData.get('device_name'),
+    user_email: formData.get('user_email'),
+    device_role: formData.get('device_role'),
+    package_id: formData.get('package_id') || null
+  };
+  
+  try {
+    const resp = await fetch('/devices/admin-register/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(JSON.stringify(err));
+    }
+    location.reload();
+  } catch (err) {
+    alert('Error creating device: ' + err.message);
+  }
+});
+</script>
 {% endblock %}

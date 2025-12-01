@@ -142,22 +142,31 @@ def admin_subscription_detail(request, pk: int):
 
 @login_required
 def user_subscription_dashboard(request):
-    subs = _subscription_queryset().filter(
-        device__user=request.user,
-        device__deleted_at__isnull=True,
-    )
+    subs_qs = _subscription_queryset().filter(device__deleted_at__isnull=True)
+    role = getattr(request.user, "role", "")
+    if role == "company_admin":
+        subs = subs_qs.filter(
+            Q(device__user=request.user)
+            | Q(device__originating_order__user=request.user)
+        )
+    else:
+        subs = subs_qs.filter(device__user=request.user)
     cards = []
     now = timezone.now()
     for sub in subs:
         days_remaining = (
             max((sub.last_paid_through - now).days, 0) if sub.last_paid_through else 0
         )
+        delegated_owner = None
+        if sub.device.user and sub.device.user != request.user:
+            delegated_owner = sub.device.user
         cards.append(
             {
                 "subscription": sub,
                 "device": sub.device,
                 "days_remaining": days_remaining,
                 "form": UserTopUpForm(initial={"subscription_id": sub.pk, "months": 1}),
+                "delegated_owner": delegated_owner,
             }
         )
     return render(
@@ -165,17 +174,23 @@ def user_subscription_dashboard(request):
         "subscriptions/user_dashboard.html",
         {
             "cards": cards,
+            "showing_delegated": role == "company_admin",
         },
     )
 
 
 @login_required
 def user_subscription_pay(request, pk: int):
-    subscription = get_object_or_404(
-        _subscription_queryset(),
-        pk=pk,
-        device__user=request.user,
-    )
+    base_qs = _subscription_queryset().filter(device__deleted_at__isnull=True)
+    role = getattr(request.user, "role", "")
+    if role == "company_admin":
+        allowed_qs = base_qs.filter(
+            Q(device__user=request.user)
+            | Q(device__originating_order__user=request.user)
+        )
+    else:
+        allowed_qs = base_qs.filter(device__user=request.user)
+    subscription = get_object_or_404(allowed_qs, pk=pk)
     if request.user.is_superuser or getattr(request.user, "role", "") == "superadmin":
         messages.error(
             request,

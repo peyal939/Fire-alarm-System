@@ -275,7 +275,35 @@ def firestations_page(request):
 
 @superadmin_required
 def admin_panel(request):
-    return render(request, "admin_panel.html")
+    from devices.models import Device
+    from subscriptions.models import DeviceSubscription
+    from products.models import Package
+
+    users = User.objects.filter(deleted_at__isnull=True).order_by("-created_at")
+    devices = (
+        Device.objects.filter(deleted_at__isnull=True)
+        .select_related("user", "package")
+        .order_by("-created_at")
+    )
+    packages = Package.objects.filter(deleted_at__isnull=True)
+
+    # Stats
+    total_users = users.count()
+    total_devices = devices.count()
+    active_subscriptions = DeviceSubscription.objects.filter(status="active").count()
+
+    return render(
+        request,
+        "admin_panel.html",
+        {
+            "users": users,
+            "devices": devices,
+            "packages": packages,
+            "total_users": total_users,
+            "total_devices": total_devices,
+            "active_subscriptions": active_subscriptions,
+        },
+    )
 
 
 @login_required(login_url="/login")

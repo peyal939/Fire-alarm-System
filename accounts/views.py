@@ -4,7 +4,12 @@ from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated, BasePermission
+from rest_framework.permissions import (
+    AllowAny,
+    IsAdminUser,
+    IsAuthenticated,
+    BasePermission,
+)
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -68,10 +73,59 @@ class IsSuperOrRoleSuperAdmin(BasePermission):
     summary="List users (admin only)",
     responses={200: UserDetailSerializer(many=True)},
 )
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsSuperOrRoleSuperAdmin])
 def user_list_admin(request):
-    """Return all users or filter by email/phone via ?q= for admin dashboard."""
+    """Return all users or filter by email/phone via ?q= for admin dashboard.
+    POST to create a new user (admin only).
+    """
+    if request.method == "POST":
+        email = request.data.get("email", "").strip().lower()
+        password = request.data.get("password", "")
+        phone_raw = request.data.get("phone_number", "").strip() or None
+        full_name = request.data.get("full_name", "").strip()
+        role = request.data.get("role", User.Role.USER)
+
+        errors = {}
+        if not email:
+            errors["email"] = "Email is required."
+        if not password:
+            errors["password"] = "Password is required."
+        if errors:
+            return Response(errors, status=400)
+
+        if User.objects.filter(email=email).exists():
+            return Response({"email": "This email is already registered."}, status=400)
+
+        # Normalize phone number and check for duplicates
+        phone = None
+        if phone_raw:
+            variants = phone_variants(phone_raw)
+            if not variants:
+                return Response(
+                    {"phone_number": "Invalid phone number format."},
+                    status=400,
+                )
+            phone = variants[0]  # Use normalized local format
+            if User.objects.filter(phone_number__in=variants).exists():
+                return Response(
+                    {
+                        "phone_number": "This phone number is already registered to another user."
+                    },
+                    status=400,
+                )
+
+        # Admin can set role directly
+        user = User.objects._create_user(
+            email=email,
+            password=password,
+            phone_number=phone,
+            full_name=full_name,
+            role=role,
+            is_staff=role in [User.Role.SUPERADMIN, User.Role.COMPANY_ADMIN],
+            is_superuser=role == User.Role.SUPERADMIN,
+        )
+        return Response(UserDetailSerializer(user).data, status=status.HTTP_201_CREATED)
 
     q = (request.query_params.get("q") or "").strip()
     qs = User.objects.all().order_by("id")
@@ -215,6 +269,7 @@ def register_init(request):
         "password_hash": make_password(data["password"]),
         "client_ip": request.META.get("REMOTE_ADDR"),
         "user_agent": request.META.get("HTTP_USER_AGENT"),
+        "role": data.get("role", "user"),
     }
 
     manager = OTPSessionManager(purpose=PhoneOTP.Purpose.REGISTER)
@@ -283,6 +338,7 @@ def register_verify(request):
             phone_number=metadata.get("phone_number", ""),
             full_name=metadata.get("full_name", ""),
             address=metadata.get("address", ""),
+            role=metadata.get("role", "user"),
         )
         user.password = password_hash
         user.save()
@@ -654,7 +710,7 @@ def change_password(request):
         ),
     ],
 )
-@api_view(["GET", "PATCH"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAdminUser])
 def user_detail_admin(request, pk: int):
     try:
@@ -666,9 +722,24 @@ def user_detail_admin(request, pk: int):
             "role",
             "full_name",
             "address",
+            "is_superuser",
         ).get()
     except User.DoesNotExist:
         return Response({"detail": "Not found"}, status=404)
+
+    if request.method == "DELETE":
+        # Prevent deleting superusers
+        if user.is_superuser:
+            return Response({"detail": "Cannot delete superuser accounts"}, status=403)
+        # Soft delete (set deleted_at)
+        from django.utils import timezone
+
+        user.deleted_at = timezone.now()
+        user.deleted_by = request.user
+        user.is_active = False
+        user.save(update_fields=["deleted_at", "deleted_by", "is_active"])
+        return Response(status=204)
+
     if request.method == "PATCH":
         serializer = AdminUserUpdateSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():

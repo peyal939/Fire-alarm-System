@@ -141,16 +141,27 @@
       return error.body.detail;
     }
     if (error.body && typeof error.body === 'object') {
+      // Friendly field labels
+      const fieldLabels = {
+        phone_number: 'Phone number',
+        email: 'Email',
+        password: 'Password',
+        confirm_password: 'Confirm password',
+        full_name: 'Full name',
+        address: 'Address',
+        role: 'Account type',
+        otp_code: 'OTP code'
+      };
       const parts = [];
       Object.entries(error.body).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          parts.push(value.join(' '));
-        } else if (value) {
-          parts.push(String(value));
+        const label = fieldLabels[key] || key;
+        const errorText = Array.isArray(value) ? value.join(' ') : String(value);
+        if (errorText) {
+          parts.push(`${label}: ${errorText}`);
         }
       });
       if (parts.length) {
-        return parts.join(' ');
+        return parts.join('\n');
       }
     }
     return fallback;
@@ -198,6 +209,9 @@
     const registerGoToLoginBtn = document.getElementById('registerGoToLoginBtn');
     const registerSubmit = document.getElementById('registerSubmit');
     const loginTabTrigger = document.getElementById('login-tab');
+    const registerRoleHelp = document.getElementById('registerRoleHelp');
+    const registerRoleInputs = document.querySelectorAll('#registerRoleGroup input[name="role"]');
+    const registerAddressBlock = document.getElementById('registerAddressBlock');
 
     const registerState = {
       payload: null,
@@ -220,11 +234,16 @@
 
     function extractRegisterPayload() {
       const formData = new FormData(registerForm);
+      const roleRaw = (formData.get('role') || 'user').trim();
+      const role = roleRaw === 'company_admin' ? 'company_admin' : 'user';
       return {
         email: (formData.get('email') || '').trim().toLowerCase(),
         phone_number: (formData.get('phone_number') || '').trim(),
         password: formData.get('password') || '',
         confirm_password: formData.get('confirm_password') || '',
+        full_name: (formData.get('full_name') || '').trim(),
+        address: (formData.get('address') || '').trim(),
+        role,
       };
     }
 
@@ -244,7 +263,39 @@
       if (payload.password !== payload.confirm_password) {
         return 'Passwords do not match.';
       }
+      if (payload.role !== 'user' && payload.role !== 'company_admin') {
+        return 'Choose a valid account type.';
+      }
       return null;
+    }
+
+    function syncRoleUI(role) {
+      if (registerRoleHelp) {
+        const text = role === 'company_admin'
+          ? registerRoleHelp.dataset.companyText || registerRoleHelp.textContent
+          : registerRoleHelp.dataset.userText || registerRoleHelp.textContent;
+        registerRoleHelp.textContent = text;
+      }
+      if (registerAddressBlock) {
+        registerAddressBlock.classList.toggle('d-none', role !== 'company_admin');
+      }
+    }
+
+    function applyRoleFromForm() {
+      const checkedInput = document.querySelector('#registerRoleGroup input[name="role"]:checked');
+      const currentRole = checkedInput ? checkedInput.value : 'user';
+      syncRoleUI(currentRole === 'company_admin' ? 'company_admin' : 'user');
+    }
+
+    if (registerRoleInputs && registerRoleInputs.length) {
+      registerRoleInputs.forEach((input) => {
+        input.addEventListener('change', () => {
+          syncRoleUI(input.value === 'company_admin' ? 'company_admin' : 'user');
+        });
+      });
+      applyRoleFromForm();
+    } else {
+      applyRoleFromForm();
     }
 
     async function requestRegistrationOtp(payload) {
@@ -372,6 +423,7 @@
       switchStep('credentials');
       registerForm.reset();
       registerOtpForm.reset();
+      applyRoleFromForm();
       registerState.sessionId = null;
       registerState.timer.stop();
       renderAlert(registerAlert, '');

@@ -184,6 +184,24 @@
                                                     <div class="form-text">We'll send OTPs to this verified number.</div>
                                                 </div>
                                                 <div class="mb-3">
+                                                    <label class="form-label" for="registerFullName">Full name (optional)</label>
+                                                    <input type="text" class="form-control" id="registerFullName" name="full_name" placeholder="Jane Operator" autocomplete="name" />
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Account type</label>
+                                                    <div class="btn-group w-100" role="group" aria-label="Account type selector" id="registerRoleGroup">
+                                                        <input type="radio" class="btn-check" name="role" id="registerRoleUser" value="user" autocomplete="off" checked>
+                                                        <label class="btn btn-outline-success" for="registerRoleUser">Personal user</label>
+                                                        <input type="radio" class="btn-check" name="role" id="registerRoleCompany" value="company_admin" autocomplete="off">
+                                                        <label class="btn btn-outline-success" for="registerRoleCompany">Company admin</label>
+                                                    </div>
+                                                    <div class="form-text" id="registerRoleHelp" data-user-text="Standard access for individual device owners." data-company-text="Manage devices bought for your organization and delegate them to teammates.">Standard access for individual device owners.</div>
+                                                </div>
+                                                <div class="mb-3" id="registerAddressBlock">
+                                                    <label class="form-label" for="registerAddress">Organization / Address (optional)</label>
+                                                    <textarea class="form-control" id="registerAddress" name="address" rows="2" placeholder="Company name, site address, or additional contact details"></textarea>
+                                                </div>
+                                                <div class="mb-3">
                                                     <label class="form-label" for="registerPassword">Password</label>
                                                     <input type="password" class="form-control" id="registerPassword" name="password" placeholder="At least 6 characters" required autocomplete="new-password" />
                                                     <div class="form-text">Use at least six characters and include mixed case, numbers, or symbols where possible.</div>

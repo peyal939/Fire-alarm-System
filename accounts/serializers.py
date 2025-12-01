@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from .models import User
+from .phone_utils import phone_variants
 from devices.models import Device
 
 
@@ -47,9 +48,38 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = ("full_name", "phone_number", "address")
         extra_kwargs = {
             "full_name": {"required": False, "allow_blank": True},
-            "phone_number": {"required": False, "allow_blank": True},
+            "phone_number": {
+                "required": False,
+                "allow_blank": True,
+                "allow_null": True,
+            },
             "address": {"required": False, "allow_blank": True},
         }
+
+    def validate_phone_number(self, value):
+        # Convert empty string to None
+        if value == "":
+            return None
+        if value:
+            # Normalize and check all variants (e.g., 01712345678 and +8801712345678)
+            variants = phone_variants(value)
+            if not variants:
+                raise serializers.ValidationError(
+                    "Invalid phone number format. Please use a valid Bangladeshi number."
+                )
+            # Check if any variant is used by another user (exclude current user)
+            user = self.instance
+            if (
+                User.objects.filter(phone_number__in=variants)
+                .exclude(pk=user.pk if user else None)
+                .exists()
+            ):
+                raise serializers.ValidationError(
+                    "Phone number is already registered to another user."
+                )
+            # Return the normalized local format (01XXXXXXXXX)
+            return variants[0]
+        return value
 
 
 class AdminUserUpdateSerializer(UserUpdateSerializer):
@@ -75,12 +105,32 @@ class RegistrationInitSerializer(serializers.Serializer):
     confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
     full_name = serializers.CharField(required=False, allow_blank=True)
     address = serializers.CharField(required=False, allow_blank=True)
+    role = serializers.ChoiceField(
+        choices=["user", "company_admin"], required=False, default="user"
+    )
 
     def validate_email(self, value: str) -> str:
         email = value.strip().lower()
         if User.objects.filter(email=email).exists():
             raise serializers.ValidationError("Email is already registered.")
         return email
+
+    def validate_phone_number(self, value: str) -> str:
+        phone = value.strip()
+        if phone:
+            # Normalize and check all variants
+            variants = phone_variants(phone)
+            if not variants:
+                raise serializers.ValidationError(
+                    "Invalid phone number format. Please use a valid Bangladeshi number."
+                )
+            if User.objects.filter(phone_number__in=variants).exists():
+                raise serializers.ValidationError(
+                    "Phone number is already registered to another user."
+                )
+            # Return normalized local format
+            return variants[0]
+        return phone
 
     def validate(self, attrs: dict) -> dict:
         password = attrs.get("password")

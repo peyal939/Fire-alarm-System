@@ -86,6 +86,14 @@ class Device(AuditSoftDeleteModel):
         related_name="devices",
         help_text="Order that supplied this physical device",
     )
+    package = models.ForeignKey(
+        "products.Package",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="devices",
+        help_text="Package assigned to this device (for admin-registered devices without an order)",
+    )
     latitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
