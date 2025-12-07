@@ -1,0 +1,603 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Checkout{% endblock %}
+{% block extra_css %}
+<style>
+  .checkout-page-header {
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .checkout-page-header h1 {
+    margin: 0;
+    font-weight: 700;
+  }
+  
+  .checkout-page-header p {
+    margin: 0.5rem 0 0;
+    opacity: 0.9;
+  }
+  
+  .checkout-container {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 2rem;
+    align-items: start;
+  }
+  
+  @media (max-width: 991px) {
+    .checkout-container {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .checkout-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+  }
+  
+  .checkout-card .card-header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .checkout-card .card-body {
+    padding: 1.5rem;
+  }
+  
+  .section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #f0f0f0;
+  }
+  
+  .form-label {
+    font-weight: 500;
+    color: #495057;
+  }
+  
+  .form-label .required {
+    color: #dc3545;
+  }
+  
+  .order-summary-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    position: sticky;
+    top: 100px;
+  }
+  
+  .order-summary-card .card-header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .order-summary-card .card-body {
+    padding: 1.5rem;
+  }
+
+  .payment-method-group .btn {
+    border-radius: 10px;
+    border: 1px solid #ced4da;
+  }
+
+  .payment-method-group .btn.active {
+    border-color: #198754;
+    background: #e8f5ee;
+    color: #146c43;
+  }
+  
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .summary-item:last-child {
+    border-bottom: none;
+  }
+  
+  .summary-item-info h6 {
+    margin: 0 0 0.25rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  
+  .summary-item-info .meta {
+    font-size: 0.8rem;
+    color: #6c757d;
+  }
+  
+  .summary-item-price {
+    font-weight: 600;
+    color: #198754;
+    white-space: nowrap;
+  }
+  
+  .summary-total {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+    border-top: 2px solid #dee2e6;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+  
+  .summary-total .value {
+    color: #198754;
+  }
+  
+  .btn-place-order {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 12px;
+    margin-top: 1.5rem;
+  }
+  
+  .btn-back-to-cart {
+    width: 100%;
+    margin-top: 0.75rem;
+    color: #6c757d;
+  }
+  
+  .checkout-loading {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+  }
+  
+  .checkout-error {
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .empty-checkout {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  
+  .empty-checkout i {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 1rem;
+  }
+  
+  .empty-checkout h4 {
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+  
+  .empty-checkout p {
+    color: #adb5bd;
+    margin-bottom: 1.5rem;
+  }
+  
+  .processing-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  
+  .processing-overlay h4 {
+    margin-top: 1.5rem;
+    color: #495057;
+  }
+  
+  .processing-overlay p {
+    color: #6c757d;
+  }
+  
+  .secure-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+  
+  .secure-badge i {
+    color: #198754;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="py-4" id="checkoutPage" data-user-id="{{ request.user.id }}">
+  
+  <div class="checkout-page-header">
+    <h1><i class="bi bi-bag-check me-2"></i>Checkout</h1>
+    <p>Complete your order</p>
+  </div>
+  
+  <div id="checkoutLoading" class="checkout-loading">
+    <div class="spinner-border text-primary mb-3" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>Loading checkout...</p>
+  </div>
+  
+  <div id="checkoutError" class="checkout-error" style="display: none;">
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <span id="checkoutErrorMsg">Failed to load checkout.</span>
+    </div>
+    <a href="/app/cart/" class="btn btn-primary">Back to Cart</a>
+  </div>
+  
+  <div id="emptyCheckout" class="empty-checkout" style="display: none;">
+    <i class="bi bi-cart-x"></i>
+    <h4>Your cart is empty</h4>
+    <p>Add items to your cart before checkout</p>
+    <a href="/app/products/" class="btn btn-primary">
+      <i class="bi bi-box-seam me-2"></i>Browse Packages
+    </a>
+  </div>
+  
+  <div id="checkoutContent" class="checkout-container" style="display: none;">
+    <div class="checkout-forms">
+      
+      <!-- Shipping Address -->
+      <div class="checkout-card card">
+        <div class="card-header">
+          <i class="bi bi-geo-alt me-2"></i>Shipping Address
+        </div>
+        <div class="card-body">
+          <form id="checkoutForm" novalidate>
+            <div class="mb-3">
+              <label class="form-label">Shipping Address <span class="required">*</span></label>
+              <textarea class="form-control" id="shippingAddress" rows="3" 
+                        placeholder="Enter your complete shipping address" required></textarea>
+              <div class="invalid-feedback">Please provide a shipping address.</div>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Customer Information -->
+      <div class="checkout-card card">
+        <div class="card-header">
+          <i class="bi bi-person me-2"></i>Customer Information (Optional)
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" id="customerName" placeholder="Full name" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              <input type="tel" class="form-control" id="customerPhone" placeholder="Phone number" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" id="customerEmail" placeholder="Email address" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">City</label>
+              <input type="text" class="form-control" id="customerCity" placeholder="City" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Post Code</label>
+              <input type="text" class="form-control" id="customerPostCode" placeholder="Post code" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Currency</label>
+              <input type="text" class="form-control" id="currency" value="BDT" maxlength="8" />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Billing Address</label>
+              <textarea class="form-control" id="customerAddress" rows="2" 
+                        placeholder="Billing address (if different from shipping)"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+    </div>
+    
+    <!-- Order Summary Sidebar -->
+    <div class="order-summary-card card">
+      <div class="card-header">
+        <i class="bi bi-receipt me-2"></i>Order Summary
+      </div>
+      <div class="card-body">
+        <div id="orderSummaryItems">
+          <!-- Items will be rendered here -->
+        </div>
+        
+        <div class="summary-total">
+          <span>Total</span>
+          <span class="value" id="orderTotal">৳0.00</span>
+        </div>
+
+        <div class="mt-3">
+          <label class="form-label fw-semibold">Payment Method</label>
+          <div class="btn-group payment-method-group w-100" role="group">
+            <button type="button" class="btn btn-outline-success active" id="payNowBtn" data-method="online">
+              <i class="bi bi-lightning-charge me-1"></i>Pay Now
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="codBtn" data-method="cod">
+              <i class="bi bi-truck me-1"></i>Cash on Delivery
+            </button>
+          </div>
+          <small class="text-muted d-block mt-2" id="paymentMethodHelp">Pay securely via ShurjoPay.</small>
+        </div>
+        
+        <button class="btn btn-success btn-place-order" id="placeOrderBtn" disabled>
+          <i class="bi bi-lock me-2"></i>Place Order & Pay
+        </button>
+        
+        <a href="/app/cart/" class="btn btn-link btn-back-to-cart">
+          <i class="bi bi-arrow-left me-1"></i>Back to Cart
+        </a>
+        
+        <div class="secure-badge">
+          <i class="bi bi-shield-check"></i>
+          <span>Secure checkout powered by ShurjoPay</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Processing Overlay -->
+  <div id="processingOverlay" class="processing-overlay" style="display: none;">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+      <span class="visually-hidden">Processing...</span>
+    </div>
+    <h4>Processing your order...</h4>
+    <p>Please wait while we create your order</p>
+  </div>
+  
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const pageRoot = document.getElementById('checkoutPage');
+  const userId = pageRoot.dataset.userId;
+  
+  const checkoutLoading = document.getElementById('checkoutLoading');
+  const checkoutError = document.getElementById('checkoutError');
+  const checkoutErrorMsg = document.getElementById('checkoutErrorMsg');
+  const emptyCheckout = document.getElementById('emptyCheckout');
+  const checkoutContent = document.getElementById('checkoutContent');
+  const orderSummaryItems = document.getElementById('orderSummaryItems');
+  const orderTotal = document.getElementById('orderTotal');
+  const placeOrderBtn = document.getElementById('placeOrderBtn');
+  const processingOverlay = document.getElementById('processingOverlay');
+  const payNowBtn = document.getElementById('payNowBtn');
+  const codBtn = document.getElementById('codBtn');
+  const paymentMethodHelp = document.getElementById('paymentMethodHelp');
+  
+  // Form fields
+  const shippingAddress = document.getElementById('shippingAddress');
+  const customerName = document.getElementById('customerName');
+  const customerPhone = document.getElementById('customerPhone');
+  const customerEmail = document.getElementById('customerEmail');
+  const customerCity = document.getElementById('customerCity');
+  const customerPostCode = document.getElementById('customerPostCode');
+  const customerAddress = document.getElementById('customerAddress');
+  const currency = document.getElementById('currency');
+  
+  let cartData = null;
+  let paymentMethod = 'online';
+  
+  function formatMoney(v) {
+    if (v === null || v === undefined || v === '') return '৳0.00';
+    const n = Number(v);
+    return isNaN(n) ? v : '৳' + n.toFixed(2);
+  }
+  
+  function computeItemTotal(item) {
+    const pkg = item.package;
+    if (!pkg) return 0;
+    const qty = Number(item.quantity) || 0;
+    const pricePerDevice = Number(pkg.price_per_device) || 0;
+    const mrf = Number(pkg.mrf) || 0;
+    return qty * (pricePerDevice + mrf);
+  }
+  
+  function showView(view) {
+    checkoutLoading.style.display = view === 'loading' ? '' : 'none';
+    checkoutError.style.display = view === 'error' ? '' : 'none';
+    emptyCheckout.style.display = view === 'empty' ? '' : 'none';
+    checkoutContent.style.display = view === 'content' ? '' : 'none';
+  }
+  
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  
+  async function loadCheckout() {
+    showView('loading');
+    try {
+      cartData = await apiGet('/cart/');
+      
+      if (!cartData || !cartData.items || cartData.items.length === 0) {
+        showView('empty');
+        return;
+      }
+      
+      renderSummary();
+      showView('content');
+      validateForm();
+    } catch (e) {
+      console.error('Failed to load checkout:', e);
+      checkoutErrorMsg.textContent = e.message || 'Failed to load checkout.';
+      showView('error');
+    }
+  }
+  
+  function renderSummary() {
+    if (!cartData || !cartData.items) return;
+    
+    let total = 0;
+    let html = '';
+    
+    cartData.items.forEach(item => {
+      const pkg = item.package || {};
+      const subtotal = computeItemTotal(item);
+      total += subtotal;
+      
+      html += `
+        <div class="summary-item">
+          <div class="summary-item-info">
+            <h6>${escapeHtml(pkg.name || 'Package')}</h6>
+            <div class="meta">
+              Qty: ${item.quantity} | 
+              Master: ${item.number_of_master_devices || 0} | 
+              Slave: ${item.number_of_slave_devices || 0}
+            </div>
+          </div>
+          <div class="summary-item-price">${formatMoney(subtotal)}</div>
+        </div>
+      `;
+    });
+    
+    orderSummaryItems.innerHTML = html;
+    orderTotal.textContent = formatMoney(total);
+  }
+  
+  function validateForm() {
+    const isValid = shippingAddress.value.trim().length > 0;
+    placeOrderBtn.disabled = !isValid;
+    
+    if (shippingAddress.value.trim()) {
+      shippingAddress.classList.remove('is-invalid');
+    }
+  }
+
+  function updatePaymentMethod(method) {
+    paymentMethod = method === 'cod' ? 'cod' : 'online';
+    payNowBtn.classList.toggle('active', paymentMethod === 'online');
+    codBtn.classList.toggle('active', paymentMethod === 'cod');
+    if (paymentMethod === 'cod') {
+      paymentMethodHelp.textContent = 'Pay when the order is delivered. Our team will confirm availability.';
+      placeOrderBtn.innerHTML = '<i class="bi bi-box-seam me-2"></i>Place Order (COD)';
+    } else {
+      paymentMethodHelp.textContent = 'Pay securely via ShurjoPay.';
+      placeOrderBtn.innerHTML = '<i class="bi bi-lock me-2"></i>Place Order & Pay';
+    }
+  }
+  
+  async function placeOrder() {
+    // Validate
+    if (!shippingAddress.value.trim()) {
+      shippingAddress.classList.add('is-invalid');
+      shippingAddress.focus();
+      return;
+    }
+    
+    placeOrderBtn.disabled = true;
+    processingOverlay.style.display = '';
+    
+    try {
+      // Call checkout API
+      const checkoutPayload = {
+        shipping_address: shippingAddress.value.trim(),
+        currency: currency.value || 'BDT',
+        payment_method: paymentMethod,
+        customer_name: customerName.value.trim() || '',
+        customer_phone: customerPhone.value.trim() || '',
+        customer_email: customerEmail.value.trim() || '',
+        customer_city: customerCity.value.trim() || '',
+        customer_post_code: customerPostCode.value.trim() || '',
+        customer_address: customerAddress.value.trim() || ''
+      };
+      
+      const result = await apiPost('/cart/checkout/', checkoutPayload);
+      
+      if (!result || !result.orders || result.orders.length === 0) {
+        throw new Error('No orders created');
+      }
+      
+      // Get the first order to initiate payment
+      const firstOrder = result.orders[0];
+      const orderUserId = typeof firstOrder.user === 'object' ? firstOrder.user.id : firstOrder.user;
+
+      if (paymentMethod === 'cod') {
+        showToast('Order placed with Cash on Delivery. We will confirm shortly.', 'success');
+        processingOverlay.style.display = 'none';
+        setTimeout(() => { window.location.href = '/app/orders/'; }, 1200);
+        return;
+      }
+      
+      // Initiate payment for the first order
+      const payResult = await apiPost(`/orders/${orderUserId}/${firstOrder.id}/pay/`, {});
+      
+      if (payResult && payResult.checkout_url) {
+        // Redirect to payment gateway
+        window.location.href = payResult.checkout_url;
+      } else {
+        // Payment initiation failed, redirect to orders page
+        showToast('Order created! Please pay from your orders page.', 'success');
+        setTimeout(() => {
+          window.location.href = '/app/orders/';
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Checkout failed:', e);
+      processingOverlay.style.display = 'none';
+      placeOrderBtn.disabled = false;
+      
+      const msg = e.body?.detail || e.message || 'Failed to place order';
+      showToast(msg, 'error');
+    }
+  }
+  
+  function showToast(msg, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 10000; min-width: 250px;';
+    toast.innerHTML = `<i class="bi bi-${type === 'error' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>${msg}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+  }
+  
+  // Event listeners
+  shippingAddress.addEventListener('input', validateForm);
+  placeOrderBtn.addEventListener('click', placeOrder);
+  payNowBtn.addEventListener('click', () => updatePaymentMethod('online'));
+  codBtn.addEventListener('click', () => updatePaymentMethod('cod'));
+  
+  // Initial load
+  loadCheckout();
+  updatePaymentMethod('online');
+})();
+</script>
+{% endblock %}

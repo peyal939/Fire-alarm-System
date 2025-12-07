@@ -13,7 +13,7 @@ from shurjopay import services as shurjopay_services
 from shurjopay.enums import PaymentTransactionStatus
 from shurjopay.models import PaymentTransaction
 
-from .enums import OrderStatus
+from .enums import OrderStatus, PaymentMethod
 from .models import Order, OrderFulfillment
 from devices.models import Device
 
@@ -81,6 +81,14 @@ def initiate_payment_for_order(
 
     if not order or not getattr(order, "pk", None):
         logger.warning("Cannot initiate payment without a persisted order instance")
+        return None
+
+    if getattr(order, "payment_method", PaymentMethod.ONLINE) != PaymentMethod.ONLINE:
+        logger.info(
+            "Skipping payment initiation for non-online method: order %s uses %s",
+            getattr(order, "pk", None),
+            getattr(order, "payment_method", None),
+        )
         return None
 
     with transaction.atomic():

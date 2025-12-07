@@ -5,6 +5,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .models import Cart, CartItem, Package
+from .enums import PaymentMethod
 
 
 class PackageSummarySerializer(serializers.ModelSerializer):
@@ -137,6 +138,10 @@ class CartCheckoutSerializer(serializers.Serializer):
     customer_post_code = serializers.CharField(required=False, allow_blank=True)
     customer_email = serializers.EmailField(required=False, allow_blank=True)
     currency = serializers.CharField(required=False, default="BDT")
+    payment_method = serializers.ChoiceField(
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.ONLINE,
+    )
 
     def validate_currency(self, value):
         v = (value or "BDT").strip().upper()

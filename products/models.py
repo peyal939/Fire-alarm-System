@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from .enums import OrderStatus
+from .enums import OrderStatus, PaymentMethod
 
 
 class AuditSoftDeleteModel(models.Model):
@@ -80,6 +80,11 @@ class Order(AuditSoftDeleteModel):
     customer_city = models.CharField(max_length=64, blank=True)
     customer_post_code = models.CharField(max_length=32, blank=True)
     customer_email = models.CharField(max_length=254, blank=True)
+    payment_method = models.CharField(
+        max_length=16,
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.ONLINE,
+    )
     order_status = models.CharField(
         max_length=16, choices=OrderStatus.choices, default=OrderStatus.PENDING
     )

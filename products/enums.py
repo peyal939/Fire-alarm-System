@@ -11,3 +11,8 @@ class OrderStatus(models.TextChoices):
     SHIPPED = "shipped", "Shipped"
     REFUNDED = "refunded", "Refunded"
     PARTIALLY_FULFILLED = "partial", "Partially Fulfilled"
+
+
+class PaymentMethod(models.TextChoices):
+    ONLINE = "online", "Online"
+    CASH_ON_DELIVERY = "cod", "Cash on Delivery"

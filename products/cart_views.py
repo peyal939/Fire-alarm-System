@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
 from .models import Cart, CartItem, Order
+from .enums import PaymentMethod
 from .cart_serializers import (
     CartSerializer,
     CartItemSerializer,
@@ -271,6 +272,9 @@ class CartCheckoutView(APIView):
                     customer_city=checkout_data.get("customer_city", ""),
                     customer_post_code=checkout_data.get("customer_post_code", ""),
                     customer_email=checkout_data.get("customer_email", ""),
+                    payment_method=checkout_data.get(
+                        "payment_method", PaymentMethod.ONLINE
+                    ),
                 )
                 order.reference = str(order.id)
                 order.save(update_fields=["reference"])

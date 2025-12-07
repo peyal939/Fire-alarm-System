@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Payment Successful{% endblock %}
+{% block extra_css %}
+<style>
+  .payment-result-container {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+  
+  .success-icon {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 2rem;
+    animation: scaleIn 0.5s ease-out;
+  }
+  
+  .success-icon i {
+    font-size: 4rem;
+    color: white;
+  }
+  
+  @keyframes scaleIn {
+    0% { transform: scale(0); opacity: 0; }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  
+  .success-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #198754;
+    margin-bottom: 1rem;
+  }
+  
+  .success-message {
+    font-size: 1.1rem;
+    color: #6c757d;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+  }
+  
+  .action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .action-buttons .btn {
+    padding: 0.75rem 2rem;
+    font-weight: 500;
+    border-radius: 10px;
+  }
+  
+  .order-info-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    text-align: left;
+  }
+  
+  .order-info-card h6 {
+    color: #6c757d;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    font-weight: 600;
+  }
+  
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .info-row:last-child {
+    border-bottom: none;
+  }
+  
+  .info-label {
+    color: #6c757d;
+  }
+  
+  .info-value {
+    font-weight: 600;
+    color: #212529;
+  }
+  
+  .confetti {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 1000;
+  }
+  
+  .confetti-piece {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    animation: confetti-fall 3s ease-out forwards;
+  }
+  
+  @keyframes confetti-fall {
+    0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="payment-result-container">
+  
+  <div class="success-icon">
+    <i class="bi bi-check-lg"></i>
+  </div>
+  
+  <h1 class="success-title">Payment Successful!</h1>
+  
+  <p class="success-message">
+    Thank you for your purchase! Your payment has been processed successfully. 
+    You will receive a confirmation email shortly.
+  </p>
+  
+  <div class="order-info-card" id="orderInfo" style="display: none;">
+    <h6>Order Details</h6>
+    <div id="orderDetails">
+      <!-- Order details will be loaded here -->
+    </div>
+  </div>
+  
+  <div class="action-buttons">
+    <a href="/app/orders/" class="btn btn-primary">
+      <i class="bi bi-bag me-2"></i>View My Orders
+    </a>
+    <a href="/app/products/" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-2"></i>Continue Shopping
+    </a>
+  </div>
+  
+</div>
+
+<!-- Confetti Animation -->
+<div class="confetti" id="confetti"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  // Create confetti effect
+  const confettiContainer = document.getElementById('confetti');
+  const colors = ['#198754', '#20c997', '#0d6efd', '#6f42c1', '#ffc107', '#dc3545'];
+  
+  for (let i = 0; i < 50; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = Math.random() * 2 + 's';
+    piece.style.animationDuration = (2 + Math.random() * 2) + 's';
+    confettiContainer.appendChild(piece);
+  }
+  
+  // Remove confetti after animation
+  setTimeout(() => {
+    confettiContainer.remove();
+  }, 5000);
+  
+  // Try to get order info from URL params
+  const urlParams = new URLSearchParams(window.location.search);
+  const orderId = urlParams.get('order_id');
+  
+  if (orderId) {
+    // Could load order details here if needed
+    console.log('Order ID:', orderId);
+  }
+})();
+</script>
+{% endblock %}
