@@ -13,3 +13,10 @@ class SubscriptionChargeStatus(models.TextChoices):
     PAID = "paid", "Paid"
     FAILED = "failed", "Failed"
     CANCELLED = "cancelled", "Cancelled"
+
+
+class InvoiceStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SENT = "sent", "Sent"
+    PAID = "paid", "Paid"
+    VOID = "void", "Void"

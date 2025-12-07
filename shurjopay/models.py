@@ -51,6 +51,15 @@ class PaymentTransaction(models.Model):
     response_payload = models.JSONField(null=True, blank=True)
     verification_payload = models.JSONField(null=True, blank=True)
 
+    # Idempotency key to prevent duplicate payments
+    idempotency_key = models.CharField(
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Unique key to prevent duplicate payment attempts",
+    )
+
     def __str__(self) -> str:  # pragma: no cover
         base = self.customer_order_id or self.reference or str(self.pk)
         return f"Payment {base} [{self.status}]"

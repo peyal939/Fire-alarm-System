@@ -117,6 +117,63 @@ class UserSubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
         }
         return Response(payload, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["post"], url_path="retry", url_name="retry")
+    def retry_payment(self, request, pk=None):
+        """
+        User-initiated retry payment for a failed subscription charge.
+        """
+        subscription = self.get_object()
+        
+        from .enums import SubscriptionChargeStatus
+        
+        # Find the most recent failed charge
+        charge = (
+            subscription.charges
+            .filter(status=SubscriptionChargeStatus.FAILED)
+            .order_by("-created_at")
+            .first()
+        )
+        
+        if not charge:
+            return Response(
+                {"detail": "No failed charge found to retry."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Update retry tracking
+        charge.retry_count += 1
+        charge.last_retry_at = timezone.now()
+        charge.save(update_fields=["retry_count", "last_retry_at"])
+        
+        # Initiate new payment
+        client_ip = request.META.get("REMOTE_ADDR", "")
+        txn = services.initiate_payment_for_charge(charge, client_ip=client_ip)
+        
+        if not txn or not txn.checkout_url:
+            return Response(
+                {"detail": "Unable to initiate payment. Please try again later."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        
+        logger.info(
+            "User retry payment initiated",
+            extra={
+                "user_id": request.user.pk,
+                "subscription_id": subscription.pk,
+                "charge_id": charge.pk,
+                "retry_count": charge.retry_count,
+            },
+        )
+        
+        return Response(
+            {
+                "charge": SubscriptionChargeSerializer(charge).data,
+                "checkout_url": txn.checkout_url,
+                "transaction_id": txn.pk,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class AdminSubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     """Superadmin endpoints for managing billing state."""
@@ -201,3 +258,74 @@ class AdminSubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
         charges = subscription.charges.order_by("-created_at")[:50]
         data = SubscriptionChargeSerializer(charges, many=True).data
         return Response(data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="retry-payment",
+        url_name="retry-payment",
+    )
+    def retry_payment(self, request, pk=None):
+        """
+        Manually retry payment for a failed or pending subscription charge.
+        
+        This initiates a new payment attempt for the most recent failed/pending charge.
+        """
+        subscription = self.get_object()
+        
+        # Find the most recent failed or pending charge
+        from .enums import SubscriptionChargeStatus
+        from .models import SubscriptionCharge
+        
+        charge = (
+            subscription.charges
+            .filter(status__in=[SubscriptionChargeStatus.FAILED, SubscriptionChargeStatus.PENDING])
+            .order_by("-created_at")
+            .first()
+        )
+        
+        if not charge:
+            return Response(
+                {"detail": "No failed or pending charge found to retry."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Update retry tracking
+        charge.retry_count += 1
+        charge.last_retry_at = timezone.now()
+        charge.save(update_fields=["retry_count", "last_retry_at"])
+        
+        # Initiate new payment
+        client_ip = request.META.get("REMOTE_ADDR", "")
+        txn = services.initiate_payment_for_charge(charge, client_ip=client_ip)
+        
+        if not txn or not txn.checkout_url:
+            logger.warning(
+                "Admin retry payment failed for charge %s (subscription %s)",
+                charge.pk,
+                subscription.pk,
+            )
+            return Response(
+                {"detail": "Unable to initiate payment. Please try again later."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        
+        logger.info(
+            "Admin retry payment initiated",
+            extra={
+                "admin_id": request.user.pk,
+                "subscription_id": subscription.pk,
+                "charge_id": charge.pk,
+                "retry_count": charge.retry_count,
+            },
+        )
+        
+        return Response(
+            {
+                "charge": SubscriptionChargeSerializer(charge).data,
+                "checkout_url": txn.checkout_url,
+                "transaction_id": txn.pk,
+                "message": f"Payment retry #{charge.retry_count} initiated.",
+            },
+            status=status.HTTP_200_OK,
+        )

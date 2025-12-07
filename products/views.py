@@ -8,7 +8,7 @@ from drf_spectacular.utils import extend_schema
 from django.utils import timezone
 from django.db import models
 from common.permissions import IsOwnerOrSuperadmin, IsSuperAdmin
-from .enums import OrderStatus
+from .enums import OrderStatus, PaymentMethod
 from .models import Package, Order
 from .serializers import (
     PackageSerializer,
@@ -516,6 +516,11 @@ class OrderPaymentInitView(APIView):
             return Response({"detail": "Not found"}, status=404)
         if order.order_status == OrderStatus.PAID:
             return Response({"detail": "Order is already paid."}, status=400)
+        if order.payment_method != PaymentMethod.ONLINE:
+            return Response(
+                {"detail": "Payment initiation is only available for online payments."},
+                status=400,
+            )
         if order.amount is None or order.amount <= 0:
             return Response(
                 {"detail": "Order amount must be greater than zero."},

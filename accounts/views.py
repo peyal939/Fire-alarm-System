@@ -202,10 +202,15 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         except TokenError as e:
             raise InvalidToken(e.args[0])
 
+        user = serializer.user
+        
+        # Skip OTP for superadmins - return tokens directly
+        if user.is_superuser or (hasattr(user, 'role') and user.role == 'superadmin'):
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
         if not settings.OTP_SETTINGS.get("login_enforced", False):
             return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
-        user = serializer.user
         phone_number = user.phone_number or ""
         if not phone_number:
             return Response(

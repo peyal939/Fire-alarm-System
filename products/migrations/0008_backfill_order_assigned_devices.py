@@ -28,6 +28,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("products", "0007_order_assigned_devices_and_more"),
+        ("devices", "0011_device_originating_order_and_more"),  # Need devices app with originating_order field
     ]
 
     operations = [

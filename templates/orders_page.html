@@ -1,0 +1,506 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}My Orders{% endblock %}
+{% block extra_css %}
+<style>
+  .orders-page-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .orders-page-header h1 {
+    margin: 0;
+    font-weight: 700;
+  }
+  
+  .orders-page-header p {
+    margin: 0.5rem 0 0;
+    opacity: 0.9;
+  }
+  
+  .orders-filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  
+  .filter-btn {
+    padding: 0.5rem 1.25rem;
+    border: 2px solid #dee2e6;
+    background: white;
+    color: #495057;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  
+  .filter-btn:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
+  }
+  
+  .filter-btn.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+  }
+  
+  .orders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .order-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .order-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  }
+  
+  .order-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .order-id {
+    font-weight: 600;
+    color: #495057;
+  }
+  
+  .order-date {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+  
+  .order-card-body {
+    padding: 1.5rem;
+  }
+  
+  .order-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+  }
+  
+  .order-info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .order-info-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+  }
+  
+  .order-info-value {
+    font-weight: 500;
+    color: #212529;
+  }
+  
+  .order-info-value.amount {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #198754;
+  }
+  
+  .order-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e9ecef;
+    background: #fafbfc;
+  }
+  
+  .order-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  
+  .status-badge {
+    padding: 0.5em 1em;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  
+  .status-pending { background: #fff3cd; color: #856404; }
+  .status-paid { background: #cff4fc; color: #055160; }
+  .status-delivered { background: #d1e7dd; color: #0f5132; }
+  .status-cancelled { background: #e2e3e5; color: #41464b; }
+  .status-failed { background: #f8d7da; color: #842029; }
+  
+  .orders-loading {
+    text-align: center;
+    padding: 4rem;
+    color: #6c757d;
+  }
+  
+  .orders-error {
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .no-orders {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  
+  .no-orders i {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 1rem;
+  }
+  
+  .no-orders h4 {
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+  
+  .no-orders p {
+    color: #adb5bd;
+    margin-bottom: 1.5rem;
+  }
+  
+  .fulfillment-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: #d1e7dd;
+    color: #0f5132;
+    margin-left: 0.5rem;
+  }
+  
+  .shipping-address {
+    grid-column: 1 / -1;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #e9ecef;
+    margin-top: 0.5rem;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="py-4" id="ordersPage" data-user-id="{{ request.user.id }}">
+  
+  <div class="orders-page-header">
+    <h1><i class="bi bi-bag me-2"></i>My Orders</h1>
+    <p>Track and manage your orders</p>
+  </div>
+  
+  <div class="orders-filter-bar" id="filterBar">
+    <button class="filter-btn active" data-filter="all">All Orders</button>
+    <button class="filter-btn" data-filter="pending">Pending</button>
+    <button class="filter-btn" data-filter="paid">Paid</button>
+    <button class="filter-btn" data-filter="delivered">Delivered</button>
+    <button class="filter-btn" data-filter="cancelled">Cancelled</button>
+  </div>
+  
+  <div id="ordersLoading" class="orders-loading">
+    <div class="spinner-border text-primary mb-3" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>Loading your orders...</p>
+  </div>
+  
+  <div id="ordersError" class="orders-error" style="display: none;">
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <span id="ordersErrorMsg">Failed to load orders.</span>
+    </div>
+    <button class="btn btn-primary" onclick="loadOrders()">Try Again</button>
+  </div>
+  
+  <div id="noOrders" class="no-orders" style="display: none;">
+    <i class="bi bi-bag-x"></i>
+    <h4 id="noOrdersTitle">No orders yet</h4>
+    <p id="noOrdersText">Start shopping to see your orders here</p>
+    <a href="/app/products/" class="btn btn-primary">
+      <i class="bi bi-box-seam me-2"></i>Browse Packages
+    </a>
+  </div>
+  
+  <div id="ordersList" class="orders-list" style="display: none;">
+    <!-- Orders will be rendered here -->
+  </div>
+  
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const pageRoot = document.getElementById('ordersPage');
+  const userId = pageRoot.dataset.userId;
+  
+  const ordersLoading = document.getElementById('ordersLoading');
+  const ordersError = document.getElementById('ordersError');
+  const ordersErrorMsg = document.getElementById('ordersErrorMsg');
+  const noOrders = document.getElementById('noOrders');
+  const noOrdersTitle = document.getElementById('noOrdersTitle');
+  const noOrdersText = document.getElementById('noOrdersText');
+  const ordersList = document.getElementById('ordersList');
+  const filterBar = document.getElementById('filterBar');
+  
+  let allOrders = [];
+  let currentFilter = 'all';
+  
+  const statusClasses = {
+    pending: 'status-pending',
+    paid: 'status-paid',
+    delivered: 'status-delivered',
+    cancelled: 'status-cancelled',
+    failed: 'status-failed'
+  };
+  
+  function formatMoney(v) {
+    if (v === null || v === undefined || v === '') return '৳0.00';
+    const n = Number(v);
+    return isNaN(n) ? v : '৳' + n.toFixed(2);
+  }
+  
+  function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+  
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  
+  function showView(view) {
+    ordersLoading.style.display = view === 'loading' ? '' : 'none';
+    ordersError.style.display = view === 'error' ? '' : 'none';
+    noOrders.style.display = view === 'empty' ? '' : 'none';
+    ordersList.style.display = view === 'content' ? '' : 'none';
+    filterBar.style.display = view === 'loading' || view === 'error' ? 'none' : '';
+  }
+  
+  async function loadOrders() {
+    showView('loading');
+    try {
+      const data = await apiGet(`/orders/${userId}/`);
+      allOrders = Array.isArray(data) ? data : [];
+      renderOrders();
+    } catch (e) {
+      console.error('Failed to load orders:', e);
+      ordersErrorMsg.textContent = e.message || 'Failed to load orders.';
+      showView('error');
+    }
+  }
+  
+  function renderOrders() {
+    let filtered = allOrders;
+    
+    if (currentFilter !== 'all') {
+      filtered = allOrders.filter(o => {
+        const status = (o.order_status || '').toLowerCase();
+        return status === currentFilter;
+      });
+    }
+    
+    if (filtered.length === 0) {
+      if (currentFilter === 'all') {
+        noOrdersTitle.textContent = 'No orders yet';
+        noOrdersText.textContent = 'Start shopping to see your orders here';
+      } else {
+        noOrdersTitle.textContent = `No ${currentFilter} orders`;
+        noOrdersText.textContent = `You don't have any ${currentFilter} orders`;
+      }
+      showView('empty');
+      return;
+    }
+    
+    // Sort by date descending
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.ordered_at || a.created_at || 0);
+      const dateB = new Date(b.ordered_at || b.created_at || 0);
+      return dateB - dateA;
+    });
+    
+    ordersList.innerHTML = filtered.map(order => renderOrderCard(order)).join('');
+    attachOrderListeners();
+    showView('content');
+  }
+  
+  function renderOrderCard(order) {
+    const pkg = order.package || {};
+    const pkgName = pkg.name || 'Package';
+    const status = (order.order_status || 'pending').toLowerCase();
+    const statusClass = statusClasses[status] || 'status-pending';
+    const orderUserId = typeof order.user === 'object' ? order.user.id : order.user;
+    const paymentMethod = (order.payment_method || 'online').toLowerCase();
+    const paymentLabel = paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online Payment';
+    
+    const canPay = paymentMethod === 'online' && (status === 'pending' || status === 'failed') && Number(order.amount) > 0;
+    const totalDevices = (order.number_of_master_devices || 0) + (order.number_of_slave_devices || 0);
+    const isFulfilled = (order.assigned_devices || 0) >= totalDevices && totalDevices > 0;
+    
+    let actionsHtml = '';
+    if (canPay) {
+      actionsHtml += `<button class="btn btn-sm btn-primary btn-pay" data-order-id="${order.id}" data-user-id="${orderUserId}">
+        <i class="bi bi-credit-card me-1"></i>Pay Now
+      </button>`;
+    }
+    actionsHtml += `<a href="/app/orders/${order.id}/" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-eye me-1"></i>View Details
+    </a>`;
+    
+    let fulfillmentBadge = '';
+    if (isFulfilled) {
+      fulfillmentBadge = `<span class="fulfillment-badge"><i class="bi bi-check-circle"></i> Fulfilled</span>`;
+    }
+    
+    return `
+      <div class="order-card" data-order-id="${order.id}">
+        <div class="order-card-header">
+          <div>
+            <span class="order-id">Order #${order.id}</span>
+            ${fulfillmentBadge}
+          </div>
+          <span class="order-date">${formatDate(order.ordered_at || order.created_at)}</span>
+        </div>
+        <div class="order-card-body">
+          <div class="order-info-grid">
+            <div class="order-info-item">
+              <span class="order-info-label">Package</span>
+              <span class="order-info-value">${escapeHtml(pkgName)}</span>
+            </div>
+            <div class="order-info-item">
+              <span class="order-info-label">Quantity</span>
+              <span class="order-info-value">${order.quantity || 0}</span>
+            </div>
+            <div class="order-info-item">
+              <span class="order-info-label">Devices</span>
+              <span class="order-info-value">
+                ${order.number_of_master_devices || 0} Master / ${order.number_of_slave_devices || 0} Slave
+              </span>
+            </div>
+            <div class="order-info-item">
+              <span class="order-info-label">Amount</span>
+              <span class="order-info-value amount">${formatMoney(order.amount)}</span>
+            </div>
+            <div class="order-info-item">
+              <span class="order-info-label">Payment Method</span>
+              <span class="order-info-value">${escapeHtml(paymentLabel)}</span>
+            </div>
+            ${order.shipping_address ? `
+            <div class="order-info-item shipping-address">
+              <span class="order-info-label">Shipping Address</span>
+              <span class="order-info-value">${escapeHtml(order.shipping_address)}</span>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+        <div class="order-card-footer">
+          <span class="status-badge ${statusClass}">${escapeHtml(order.order_status || 'Pending')}</span>
+          <div class="order-actions">
+            ${actionsHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function attachOrderListeners() {
+    // Pay buttons
+    document.querySelectorAll('.btn-pay').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.orderId;
+        const orderUserId = btn.dataset.userId;
+        await initiatePayment(orderId, orderUserId, btn);
+      });
+    });
+  }
+  
+  async function initiatePayment(orderId, orderUserId, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+    
+    try {
+      const result = await apiPost(`/orders/${orderUserId}/${orderId}/pay/`, {});
+      
+      if (result && result.checkout_url) {
+        window.location.href = result.checkout_url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (e) {
+      console.error('Payment initiation failed:', e);
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      showToast(e.body?.detail || e.message || 'Failed to initiate payment', 'error');
+    }
+  }
+  
+  function showToast(msg, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `<i class="bi bi-${type === 'error' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>${msg}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+  }
+  
+  // Filter buttons
+  filterBar.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderOrders();
+    });
+  });
+  
+  // Expose for retry button
+  window.loadOrders = loadOrders;
+  
+  // Initial load
+  loadOrders();
+})();
+</script>
+{% endblock %}

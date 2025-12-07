@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from .enums import OrderStatus
+from .enums import OrderStatus, PaymentMethod
 
 
 class AuditSoftDeleteModel(models.Model):
@@ -80,6 +80,11 @@ class Order(AuditSoftDeleteModel):
     customer_city = models.CharField(max_length=64, blank=True)
     customer_post_code = models.CharField(max_length=32, blank=True)
     customer_email = models.CharField(max_length=254, blank=True)
+    payment_method = models.CharField(
+        max_length=16,
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.ONLINE,
+    )
     order_status = models.CharField(
         max_length=16, choices=OrderStatus.choices, default=OrderStatus.PENDING
     )
@@ -131,3 +136,82 @@ class OrderFulfillment(AuditSoftDeleteModel):
 
     def __str__(self) -> str:
         return f"{self.hardware_identifier} ({self.device_role})"
+
+
+class Cart(models.Model):
+    """Shopping cart for users to collect packages before checkout."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cart",
+    )
+    expires_at = models.DateTimeField(
+        help_text="Cart auto-expires after 7 days of inactivity",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["expires_at"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Cart for {self.user_id}"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    def refresh_expiry(self, days: int = 7) -> None:
+        """Extend cart expiry by specified days from now."""
+        self.expires_at = timezone.now() + timezone.timedelta(days=days)
+        self.save(update_fields=["expires_at", "updated_at"])
+
+    def get_total(self):
+        """Calculate total cart value."""
+        from decimal import Decimal
+        total = Decimal("0.00")
+        for item in self.items.select_related("package"):
+            price = item.package.price_per_device or Decimal("0")
+            mrf = item.package.mrf or Decimal("0")
+            total += (price + mrf) * item.quantity
+        return total
+
+
+class CartItem(models.Model):
+    """Individual item in a shopping cart."""
+
+    cart = models.ForeignKey(
+        Cart,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    package = models.ForeignKey(
+        Package,
+        on_delete=models.CASCADE,
+        related_name="cart_items",
+    )
+    quantity = models.PositiveIntegerField(default=1)
+    number_of_master_devices = models.PositiveIntegerField(default=1)
+    number_of_slave_devices = models.PositiveIntegerField(default=0)
+    added_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("cart", "package")
+        indexes = [
+            models.Index(fields=["cart", "package"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.quantity}x {self.package.name} in cart {self.cart_id}"
+
+    @property
+    def line_total(self):
+        """Calculate total for this line item."""
+        from decimal import Decimal
+        price = self.package.price_per_device or Decimal("0")
+        mrf = self.package.mrf or Decimal("0")
+        return (price + mrf) * self.quantity
