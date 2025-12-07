@@ -11,6 +11,12 @@ from .views import (
     AdminOrderStatusUpdateView,
     OrderFulfillView,
 )
+from .cart_views import (
+    CartView,
+    CartItemListView,
+    CartItemDetailView,
+    CartCheckoutView,
+)
 
 router = DefaultRouter()
 router.register(r"packages", PackageViewSet, basename="package")
@@ -43,4 +49,9 @@ urlpatterns = [
         AdminOrderStatusUpdateView.as_view(),
         name="orders-update-status",
     ),
+    # Cart endpoints
+    path("cart/", CartView.as_view(), name="cart"),
+    path("cart/items/", CartItemListView.as_view(), name="cart-items"),
+    path("cart/items/<int:item_id>/", CartItemDetailView.as_view(), name="cart-item-detail"),
+    path("cart/checkout/", CartCheckoutView.as_view(), name="cart-checkout"),
 ]

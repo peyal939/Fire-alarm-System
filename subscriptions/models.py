@@ -6,7 +6,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from .enums import DeviceSubscriptionStatus, SubscriptionChargeStatus
+from .enums import DeviceSubscriptionStatus, SubscriptionChargeStatus, InvoiceStatus
 
 
 class DeviceSubscription(models.Model):
@@ -104,6 +104,15 @@ class SubscriptionCharge(models.Model):
         on_delete=models.SET_NULL,
         related_name="manual_subscription_charges",
     )
+    retry_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Number of manual payment retry attempts",
+    )
+    last_retry_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of last manual retry attempt",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -116,3 +125,108 @@ class SubscriptionCharge(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"Charge {self.pk} ({self.status})"
+
+
+class Invoice(models.Model):
+    """Invoice generated for orders or subscription charges."""
+
+    number = models.CharField(
+        max_length=32,
+        unique=True,
+        help_text="Invoice number, e.g., INV-2025-000001",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="invoices",
+    )
+    order = models.ForeignKey(
+        "products.Order",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="invoices",
+    )
+    subscription_charge = models.ForeignKey(
+        SubscriptionCharge,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="invoices",
+    )
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2)
+    tax = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(
+        max_length=16,
+        choices=InvoiceStatus,
+        default=InvoiceStatus.DRAFT,
+    )
+    pdf_file = models.FileField(
+        upload_to="invoices/",
+        null=True,
+        blank=True,
+        help_text="Generated PDF invoice file",
+    )
+    issued_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-issued_at"]
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["number"]),
+            models.Index(fields=["issued_at"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Invoice {self.number} ({self.status})"
+
+    @classmethod
+    def generate_invoice_number(cls) -> str:
+        """Generate a unique invoice number like INV-2025-000001."""
+        from django.db.models import Max
+        year = timezone.now().year
+        prefix = f"INV-{year}-"
+        last_invoice = cls.objects.filter(number__startswith=prefix).aggregate(
+            max_num=Max("number")
+        )
+        if last_invoice["max_num"]:
+            try:
+                last_seq = int(last_invoice["max_num"].split("-")[-1])
+            except (ValueError, IndexError):
+                last_seq = 0
+        else:
+            last_seq = 0
+        new_seq = last_seq + 1
+        return f"{prefix}{new_seq:06d}"
+
+
+class InvoiceLineItem(models.Model):
+    """Individual line item on an invoice."""
+
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name="line_items",
+    )
+    description = models.CharField(max_length=255)
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.description} ({self.quantity}x)"
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate total if not set
+        if not self.total:
+            self.total = self.unit_price * self.quantity
+        super().save(*args, **kwargs)
