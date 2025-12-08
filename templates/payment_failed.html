@@ -114,12 +114,12 @@
     <!-- Error details if available -->
   </div>
   
-  <div class="action-buttons">
+  <div class="action-buttons" id="actionButtons">
     <a href="/app/orders/" class="btn btn-primary">
-      <i class="bi bi-arrow-repeat me-2"></i>Try Again
+      <i class="bi bi-arrow-repeat me-2"></i>View My Orders
     </a>
-    <a href="/app/cart/" class="btn btn-outline-secondary">
-      <i class="bi bi-cart me-2"></i>View Cart
+    <a href="/app/products/" class="btn btn-outline-secondary">
+      <i class="bi bi-box-seam me-2"></i>Continue Shopping
     </a>
   </div>
   
@@ -153,12 +153,90 @@
     errorCode.style.display = 'block';
   }
   
-  // Update retry link with order if available
+  // If we have an order ID, show more specific actions
   if (orderId) {
-    const retryBtn = document.querySelector('.btn-primary');
-    if (retryBtn) {
-      retryBtn.href = `/app/orders/`;
-    }
+    const actionsDiv = document.getElementById('actionButtons');
+    const userId = localStorage.getItem('user_id') || '';
+    
+    actionsDiv.innerHTML = `
+      <button class="btn btn-primary" id="retryPayBtn">
+        <i class="bi bi-credit-card me-2"></i>Retry Payment
+      </button>
+      <button class="btn btn-warning" id="switchCodBtn">
+        <i class="bi bi-cash me-2"></i>Switch to Cash on Delivery
+      </button>
+      <a href="/app/orders/" class="btn btn-outline-secondary">
+        <i class="bi bi-list me-2"></i>View All Orders
+      </a>
+    `;
+    
+    // Retry payment button
+    document.getElementById('retryPayBtn').addEventListener('click', async function() {
+      const btn = this;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+      
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/orders/${userId}/${orderId}/pay/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({})
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.checkout_url) {
+            window.location.href = result.checkout_url;
+            return;
+          }
+        }
+        
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to initiate payment');
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert(e.message || 'Failed to retry payment. Please try from your orders page.');
+      }
+    });
+    
+    // Switch to COD button
+    document.getElementById('switchCodBtn').addEventListener('click', async function() {
+      const btn = this;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Switching...';
+      
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/orders/${userId}/${orderId}/payment-method/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ payment_method: 'cod' })
+        });
+        
+        if (response.ok) {
+          alert('Switched to Cash on Delivery! Our team will confirm your order.');
+          window.location.href = '/app/orders/';
+          return;
+        }
+        
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to switch payment method');
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert(e.message || 'Failed to switch payment method. Please try from your orders page.');
+      }
+    });
   }
 })();
 </script>

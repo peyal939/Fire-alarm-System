@@ -473,7 +473,10 @@
         </div>
         
         <div class="cart-item-price">
-          <div class="unit-price">${formatMoney(pricePerUnit)} × ${item.quantity}</div>
+          <div class="unit-price">
+            <div>Device: ${formatMoney(pkg.price_per_device)} × ${item.quantity} = ${formatMoney((Number(pkg.price_per_device) || 0) * item.quantity)}</div>
+            <div class="text-muted small">MRF: ${formatMoney(pkg.mrf)} × ${item.quantity} = ${formatMoney((Number(pkg.mrf) || 0) * item.quantity)}</div>
+          </div>
           <div class="subtotal">${formatMoney(subtotal)}</div>
         </div>
       </div>
@@ -488,13 +491,22 @@
     
     cartData.items.forEach(item => {
       const pkg = item.package || {};
-      const subtotal = computeItemTotal(item);
+      const qty = Number(item.quantity) || 0;
+      const pricePerDevice = Number(pkg.price_per_device) || 0;
+      const mrf = Number(pkg.mrf) || 0;
+      const deviceTotal = pricePerDevice * qty;
+      const mrfTotal = mrf * qty;
+      const subtotal = deviceTotal + mrfTotal;
       total += subtotal;
       
       summaryHtml += `
         <div class="summary-row">
-          <span>${escapeHtml(pkg.name || 'Package')} × ${item.quantity}</span>
-          <span>${formatMoney(subtotal)}</span>
+          <span>${escapeHtml(pkg.name || 'Package')} - Device × ${qty}</span>
+          <span>${formatMoney(deviceTotal)}</span>
+        </div>
+        <div class="summary-row text-muted small">
+          <span>${escapeHtml(pkg.name || 'Package')} - MRF (1st Month) × ${qty}</span>
+          <span>${formatMoney(mrfTotal)}</span>
         </div>
       `;
     });

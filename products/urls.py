@@ -7,6 +7,7 @@ from .views import (
     UserOrderListView,
     UserOrderDetailView,
     OrderPaymentInitView,
+    OrderPaymentMethodUpdateView,
     OrderIdNotifyView,
     AdminOrderStatusUpdateView,
     OrderFulfillView,
@@ -49,6 +50,11 @@ urlpatterns = [
         "orders/<int:user_id>/<int:order_id>/pay/",
         OrderPaymentInitView.as_view(),
         name="user-order-pay",
+    ),
+    path(
+        "orders/<int:user_id>/<int:order_id>/payment-method/",
+        OrderPaymentMethodUpdateView.as_view(),
+        name="user-order-payment-method",
     ),
     path(
         "orders/<int:user_id>/<int:order_id>/fulfill/",

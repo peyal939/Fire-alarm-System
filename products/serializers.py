@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 
 from .models import Package, Order, OrderFulfillment
 from .enums import PaymentMethod
@@ -22,6 +24,13 @@ class PackageSerializer(serializers.ModelSerializer):
         read_only_fields = ("id",)
 
 
+class PackageSummarySerializer(serializers.ModelSerializer):
+    """Minimal package info for order display (with pricing)."""
+    class Meta:
+        model = Package
+        fields = ("id", "name", "price_per_device", "mrf", "min_quantity", "max_quantity")
+
+
 class OrderSerializer(serializers.ModelSerializer):
     # Additional fields for admin panel display
     user_email = serializers.SerializerMethodField()
@@ -30,6 +39,7 @@ class OrderSerializer(serializers.ModelSerializer):
     total_amount = serializers.DecimalField(source='amount', max_digits=10, decimal_places=2, read_only=True)
     status = serializers.CharField(source='order_status', read_only=True)
     created_at = serializers.DateTimeField(source='ordered_at', read_only=True)
+    package = PackageSummarySerializer(read_only=True)
     
     class Meta:
         model = Order
@@ -76,12 +86,14 @@ class OrderSerializer(serializers.ModelSerializer):
             "ordered_at",
         )
     
-    def get_user_email(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_user_email(self, obj) -> str | None:
         if obj.user:
             return obj.user.email or obj.user.get_username()
         return None
     
-    def get_user_phone(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_user_phone(self, obj) -> str | None:
         # Try customer_phone first, then user's phone
         if obj.customer_phone:
             return obj.customer_phone
@@ -89,7 +101,8 @@ class OrderSerializer(serializers.ModelSerializer):
             return obj.user.phone
         return None
     
-    def get_package_name(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_package_name(self, obj) -> str | None:
         if obj.package:
             return obj.package.name
         return None

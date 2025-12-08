@@ -553,6 +553,72 @@ class OrderPaymentInitView(APIView):
 
 @extend_schema(
     tags=["Orders"],
+    summary="Change payment method for a pending order",
+    description="Allows user to switch between online payment and COD for pending/failed orders",
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "payment_method": {
+                    "type": "string",
+                    "enum": ["online", "cod"],
+                    "description": "New payment method",
+                }
+            },
+            "required": ["payment_method"],
+        }
+    },
+    responses={
+        200: OrderSerializer,
+        400: None,
+        403: None,
+        404: None,
+    },
+)
+class OrderPaymentMethodUpdateView(APIView):
+    """Allow user to change payment method for pending orders."""
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, user_id: int, order_id: int):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Authentication required"}, status=401)
+        if str(request.user.id) != str(user_id):
+            return Response({"detail": "Forbidden"}, status=403)
+        
+        try:
+            order = Order.objects.select_related("user", "package").get(
+                id=order_id,
+                user_id=user_id,
+                deleted_at__isnull=True,
+            )
+        except Order.DoesNotExist:
+            return Response({"detail": "Order not found"}, status=404)
+        
+        # Only allow changing payment method for pending or failed orders
+        if order.order_status not in [OrderStatus.PENDING, OrderStatus.FAILED]:
+            return Response(
+                {"detail": "Payment method can only be changed for pending or failed orders."},
+                status=400,
+            )
+        
+        new_method = (request.data or {}).get("payment_method", "").strip().lower()
+        if new_method not in ["online", "cod"]:
+            return Response(
+                {"detail": "Invalid payment method. Use 'online' or 'cod'."},
+                status=400,
+            )
+        
+        # Update payment method
+        order.payment_method = PaymentMethod.ONLINE if new_method == "online" else PaymentMethod.CASH_ON_DELIVERY
+        order.updated_by = request.user
+        order.save(update_fields=["payment_method", "updated_by", "updated_at"])
+        
+        return Response(OrderSerializer(order).data)
+
+
+@extend_schema(
+    tags=["Orders"],
     summary="Admin: update order status",
     request={
         "application/json": {

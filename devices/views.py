@@ -21,7 +21,9 @@ from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiResponse,
     OpenApiTypes,
+    inline_serializer,
 )
+from rest_framework import serializers as drf_serializers
 
 from . import services
 from .enums import AlertStatus
@@ -578,17 +580,16 @@ class DeviceViewSet(viewsets.ModelViewSet):
         tags=["Devices"],
         summary="Admin register a device for any user",
         description="Admin-only endpoint to register a device for any user by their email.",
-        request={
-            "type": "object",
-            "properties": {
-                "hardware_identifier": {"type": "string"},
-                "device_name": {"type": "string"},
-                "user_email": {"type": "string", "format": "email"},
-                "device_role": {"type": "string", "enum": ["master", "slave"]},
-                "package_id": {"type": "integer"},
+        request=inline_serializer(
+            name="AdminRegisterDeviceRequest",
+            fields={
+                "hardware_identifier": drf_serializers.CharField(),
+                "device_name": drf_serializers.CharField(required=False, allow_blank=True),
+                "user_email": drf_serializers.EmailField(),
+                "device_role": drf_serializers.ChoiceField(choices=["master", "slave"], required=False),
+                "package_id": drf_serializers.IntegerField(required=False),
             },
-            "required": ["hardware_identifier", "user_email"],
-        },
+        ),
         responses={201: DeviceSerializer},
     )
     @action(detail=False, methods=["post"], url_path="admin-register")

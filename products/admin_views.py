@@ -15,11 +15,11 @@ from django.db.models import Sum, Count, Avg, F, Q
 from django.db.models.functions import TruncDate, TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import status, serializers as drf_serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer, OpenApiResponse
 
 from common.permissions import IsSuperAdmin, IsSuperAdminOrCompanyAdmin
 from .enums import OrderStatus, PaymentMethod
@@ -47,12 +47,25 @@ logger = logging.getLogger(__name__)
         OpenApiParameter(name="page", type=int, description="Page number"),
         OpenApiParameter(name="page_size", type=int, description="Items per page (default 20, max 100)"),
     ],
+    responses={
+        200: inline_serializer(
+            name="AdminOrderListResponse",
+            fields={
+                "count": drf_serializers.IntegerField(),
+                "page": drf_serializers.IntegerField(),
+                "page_size": drf_serializers.IntegerField(),
+                "total_pages": drf_serializers.IntegerField(),
+                "results": OrderSerializer(many=True),
+            },
+        )
+    },
 )
 class AdminOrderListView(APIView):
     """Admin endpoint for listing orders with advanced filtering."""
     
     permission_classes = [IsAuthenticated, IsSuperAdminOrCompanyAdmin]
 
+    @extend_schema(operation_id="admin_orders_list")
     def get(self, request):
         qs = (
             Order.objects.select_related("user", "package")
@@ -113,15 +126,17 @@ class AdminOrderListView(APIView):
         })
 
 
-@extend_schema(
-    tags=["Admin - Orders"],
-    summary="Admin: Get order details",
-)
 class AdminOrderDetailView(APIView):
     """Admin endpoint for viewing order details."""
     
     permission_classes = [IsAuthenticated, IsSuperAdminOrCompanyAdmin]
 
+    @extend_schema(
+        tags=["Admin - Orders"],
+        summary="Admin: Get order details",
+        operation_id="admin_order_detail",
+        responses={200: OrderSerializer},
+    )
     def get(self, request, order_id: int):
         try:
             order = Order.objects.select_related("user", "package").get(
@@ -147,6 +162,7 @@ class AdminOrderDetailView(APIView):
             "required": ["order_status"],
         }
     },
+    responses={200: OrderSerializer},
 )
 class AdminOrderUpdateView(APIView):
     """Admin endpoint for updating order status."""
@@ -198,6 +214,15 @@ class AdminOrderUpdateView(APIView):
             "required": ["order_ids", "order_status"],
         }
     },
+    responses={
+        200: inline_serializer(
+            name="BulkUpdateResponse",
+            fields={
+                "updated_count": drf_serializers.IntegerField(),
+                "order_status": drf_serializers.CharField(),
+            },
+        )
+    },
 )
 class AdminOrderBulkUpdateView(APIView):
     """Admin endpoint for bulk updating order status."""
@@ -248,6 +273,17 @@ class AdminOrderBulkUpdateView(APIView):
         OpenApiParameter(name="status", type=str, description="Filter by order status"),
         OpenApiParameter(name="output_format", type=str, description="Output format: json or csv (default: json)"),
     ],
+    responses={
+        200: inline_serializer(
+            name="OrderReportResponse",
+            fields={
+                "period": drf_serializers.DictField(),
+                "summary": drf_serializers.DictField(),
+                "status_breakdown": drf_serializers.ListField(),
+                "orders": OrderSerializer(many=True),
+            },
+        )
+    },
 )
 class AdminOrderReportView(APIView):
     """Generate order reports with date filtering and CSV export."""
@@ -353,6 +389,18 @@ class AdminOrderReportView(APIView):
         OpenApiParameter(name="date_to", type=str, required=True, description="End date (YYYY-MM-DD)"),
         OpenApiParameter(name="output_format", type=str, description="Output format: json or csv (default: json)"),
     ],
+    responses={
+        200: inline_serializer(
+            name="PaymentReportResponse",
+            fields={
+                "period": drf_serializers.DictField(),
+                "summary": drf_serializers.DictField(),
+                "status_breakdown": drf_serializers.ListField(),
+                "payment_method_breakdown": drf_serializers.ListField(),
+                "records": drf_serializers.ListField(),
+            },
+        )
+    },
 )
 class AdminPaymentReportView(APIView):
     """Generate payment/transaction reports."""
@@ -581,6 +629,18 @@ class AdminPaymentReportView(APIView):
         OpenApiParameter(name="page", type=int, description="Page number"),
         OpenApiParameter(name="page_size", type=int, description="Items per page (default 20, max 100)"),
     ],
+    responses={
+        200: inline_serializer(
+            name="FulfillmentListResponse",
+            fields={
+                "count": drf_serializers.IntegerField(),
+                "page": drf_serializers.IntegerField(),
+                "page_size": drf_serializers.IntegerField(),
+                "total_pages": drf_serializers.IntegerField(),
+                "results": OrderFulfillmentSerializer(many=True),
+            },
+        )
+    },
 )
 class AdminFulfillmentListView(APIView):
     permission_classes = [IsAuthenticated, IsSuperAdminOrCompanyAdmin]
@@ -631,6 +691,11 @@ class AdminFulfillmentListView(APIView):
                 },
             },
         }
+    },
+    responses={
+        200: OrderFulfillmentSerializer,
+        204: OpenApiResponse(description="Fulfillment deleted"),
+        404: OpenApiResponse(description="Not found"),
     },
 )
 class AdminFulfillmentDetailView(APIView):
@@ -714,6 +779,17 @@ class AdminFulfillmentDetailView(APIView):
         OpenApiParameter(name="date_to", type=str, required=True, description="End date (YYYY-MM-DD)"),
         OpenApiParameter(name="output_format", type=str, description="Output format: json or csv (default: json)"),
     ],
+    responses={
+        200: inline_serializer(
+            name="SubscriptionReportResponse",
+            fields={
+                "period": drf_serializers.DictField(),
+                "summary": drf_serializers.DictField(),
+                "status_breakdown": drf_serializers.ListField(),
+                "subscriptions": drf_serializers.ListField(),
+            },
+        )
+    },
 )
 class AdminSubscriptionReportView(APIView):
     """Generate subscription reports."""
@@ -846,6 +922,18 @@ class AdminSubscriptionReportView(APIView):
 @extend_schema(
     tags=["Admin - Dashboard"],
     summary="Admin: Dashboard overview statistics",
+    responses={
+        200: inline_serializer(
+            name="DashboardOverviewResponse",
+            fields={
+                "orders": drf_serializers.DictField(),
+                "revenue": drf_serializers.DictField(),
+                "subscriptions": drf_serializers.DictField(),
+                "devices": drf_serializers.DictField(),
+                "payments": drf_serializers.DictField(),
+            },
+        )
+    },
 )
 class AdminDashboardOverviewView(APIView):
     """Get dashboard overview statistics."""
@@ -1013,6 +1101,17 @@ class AdminDashboardOverviewView(APIView):
         OpenApiParameter(name="days", type=int, description="Number of days for daily (default: 30)"),
         OpenApiParameter(name="months", type=int, description="Number of months for monthly (default: 12)"),
     ],
+    responses={
+        200: inline_serializer(
+            name="RevenueTrendResponse",
+            fields={
+                "period": drf_serializers.CharField(),
+                "days": drf_serializers.IntegerField(required=False),
+                "months": drf_serializers.IntegerField(required=False),
+                "data": drf_serializers.ListField(),
+            },
+        )
+    },
 )
 class AdminRevenueTrendView(APIView):
     """Get revenue trend data for charts."""
@@ -1164,6 +1263,14 @@ class AdminRevenueTrendView(APIView):
 @extend_schema(
     tags=["Admin - Dashboard"],
     summary="Admin: Order status breakdown",
+    responses={
+        200: inline_serializer(
+            name="OrderStatusBreakdownResponse",
+            fields={
+                "breakdown": drf_serializers.ListField(),
+            },
+        )
+    },
 )
 class AdminOrderStatusBreakdownView(APIView):
     """Get order status breakdown for dashboard."""

@@ -376,6 +376,8 @@
     const paymentLabel = paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online Payment';
     
     const canPay = paymentMethod === 'online' && (status === 'pending' || status === 'failed') && Number(order.amount) > 0;
+    const canDownloadInvoice = ['paid', 'processing', 'shipped', 'delivered'].includes(status);
+    const canChangePaymentMethod = (status === 'pending' || status === 'failed');
     const totalDevices = (order.number_of_master_devices || 0) + (order.number_of_slave_devices || 0);
     const isFulfilled = (order.assigned_devices || 0) >= totalDevices && totalDevices > 0;
     
@@ -385,8 +387,24 @@
         <i class="bi bi-credit-card me-1"></i>Pay Now
       </button>`;
     }
+    if (canChangePaymentMethod) {
+      if (paymentMethod === 'online') {
+        actionsHtml += `<button class="btn btn-sm btn-outline-warning btn-switch-cod" data-order-id="${order.id}" data-user-id="${orderUserId}" title="Switch to Cash on Delivery">
+          <i class="bi bi-cash me-1"></i>COD
+        </button>`;
+      } else {
+        actionsHtml += `<button class="btn btn-sm btn-warning btn-switch-online" data-order-id="${order.id}" data-user-id="${orderUserId}" title="Switch to Online Payment">
+          <i class="bi bi-credit-card me-1"></i>Pay Online
+        </button>`;
+      }
+    }
+    if (canDownloadInvoice) {
+      actionsHtml += `<button class="btn btn-sm btn-success btn-invoice" data-order-id="${order.id}" title="Download Invoice">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Invoice
+      </button>`;
+    }
     actionsHtml += `<a href="/app/orders/${order.id}/" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-eye me-1"></i>View Details
+      <i class="bi bi-eye me-1"></i>Details
     </a>`;
     
     let fulfillmentBadge = '';
@@ -420,7 +438,15 @@
               </span>
             </div>
             <div class="order-info-item">
-              <span class="order-info-label">Amount</span>
+              <span class="order-info-label">Device Cost</span>
+              <span class="order-info-value">${formatMoney(pkg.price_per_device || 0)} × ${order.quantity || 0}</span>
+            </div>
+            <div class="order-info-item">
+              <span class="order-info-label">MRF (1st Month)</span>
+              <span class="order-info-value">${formatMoney(pkg.mrf || 0)} × ${order.quantity || 0}</span>
+            </div>
+            <div class="order-info-item">
+              <span class="order-info-label">Total</span>
               <span class="order-info-value amount">${formatMoney(order.amount)}</span>
             </div>
             <div class="order-info-item">
@@ -454,6 +480,56 @@
         await initiatePayment(orderId, orderUserId, btn);
       });
     });
+    
+    // Invoice download buttons
+    document.querySelectorAll('.btn-invoice').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.orderId;
+        await downloadInvoice(orderId, btn);
+      });
+    });
+    
+    // Switch to COD buttons
+    document.querySelectorAll('.btn-switch-cod').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.orderId;
+        const orderUserId = btn.dataset.userId;
+        await switchPaymentMethod(orderId, orderUserId, 'cod', btn);
+      });
+    });
+    
+    // Switch to Online buttons
+    document.querySelectorAll('.btn-switch-online').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.orderId;
+        const orderUserId = btn.dataset.userId;
+        await switchPaymentMethod(orderId, orderUserId, 'online', btn);
+      });
+    });
+  }
+  
+  async function switchPaymentMethod(orderId, orderUserId, newMethod, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    try {
+      await apiPost(`/orders/${orderUserId}/${orderId}/payment-method/`, { payment_method: newMethod });
+      
+      if (newMethod === 'cod') {
+        showToast('Switched to Cash on Delivery!', 'success');
+      } else {
+        showToast('Switched to Online Payment!', 'success');
+      }
+      
+      // Reload orders to reflect changes
+      setTimeout(() => loadOrders(), 500);
+    } catch (e) {
+      console.error('Payment method switch failed:', e);
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      showToast(e.body?.detail || e.message || 'Failed to change payment method', 'error');
+    }
   }
   
   async function initiatePayment(orderId, orderUserId, btn) {
@@ -474,6 +550,55 @@
       btn.disabled = false;
       btn.innerHTML = originalHtml;
       showToast(e.body?.detail || e.message || 'Failed to initiate payment', 'error');
+    }
+  }
+  
+  async function downloadInvoice(orderId, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+    
+    try {
+      // Fetch the PDF as a blob
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`/subscriptions/invoices/order/${orderId}/pdf/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to download invoice');
+      }
+      
+      // Get the filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `invoice_order_${orderId}.pdf`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+        if (match) filename = match[1];
+      }
+      
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      
+      showToast('Invoice downloaded!', 'success');
+    } catch (e) {
+      console.error('Invoice download failed:', e);
+      showToast(e.message || 'Failed to download invoice', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
     }
   }
   

@@ -93,6 +93,144 @@ class UserInvoiceViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    @extend_schema(
+        summary="Get or create invoice for user's order",
+        description="Returns the invoice for a paid order. Creates one automatically if it doesn't exist.",
+        responses={
+            200: InvoiceSerializer,
+            400: {"description": "Order not paid or invalid"},
+            404: {"description": "Order not found"},
+        },
+    )
+    @action(detail=False, methods=["get"], url_path="order/(?P<order_id>[^/.]+)")
+    def get_for_order(self, request, order_id=None):
+        """
+        Get invoice for a specific order. Auto-creates if order is paid and no invoice exists.
+        This enables users to download invoices like professional e-commerce apps.
+        """
+        from products.models import Order
+        from products.enums import OrderStatus
+
+        # Get the order - must belong to current user
+        try:
+            order = Order.objects.get(
+                pk=order_id,
+                user=request.user,
+                deleted_at__isnull=True,
+            )
+        except Order.DoesNotExist:
+            return Response(
+                {"detail": "Order not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if order is paid
+        if order.order_status not in [OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
+            return Response(
+                {"detail": "Invoice is only available for paid orders."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if invoice already exists
+        invoice = Invoice.objects.filter(order=order).first()
+
+        if not invoice:
+            # Auto-create invoice for paid order
+            try:
+                invoice = invoice_utils.create_invoice_for_order(order)
+                logger.info("Auto-created invoice %s for order %s", invoice.number, order.id)
+            except Exception as e:
+                logger.exception("Failed to create invoice for order %s", order.id)
+                return Response(
+                    {"detail": "Failed to create invoice."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        # Auto-generate PDF if not exists
+        if not invoice.pdf_file:
+            try:
+                invoice_utils.save_invoice_pdf(invoice)
+            except Exception as e:
+                logger.warning("Failed to auto-generate PDF for invoice %s: %s", invoice.number, e)
+
+        return Response(InvoiceSerializer(invoice).data)
+
+    @extend_schema(
+        summary="Download invoice PDF for order",
+        description="Downloads the PDF invoice for a specific order. Auto-creates invoice if needed.",
+        responses={
+            200: {"type": "string", "format": "binary"},
+            400: {"description": "Order not paid"},
+            404: {"description": "Order not found"},
+        },
+    )
+    @action(detail=False, methods=["get"], url_path="order/(?P<order_id>[^/.]+)/pdf")
+    def download_for_order(self, request, order_id=None):
+        """
+        Download invoice PDF for a specific order.
+        Auto-creates invoice and PDF if they don't exist.
+        """
+        from products.models import Order
+        from products.enums import OrderStatus
+
+        # Get the order - must belong to current user
+        try:
+            order = Order.objects.get(
+                pk=order_id,
+                user=request.user,
+                deleted_at__isnull=True,
+            )
+        except Order.DoesNotExist:
+            return Response(
+                {"detail": "Order not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if order is paid
+        if order.order_status not in [OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
+            return Response(
+                {"detail": "Invoice is only available for paid orders."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get or create invoice
+        invoice = Invoice.objects.filter(order=order).first()
+
+        if not invoice:
+            try:
+                invoice = invoice_utils.create_invoice_for_order(order)
+                logger.info("Auto-created invoice %s for order %s", invoice.number, order.id)
+            except Exception as e:
+                logger.exception("Failed to create invoice for order %s", order.id)
+                return Response(
+                    {"detail": "Failed to create invoice."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        # Generate PDF if not exists
+        if not invoice.pdf_file:
+            try:
+                invoice_utils.save_invoice_pdf(invoice)
+            except Exception as e:
+                logger.exception("Failed to generate PDF for invoice %s", invoice.number)
+                return Response(
+                    {"detail": "Failed to generate PDF."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        # Serve the PDF
+        try:
+            pdf_content = invoice.pdf_file.read()
+            response = HttpResponse(pdf_content, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename="invoice_{invoice.number}.pdf"'
+            return response
+        except Exception as e:
+            logger.exception("Failed to read PDF for invoice %s", invoice.number)
+            return Response(
+                {"detail": "Failed to retrieve PDF."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
 
 @extend_schema(tags=["Invoices (Admin)"])
 class AdminInvoiceViewSet(viewsets.ReadOnlyModelViewSet):

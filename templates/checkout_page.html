@@ -471,7 +471,12 @@
     
     cartData.items.forEach(item => {
       const pkg = item.package || {};
-      const subtotal = computeItemTotal(item);
+      const qty = Number(item.quantity) || 0;
+      const pricePerDevice = Number(pkg.price_per_device) || 0;
+      const mrf = Number(pkg.mrf) || 0;
+      const deviceTotal = pricePerDevice * qty;
+      const mrfTotal = mrf * qty;
+      const subtotal = deviceTotal + mrfTotal;
       total += subtotal;
       
       html += `
@@ -479,12 +484,15 @@
           <div class="summary-item-info">
             <h6>${escapeHtml(pkg.name || 'Package')}</h6>
             <div class="meta">
-              Qty: ${item.quantity} | 
+              Qty: ${qty} | 
               Master: ${item.number_of_master_devices || 0} | 
               Slave: ${item.number_of_slave_devices || 0}
             </div>
           </div>
-          <div class="summary-item-price">${formatMoney(subtotal)}</div>
+          <div class="summary-item-price">
+            <div>Device: ${formatMoney(deviceTotal)}</div>
+            <div class="text-muted small">MRF: ${formatMoney(mrfTotal)}</div>
+          </div>
         </div>
       `;
     });
@@ -594,6 +602,21 @@
   placeOrderBtn.addEventListener('click', placeOrder);
   payNowBtn.addEventListener('click', () => updatePaymentMethod('online'));
   codBtn.addEventListener('click', () => updatePaymentMethod('cod'));
+  
+  // Handle browser back button (e.g., returning from payment gateway)
+  // pageshow fires when page is loaded from back-forward cache
+  window.addEventListener('pageshow', function(event) {
+    // If page was loaded from bfcache (back-forward cache), reset the UI
+    if (event.persisted) {
+      processingOverlay.style.display = 'none';
+      placeOrderBtn.disabled = false;
+      // Reload the checkout to get fresh cart state
+      loadCheckout();
+    }
+  });
+  
+  // Also hide overlay on page load (in case page was refreshed)
+  processingOverlay.style.display = 'none';
   
   // Initial load
   loadCheckout();

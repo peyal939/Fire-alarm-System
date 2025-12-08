@@ -174,6 +174,7 @@ class InvoiceAPITests(APITestCase):
             package=self.package,
             quantity=2,
             amount=Decimal("2200.00"),
+            order_status="paid",  # Must be paid for invoice tests
         )
         self.invoice = Invoice.objects.create(
             number="INV-2025-000001",
@@ -287,3 +288,86 @@ class InvoiceAPITests(APITestCase):
 
         # DRF returns 403 Forbidden for unauthenticated requests by default
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+    def test_user_get_invoice_for_order(self):
+        """Test user can get invoice for their paid order."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("user-invoices-get-for-order", kwargs={"order_id": self.order.pk})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["order_id"], self.order.pk)
+
+    def test_user_auto_creates_invoice_for_paid_order(self):
+        """Test invoice is auto-created when user requests it for paid order."""
+        # Create a new paid order without invoice
+        new_order = Order.objects.create(
+            user=self.user,
+            package=self.package,
+            quantity=1,
+            amount=Decimal("1100.00"),
+            order_status="paid",
+        )
+        self.assertFalse(Invoice.objects.filter(order=new_order).exists())
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse("user-invoices-get-for-order", kwargs={"order_id": new_order.pk})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(Invoice.objects.filter(order=new_order).exists())
+        self.assertEqual(response.data["order_id"], new_order.pk)
+
+    def test_user_cannot_get_invoice_for_pending_order(self):
+        """Test invoice not available for pending orders."""
+        pending_order = Order.objects.create(
+            user=self.user,
+            package=self.package,
+            quantity=1,
+            amount=Decimal("1100.00"),
+            order_status="pending",
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse("user-invoices-get-for-order", kwargs={"order_id": pending_order.pk})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("paid orders", response.data["detail"])
+
+    def test_user_cannot_get_invoice_for_other_users_order(self):
+        """Test user cannot access another user's order invoice."""
+        other_user = User.objects.create_user(
+            email="other2@example.com",
+            password="otherpass123",
+        )
+        other_order = Order.objects.create(
+            user=other_user,
+            package=self.package,
+            quantity=1,
+            amount=Decimal("1100.00"),
+            order_status="paid",
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse("user-invoices-get-for-order", kwargs={"order_id": other_order.pk})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch("subscriptions.invoice_views.invoice_utils.save_invoice_pdf")
+    def test_user_download_pdf_for_order(self, mock_save):
+        """Test user can download PDF for their order."""
+        from django.core.files.base import ContentFile
+        # Setup - create PDF for existing invoice
+        pdf_content = b"%PDF-1.4 test content"
+        self.invoice.pdf_file.save("test.pdf", ContentFile(pdf_content))
+        self.invoice.save()
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse("user-invoices-download-for-order", kwargs={"order_id": self.order.pk})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+

@@ -70,8 +70,25 @@ class IsSuperOrRoleSuperAdmin(BasePermission):
 
 @extend_schema(
     tags=["Admin"],
-    summary="List users (admin only)",
-    responses={200: UserDetailSerializer(many=True)},
+    summary="List users or create a new user (admin only)",
+    description="GET returns all users (filterable by ?q=). POST creates a new user.",
+    responses={
+        200: UserDetailSerializer(many=True),
+        201: UserDetailSerializer,
+    },
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "email": {"type": "string", "format": "email"},
+                "password": {"type": "string"},
+                "phone_number": {"type": "string"},
+                "full_name": {"type": "string"},
+                "role": {"type": "string", "enum": ["user", "company_admin", "superadmin"]},
+            },
+            "required": ["email", "password"],
+        }
+    },
 )
 @api_view(["GET", "POST"])
 @permission_classes([IsSuperOrRoleSuperAdmin])

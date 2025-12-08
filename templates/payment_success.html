@@ -142,6 +142,9 @@
   </div>
   
   <div class="action-buttons">
+    <button id="downloadInvoiceBtn" class="btn btn-success" style="display: none;">
+      <i class="bi bi-file-earmark-pdf me-2"></i>Download Invoice
+    </button>
     <a href="/app/orders/" class="btn btn-primary">
       <i class="bi bi-bag me-2"></i>View My Orders
     </a>
@@ -182,8 +185,120 @@
   const orderId = urlParams.get('order_id');
   
   if (orderId) {
-    // Could load order details here if needed
-    console.log('Order ID:', orderId);
+    // Show and enable invoice download button
+    const invoiceBtn = document.getElementById('downloadInvoiceBtn');
+    invoiceBtn.style.display = '';
+    invoiceBtn.addEventListener('click', () => downloadInvoice(orderId, invoiceBtn));
+    
+    // Load order details
+    loadOrderDetails(orderId);
+  }
+  
+  function formatMoney(v) {
+    if (v === null || v === undefined || v === '') return '৳0.00';
+    const n = Number(v);
+    return isNaN(n) ? v : '৳' + n.toFixed(2);
+  }
+  
+  async function loadOrderDetails(orderId) {
+    try {
+      const token = localStorage.getItem('access_token');
+      const userId = localStorage.getItem('user_id');
+      
+      const response = await fetch(`/orders/${userId}/${orderId}/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) return;
+      
+      const order = await response.json();
+      const pkg = order.package || {};
+      const qty = Number(order.quantity) || 0;
+      const pricePerDevice = Number(pkg.price_per_device) || 0;
+      const mrf = Number(pkg.mrf) || 0;
+      const deviceTotal = pricePerDevice * qty;
+      const mrfTotal = mrf * qty;
+      
+      const orderInfoCard = document.getElementById('orderInfo');
+      const orderDetails = document.getElementById('orderDetails');
+      
+      orderDetails.innerHTML = `
+        <div class="info-row">
+          <span class="info-label">Order ID</span>
+          <span class="info-value">#${order.id}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Package</span>
+          <span class="info-value">${pkg.name || 'Package'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Quantity</span>
+          <span class="info-value">${qty} devices</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Device Cost</span>
+          <span class="info-value">${formatMoney(pricePerDevice)} × ${qty} = ${formatMoney(deviceTotal)}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">MRF (1st Month)</span>
+          <span class="info-value">${formatMoney(mrf)} × ${qty} = ${formatMoney(mrfTotal)}</span>
+        </div>
+        <div class="info-row" style="border-top: 2px solid #198754; margin-top: 0.5rem; padding-top: 0.75rem;">
+          <span class="info-label" style="font-weight: 600; color: #198754;">Total Paid</span>
+          <span class="info-value" style="color: #198754; font-size: 1.2rem;">${formatMoney(order.amount)}</span>
+        </div>
+      `;
+      
+      orderInfoCard.style.display = '';
+    } catch (e) {
+      console.error('Failed to load order details:', e);
+    }
+  }
+  
+  async function downloadInvoice(orderId, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+    
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`/subscriptions/invoices/order/${orderId}/pdf/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to download invoice');
+      }
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `invoice_order_${orderId}.pdf`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+        if (match) filename = match[1];
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (e) {
+      console.error('Invoice download failed:', e);
+      alert(e.message || 'Failed to download invoice');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
   }
 })();
 </script>

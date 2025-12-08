@@ -342,12 +342,19 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": os.getenv("OPENAPI_VERSION", "1.0.0"),
     "SERVE_INCLUDE_SCHEMA": False,
+    # Use path-based operation ID to avoid collisions
+    "OPERATION_ID_CALLBACK": "drf_spectacular.extensions.OpenApiViewExtension.get_operation_id",
     "ENUM_NAME_OVERRIDES": {
         "PaymentTransactionStatusEnum": "shurjopay.enums.PaymentTransactionStatus",
         "DeviceSubscriptionStatusEnum": "subscriptions.enums.DeviceSubscriptionStatus",
         "SubscriptionChargeStatusEnum": "subscriptions.enums.SubscriptionChargeStatus",
         "AlertStatusEnum": "devices.enums.AlertStatus",
         "NotificationStatusEnum": "notifications.enums.NotificationStatus",
+        "OrderStatusEnum": "products.enums.OrderStatus",
+        "PaymentMethodEnum": "products.enums.PaymentMethod",
+        "InvoiceStatusEnum": "subscriptions.enums.InvoiceStatus",
+        "UserRoleEnum": "accounts.models.User.Role",
+        "DeviceRoleEnum": "devices.models.Device.DeviceRole",
     },
 }
 
