@@ -196,7 +196,9 @@ def normalize_bd_phone_number(raw: str) -> str:
 
 class DeviceRegisterSerializer(serializers.Serializer):
     hardware_identifier = serializers.CharField(
-        max_length=64, help_text="Unique hardware identifier of the device"
+        min_length=3,
+        max_length=64,
+        help_text="Unique hardware identifier of the device (3-64 characters)"
     )
     device_name = serializers.CharField(
         max_length=255, required=False, allow_blank=True, help_text="Optional name"

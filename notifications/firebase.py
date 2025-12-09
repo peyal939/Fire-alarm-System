@@ -15,9 +15,10 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 _firebase_initialized = False
+_firebase_init_error = None  # Track last initialization error for diagnostics
 
 
-def initialize_firebase():
+def initialize_firebase(force_retry: bool = False):
     """Initialize Firebase Admin SDK with service account credentials.
 
     This function should be called once during application startup.
@@ -29,10 +30,14 @@ def initialize_firebase():
     If no credentials are found, Firebase will not be initialized and push
     notifications will be disabled (logs warning).
     """
-    global _firebase_initialized
+    global _firebase_initialized, _firebase_init_error
 
     if _firebase_initialized:
         logger.debug("Firebase already initialized")
+        return
+    
+    if _firebase_init_error and not force_retry:
+        logger.debug("Firebase initialization previously failed, use force_retry=True to retry")
         return
 
     # Try to get credentials from environment
@@ -62,15 +67,22 @@ def initialize_firebase():
             logger.info("Firebase initialized successfully from environment JSON")
             _firebase_initialized = True
         else:
+            _firebase_init_error = "Credentials not found"
             logger.warning(
                 "Firebase credentials not found. Push notifications will be disabled. "
                 "Set FIREBASE_CREDENTIALS_PATH or FIREBASE_CREDENTIALS environment variable, "
                 "or place firebase-credentials.json in project root."
             )
     except Exception as e:
+        _firebase_init_error = str(e)
         logger.error(f"Failed to initialize Firebase: {e}", exc_info=True)
 
 
 def is_firebase_initialized() -> bool:
     """Check if Firebase has been successfully initialized."""
     return _firebase_initialized
+
+
+def get_firebase_init_error() -> str | None:
+    """Return the last Firebase initialization error, if any."""
+    return _firebase_init_error

@@ -821,6 +821,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         phone_number = ser.validated_data["phone_number"]
         try:
+            # Transaction ensures DB rollback if MQTT publish fails
             with transaction.atomic():
                 now = timezone.now()
                 device.phone_number = phone_number
@@ -843,7 +844,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        device.refresh_from_db(fields=["phone_number", "phone_number_updated_at"])
         device.refresh_from_db(fields=["phone_number", "phone_number_updated_at"])
         return Response(self.get_serializer(device).data, status=200)
 

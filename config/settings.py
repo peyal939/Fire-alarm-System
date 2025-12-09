@@ -25,9 +25,30 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load .env
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me")
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+
+# SECRET_KEY: Use env var in production, allow default only in DEBUG mode
+_secret_key_env = os.getenv("DJANGO_SECRET_KEY", "").strip()
+if _secret_key_env:
+    SECRET_KEY = _secret_key_env
+elif DEBUG:
+    # Allow insecure default only during local development
+    SECRET_KEY = "dev-only-insecure-key-not-for-production"
+else:
+    raise RuntimeError(
+        "DJANGO_SECRET_KEY environment variable is required in production (DEBUG=False). "
+        "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
+
+# ALLOWED_HOSTS: In production, require explicit hosts; allow wildcard only in DEBUG
+_allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "").strip()
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
+elif DEBUG:
+    ALLOWED_HOSTS = ["*"]  # Allow all hosts in development
+else:
+    # Production without explicit ALLOWED_HOSTS - use safe default
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 APP_NAME = os.getenv("APP_NAME", "apS Fire Backend")
 HOST = os.getenv("HOST", "0.0.0.0")
@@ -72,7 +93,9 @@ OTP_SETTINGS = {
         "OTP_SMS_TEMPLATE",
         "Your praniSheba {purpose} code is {code}. It expires in {minutes} minutes.",
     ),
-    "test_bypass_code": os.getenv("OTP_TEST_BYPASS_CODE", "").strip() or None,
+    # SECURITY: OTP bypass code is only allowed in DEBUG mode (local development)
+    # In production (DEBUG=False), this is always None regardless of env var
+    "test_bypass_code": (os.getenv("OTP_TEST_BYPASS_CODE", "").strip() or None) if DEBUG else None,
     "login_enforced": os.getenv("OTP_LOGIN_ENFORCED", "true").lower() == "true",
 }
 
@@ -209,7 +232,18 @@ DATABASES = {
         "PORT": os.getenv("MYSQL_PORT", "3306"),
         "OPTIONS": {
             "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
+            # Connection timeout to prevent hanging connections
+            "connect_timeout": 10,
+            # Read timeout for long queries
+            "read_timeout": 30,
+            # Write timeout
+            "write_timeout": 30,
         },
+        # Persist connections for 10 minutes to reduce connection overhead
+        # Set to None for unlimited persistence (until server closes)
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "600")),
+        # Enable connection health checks before reusing a connection
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 

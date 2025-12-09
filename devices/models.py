@@ -136,6 +136,8 @@ class Device(AuditSoftDeleteModel):
             models.Index(fields=["device_role"]),
             models.Index(fields=["master"]),
             models.Index(fields=["originating_order"]),
+            # Composite index for common query pattern: lookup by hardware_id excluding soft-deleted
+            models.Index(fields=["hardware_identifier", "deleted_at"]),
         ]
         # Default ordering surfaces most recently active devices first while preserving stability
         ordering = ["-last_seen", "-registered_at"]

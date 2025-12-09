@@ -101,7 +101,10 @@ def user_list_admin(request):
         password = request.data.get("password", "")
         phone_raw = request.data.get("phone_number", "").strip() or None
         full_name = request.data.get("full_name", "").strip()
-        role = request.data.get("role", User.Role.USER)
+        role_input = request.data.get("role", User.Role.USER)
+        # Validate role is one of the allowed choices
+        valid_roles = {choice[0] for choice in User.Role.choices}
+        role = role_input if role_input in valid_roles else User.Role.USER
 
         errors = {}
         if not email:
@@ -153,8 +156,28 @@ def user_list_admin(request):
             variants = phone_variants(q) or [q]
             qs = qs.filter(phone_number__in=variants)
 
-    serializer = UserDetailSerializer(qs[:200], many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    # Pagination: default 50, max 200 per page
+    try:
+        page_size = min(int(request.query_params.get("page_size", 50)), 200)
+    except (ValueError, TypeError):
+        page_size = 50
+    try:
+        page = max(int(request.query_params.get("page", 1)), 1)
+    except (ValueError, TypeError):
+        page = 1
+    
+    start = (page - 1) * page_size
+    end = start + page_size
+    total_count = qs.count()
+    
+    serializer = UserDetailSerializer(qs[start:end], many=True)
+    return Response({
+        "count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_count + page_size - 1) // page_size if page_size > 0 else 1,
+        "results": serializer.data,
+    }, status=status.HTTP_200_OK)
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
