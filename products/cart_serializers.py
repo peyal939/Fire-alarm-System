@@ -98,6 +98,26 @@ class CartItemUpdateSerializer(serializers.Serializer):
     number_of_slave_devices = serializers.IntegerField(min_value=0, required=False)
 
 
+class CartItemBulkCreateSerializer(serializers.Serializer):
+    """Serializer for bulk adding items to cart."""
+
+    items = serializers.ListField(
+        child=CartItemCreateSerializer(),
+        min_length=1,
+        max_length=50,
+        help_text="List of items to add to cart (max 50 items)",
+    )
+
+    def validate_items(self, value):
+        # Check for duplicate package_ids in the request
+        package_ids = [item["package_id"].id for item in value]
+        if len(package_ids) != len(set(package_ids)):
+            raise serializers.ValidationError(
+                "Duplicate package_id found in items. Each package can only appear once."
+            )
+        return value
+
+
 class CartSerializer(serializers.ModelSerializer):
     """Serializer for the shopping cart."""
 

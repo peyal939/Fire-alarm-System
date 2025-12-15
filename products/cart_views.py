@@ -18,6 +18,7 @@ from .cart_serializers import (
     CartItemSerializer,
     CartItemCreateSerializer,
     CartItemUpdateSerializer,
+    CartItemBulkCreateSerializer,
     CartCheckoutSerializer,
 )
 from .services import calculate_order_total
@@ -120,6 +121,92 @@ class CartItemListView(APIView):
         )
         cart.refresh_expiry(CART_EXPIRY_DAYS)
         return Response(CartItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Cart"])
+class CartItemBulkView(APIView):
+    """Bulk add multiple items to cart in a single request."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Bulk add items to cart",
+        description="Add multiple packages to cart in a single request. Useful for mobile apps to reduce API calls.",
+        request=CartItemBulkCreateSerializer,
+        responses={
+            201: CartSerializer,
+            200: CartSerializer,
+        },
+    )
+    def post(self, request):
+        """
+        Bulk add items to cart.
+        
+        If a package already exists in cart, its quantity will be updated.
+        Returns the full cart after all items are processed.
+        """
+        serializer = CartItemBulkCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        cart = get_or_create_cart(request.user)
+        items_data = serializer.validated_data["items"]
+        
+        created_count = 0
+        updated_count = 0
+
+        with transaction.atomic():
+            for item_data in items_data:
+                package = item_data["package_id"]
+                quantity = item_data.get("quantity", 1)
+                master_devices = item_data.get("number_of_master_devices", 1)
+                slave_devices = item_data.get("number_of_slave_devices", 0)
+
+                # Check if item already exists in cart
+                existing_item = cart.items.filter(package=package).first()
+                if existing_item:
+                    # Update existing item
+                    existing_item.quantity = quantity
+                    existing_item.number_of_master_devices = master_devices
+                    existing_item.number_of_slave_devices = slave_devices
+                    existing_item.save()
+                    updated_count += 1
+                else:
+                    # Create new item
+                    CartItem.objects.create(
+                        cart=cart,
+                        package=package,
+                        quantity=quantity,
+                        number_of_master_devices=master_devices,
+                        number_of_slave_devices=slave_devices,
+                    )
+                    created_count += 1
+
+            cart.refresh_expiry(CART_EXPIRY_DAYS)
+
+        # Refresh cart from DB to get updated items
+        cart.refresh_from_db()
+        
+        logger.info(
+            "Bulk cart items added",
+            extra={
+                "user_id": request.user.pk,
+                "created": created_count,
+                "updated": updated_count,
+            },
+        )
+
+        response_status = status.HTTP_201_CREATED if created_count > 0 else status.HTTP_200_OK
+        return Response(
+            {
+                "cart": CartSerializer(cart).data,
+                "summary": {
+                    "items_created": created_count,
+                    "items_updated": updated_count,
+                    "total_items_processed": created_count + updated_count,
+                },
+            },
+            status=response_status,
+        )
 
 
 @extend_schema(tags=["Cart"])
