@@ -190,8 +190,8 @@ class CartItemBulkView(APIView):
             "Bulk cart items added",
             extra={
                 "user_id": request.user.pk,
-                "created": created_count,
-                "updated": updated_count,
+                "items_created": created_count,
+                "items_updated": updated_count,
             },
         )
 
