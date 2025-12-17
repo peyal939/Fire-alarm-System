@@ -1,43 +1,67 @@
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 from rest_framework import status
 
 from devices.models import Device
+from products.models import Package, Order, OrderFulfillment
+from products.enums import OrderStatus
 
 
 def get_items(data):
     return data["results"] if isinstance(data, dict) and "results" in data else data
 
 
+def create_fulfillment(user, hid, role="master"):
+    """Helper to create order fulfillment for device registration."""
+    package, _ = Package.objects.get_or_create(
+        name="TestPackage",
+        defaults={
+            "min_quantity": 1,
+            "max_quantity": 5,
+            "price_per_device": Decimal("100.00"),
+            "mrf": Decimal("10.00"),
+        },
+    )
+    order = Order.objects.create(
+        user=user,
+        package=package,
+        quantity=1,
+        amount=Decimal("100.00"),
+        order_status=OrderStatus.PAID,
+    )
+    OrderFulfillment.objects.create(
+        order=order,
+        hardware_identifier=hid,
+        device_role=role,
+    )
+    return order
+
+
 class MasterSlaveRegistrationAndTreeTests(APITestCase):
     def setUp(self):
-        # Create two users A and B
-        r = self.client.post(
-            "/auth/register",
-            {"email": "msa@example.com", "password": "Passw0rd!"},
-            format="json",
+        # Create two users A and B and authenticate directly (bypasses OTP requirement)
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email="msa@example.com", password="Passw0rd!"
         )
-        r = self.client.post(
-            "/auth/login",
-            {"email": "msa@example.com", "password": "Passw0rd!"},
-            format="json",
+        self.user_b = User.objects.create_user(
+            email="msb@example.com", password="Passw0rd!"
         )
-        self.token_a = r.data["access"]
-
-        r = self.client.post(
-            "/auth/register",
-            {"email": "msb@example.com", "password": "Passw0rd!"},
-            format="json",
-        )
-        r = self.client.post(
-            "/auth/login",
-            {"email": "msb@example.com", "password": "Passw0rd!"},
-            format="json",
-        )
-        self.token_b = r.data["access"]
 
     def test_master_slave_registration_and_tree(self):
         # Login as A
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_a}")
+        self.client.force_authenticate(user=self.user_a)
+
+        # Create fulfillments for all devices that will be registered
+        create_fulfillment(self.user_a, "MSTR-1", role="master")
+        create_fulfillment(self.user_a, "SLV-FAIL", role="slave")
+        create_fulfillment(self.user_a, "SLV-1", role="slave")
+        create_fulfillment(self.user_a, "MSTR-ERR", role="master")
+        create_fulfillment(self.user_a, "SLV-2", role="slave")
+        create_fulfillment(self.user_b, "SLV-B", role="slave")
 
         # 1) Register a master (no master_id required)
         r = self.client.post(
@@ -130,7 +154,7 @@ class MasterSlaveRegistrationAndTreeTests(APITestCase):
         self.assertIn(slave1_id, s_ids)
 
         # 7) User B cannot register a slave under A's master (ownership enforced)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token_b}")
+        self.client.force_authenticate(user=self.user_b)
         r = self.client.post(
             "/devices/register/",
             {
