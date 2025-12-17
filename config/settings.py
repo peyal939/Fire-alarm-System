@@ -166,6 +166,7 @@ INSTALLED_APPS = [
     "otp",
     "firestations",
     "subscriptions",
+    "resellers",
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "shurjopay",

@@ -86,6 +86,15 @@ class Device(AuditSoftDeleteModel):
         related_name="devices",
         help_text="Order that supplied this physical device",
     )
+    # Reseller who sold this device to the end user
+    reseller = models.ForeignKey(
+        "resellers.Reseller",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sold_devices",
+        help_text="Reseller who sold this device to the end user",
+    )
     package = models.ForeignKey(
         "products.Package",
         null=True,

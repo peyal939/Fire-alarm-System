@@ -14,6 +14,7 @@ urlpatterns = [
     path("app/firestations/", views.firestations_page, name="firestations_page"),
     path("app/account/", views.account_settings_page, name="account_settings"),
     path("app/admin-panel/", views.admin_panel, name="admin_panel"),
+    path("app/reseller/", views.reseller_panel, name="reseller_panel"),
     # E-Commerce pages
     path("app/cart/", views.cart_page, name="cart_page"),
     path("app/checkout/", views.checkout_page, name="checkout_page"),

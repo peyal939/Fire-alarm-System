@@ -274,6 +274,24 @@ def firestations_page(request):
     return render(request, "firestations_page.html")
 
 
+@login_required(login_url="/login")
+def reseller_panel(request):
+    """Reseller panel for company admins with reseller accounts."""
+    user = request.user
+    # Check if user has a reseller account
+    reseller = getattr(user, "reseller_account", None)
+    if not reseller:
+        # Check if user is company_admin and can register
+        if getattr(user, "role", "") == "company_admin":
+            return render(request, "reseller_register.html")
+        # Otherwise redirect to home
+        from django.contrib import messages
+        messages.error(request, "You don't have access to the reseller panel.")
+        return redirect("/")
+    
+    return render(request, "reseller_panel.html", {"reseller": reseller})
+
+
 @superadmin_required
 def admin_panel(request):
     from django.db.models import Sum

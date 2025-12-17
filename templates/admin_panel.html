@@ -228,6 +228,11 @@
       </button>
     </li>
     <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#resellersTab" type="button">
+        <i class="bi bi-shop me-1"></i>Resellers
+      </button>
+    </li>
+    <li class="nav-item">
       <button class="nav-link" data-bs-toggle="tab" data-bs-target="#reportsTab" type="button">
         <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
       </button>
@@ -483,6 +488,161 @@
         <div class="card-footer bg-white d-flex justify-content-between align-items-center">
           <div class="small text-muted">Showing <span id="fulfillmentShowing">0</span> of <span id="fulfillmentTotal">0</span></div>
           <nav><ul class="pagination pagination-sm mb-0" id="fulfillmentPagination"></ul></nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resellers Tab -->
+    <div class="tab-pane fade" id="resellersTab">
+      <!-- Reseller Dashboard Stats -->
+      <div class="row g-3 mb-4" id="resellerDashboardStats">
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-primary bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-primary" id="statTotalResellers">-</div>
+              <small class="text-muted">Total Resellers</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-warning bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-warning" id="statPendingResellers">-</div>
+              <small class="text-muted">Pending</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-success bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-success" id="statActiveResellers">-</div>
+              <small class="text-muted">Active</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-info bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-info" id="statDevicesSold">-</div>
+              <small class="text-muted">Devices Sold</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-secondary bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0" id="statTotalOrders">-</div>
+              <small class="text-muted">Total Orders</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-danger bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-danger" id="statCreditOutstanding">-</div>
+              <small class="text-muted">Credit Outstanding</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reseller Tabs -->
+      <ul class="nav nav-tabs mb-3" id="resellerSubTabs">
+        <li class="nav-item">
+          <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#resellerListPane">Resellers</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#resellerOrdersPane">Purchase Orders</button>
+        </li>
+      </ul>
+      
+      <div class="tab-content">
+        <!-- Resellers List Pane -->
+        <div class="tab-pane fade show active" id="resellerListPane">
+          <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-shop text-primary me-2"></i>Reseller Management</h5>
+                <input type="text" class="form-control form-control-sm search-box" placeholder="Search resellers..." id="resellerSearchInput">
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-admin table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>Company</th>
+                      <th>Admin</th>
+                      <th>Contact</th>
+                      <th>Status</th>
+                      <th>Devices</th>
+                      <th>Customers</th>
+                      <th>Credit</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resellersTableBody">
+                    <tr>
+                      <td colspan="8" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                          <span class="visually-hidden">Loading...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Reseller Orders Pane -->
+        <div class="tab-pane fade" id="resellerOrdersPane">
+          <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-receipt text-primary me-2"></i>Reseller Purchase Orders</h5>
+                <div class="d-flex gap-2">
+                  <select class="form-select form-select-sm" id="resellerOrderFilter" style="width: 150px;">
+                    <option value="">All Orders</option>
+                    <option value="credit">Credit Only</option>
+                  </select>
+                  <select class="form-select form-select-sm" id="resellerOrderStatusFilter" style="width: 150px;">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="delivered">Delivered</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-admin table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>PO#</th>
+                      <th>Reseller</th>
+                      <th>Order#</th>
+                      <th>Package</th>
+                      <th>Qty</th>
+                      <th>Amount</th>
+                      <th>Discount</th>
+                      <th>Status</th>
+                      <th>Credit</th>
+                      <th>Fulfilled</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resellerOrdersTableBody">
+                    <tr>
+                      <td colspan="11" class="text-center py-4 text-muted">Select "Purchase Orders" tab to load data</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1008,6 +1168,14 @@ function getCsrfToken() {
     .find(row => row.startsWith('csrftoken='))
     ?.split('=')[1];
   return cookieValue || '';
+}
+
+// ===== HTML Escape Helper =====
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ===== Error Message Parser =====
@@ -2116,7 +2284,339 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
     if (target === '#ordersTab') loadOrders();
     if (target === '#dashboardTab') loadDashboard();
     if (target === '#fulfillmentsTab') loadFulfillments();
+    if (target === '#resellersTab') {
+      loadResellerDashboard();
+      loadResellers();
+    }
+    if (target === '#resellerOrdersPane') loadResellerOrders();
   });
+});
+
+// ==================== Resellers Management ====================
+let resellersData = [];
+let resellerOrdersData = [];
+
+async function loadResellerDashboard() {
+  try {
+    const response = await fetch('/api/resellers/admin/dashboard/', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (!response.ok) throw new Error('Failed to load dashboard');
+    
+    const data = await response.json();
+    
+    // Update stats
+    document.getElementById('statTotalResellers').textContent = data.resellers?.total || 0;
+    document.getElementById('statPendingResellers').textContent = data.resellers?.pending || 0;
+    document.getElementById('statActiveResellers').textContent = data.resellers?.active || 0;
+    document.getElementById('statDevicesSold').textContent = data.devices_sold_by_resellers || 0;
+    document.getElementById('statTotalOrders').textContent = data.purchase_orders?.total_orders || 0;
+    document.getElementById('statCreditOutstanding').textContent = '৳' + parseFloat(data.purchase_orders?.credit_outstanding || 0).toLocaleString();
+    
+  } catch (error) {
+    console.error('Failed to load reseller dashboard:', error);
+  }
+}
+
+async function loadResellers() {
+  const tbody = document.getElementById('resellersTableBody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+  
+  try {
+    const response = await fetch('/api/resellers/admin/resellers/', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (!response.ok) throw new Error('Failed to load resellers');
+    
+    const data = await response.json();
+    resellersData = Array.isArray(data) ? data : (data.results || []);
+    renderResellers(resellersData);
+  } catch (error) {
+    console.error('Failed to load resellers:', error);
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Failed to load resellers</td></tr>';
+  }
+}
+
+function renderResellers(data) {
+  const tbody = document.getElementById('resellersTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No resellers registered yet</td></tr>';
+    return;
+  }
+  
+  const statusColors = {
+    'pending': 'warning',
+    'active': 'success',
+    'suspended': 'danger',
+    'terminated': 'secondary'
+  };
+  
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td>
+        <div class="fw-semibold">${escapeHtml(r.company_name)}</div>
+        ${r.brand_name ? `<small class="text-muted">${escapeHtml(r.brand_name)}</small>` : ''}
+      </td>
+      <td>${escapeHtml(r.admin_email || '-')}</td>
+      <td>
+        <div>${escapeHtml(r.contact_email)}</div>
+        <small class="text-muted">${escapeHtml(r.contact_phone || '-')}</small>
+      </td>
+      <td>
+        <span class="badge bg-${statusColors[r.status] || 'secondary'}">${r.status}</span>
+      </td>
+      <td>${r.device_count || 0}</td>
+      <td>${r.customer_count || 0}</td>
+      <td>
+        <div>৳${parseFloat(r.credit_limit || 0).toLocaleString()}</div>
+        <small class="text-muted">Used: ৳${parseFloat(r.current_credit_used || 0).toLocaleString()}</small>
+      </td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          ${r.status === 'pending' ? `
+            <button class="btn btn-success" onclick="activateReseller(${r.id})" title="Activate">
+              <i class="bi bi-check-lg"></i>
+            </button>
+          ` : ''}
+          ${r.status === 'active' ? `
+            <button class="btn btn-warning" onclick="suspendReseller(${r.id})" title="Suspend">
+              <i class="bi bi-pause"></i>
+            </button>
+          ` : ''}
+          ${r.status === 'suspended' ? `
+            <button class="btn btn-success" onclick="activateReseller(${r.id})" title="Reactivate">
+              <i class="bi bi-play"></i>
+            </button>
+            <button class="btn btn-danger" onclick="terminateReseller(${r.id})" title="Terminate">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          ` : ''}
+          <button class="btn btn-outline-primary" onclick="editReseller(${r.id})" title="Edit">
+            <i class="bi bi-pencil"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function activateReseller(id) {
+  if (!confirm('Activate this reseller?')) return;
+  try {
+    const response = await fetch(`/api/resellers/admin/resellers/${id}/activate/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (response.ok) {
+      alert('Reseller activated successfully');
+      loadResellers();
+    } else {
+      throw new Error('Failed to activate');
+    }
+  } catch (e) {
+    alert('Failed to activate reseller: ' + e.message);
+  }
+}
+
+async function suspendReseller(id) {
+  if (!confirm('Suspend this reseller? They will not be able to manage devices.')) return;
+  try {
+    const response = await fetch(`/api/resellers/admin/resellers/${id}/suspend/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (response.ok) {
+      alert('Reseller suspended');
+      loadResellers();
+      loadResellerDashboard();
+    } else {
+      throw new Error('Failed to suspend');
+    }
+  } catch (e) {
+    alert('Failed to suspend reseller: ' + e.message);
+  }
+}
+
+async function terminateReseller(id) {
+  if (!confirm('Terminate this reseller? This action cannot be undone.')) return;
+  try {
+    const response = await fetch(`/api/resellers/admin/resellers/${id}/terminate/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (response.ok) {
+      alert('Reseller terminated');
+      loadResellers();
+      loadResellerDashboard();
+    } else {
+      throw new Error('Failed to terminate');
+    }
+  } catch (e) {
+    alert('Failed to terminate reseller: ' + e.message);
+  }
+}
+
+function editReseller(id) {
+  // For now, redirect to Django admin
+  window.open(`/admin/resellers/reseller/${id}/change/`, '_blank');
+}
+
+// ==================== Reseller Orders Management ====================
+async function loadResellerOrders() {
+  const tbody = document.getElementById('resellerOrdersTableBody');
+  tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+  
+  try {
+    let url = '/api/resellers/admin/orders/';
+    const params = new URLSearchParams();
+    
+    const creditFilter = document.getElementById('resellerOrderFilter')?.value;
+    if (creditFilter === 'credit') params.append('credit_only', 'true');
+    
+    const statusFilter = document.getElementById('resellerOrderStatusFilter')?.value;
+    if (statusFilter) params.append('status', statusFilter);
+    
+    if (params.toString()) url += '?' + params.toString();
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (!response.ok) throw new Error('Failed to load orders');
+    
+    resellerOrdersData = await response.json();
+    renderResellerOrders(resellerOrdersData);
+  } catch (error) {
+    console.error('Failed to load reseller orders:', error);
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-danger">Failed to load orders</td></tr>';
+  }
+}
+
+function renderResellerOrders(data) {
+  const tbody = document.getElementById('resellerOrdersTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">No purchase orders found</td></tr>';
+    return;
+  }
+  
+  const statusColors = {
+    'pending': 'warning',
+    'paid': 'info',
+    'processing': 'primary',
+    'shipped': 'primary',
+    'delivered': 'success',
+    'cancelled': 'danger'
+  };
+  
+  tbody.innerHTML = data.map(po => {
+    const creditStatus = po.is_credit_purchase 
+      ? (po.credit_paid_at 
+          ? '<span class="badge bg-success">Paid</span>' 
+          : `<span class="badge bg-warning">Due ${po.credit_due_date || 'N/A'}</span>`)
+      : '<span class="badge bg-secondary">Cash</span>';
+    
+    const markPaidBtn = po.is_credit_purchase && !po.credit_paid_at
+      ? `<button class="btn btn-success btn-sm" onclick="markCreditPaid(${po.id})" title="Mark Paid"><i class="bi bi-check"></i></button>`
+      : '';
+    
+    return `
+      <tr>
+        <td><strong>PO-${po.id}</strong></td>
+        <td>${escapeHtml(po.reseller_name)}</td>
+        <td><a href="#" onclick="viewOrder(${po.order_id})">#${po.order_id}</a></td>
+        <td>${escapeHtml(po.package_name || '-')}</td>
+        <td>${po.quantity}</td>
+        <td>৳${parseFloat(po.final_amount).toLocaleString()}</td>
+        <td class="text-success">-৳${parseFloat(po.discount_applied).toLocaleString()}</td>
+        <td><span class="badge bg-${statusColors[po.order_status] || 'secondary'}">${po.order_status}</span></td>
+        <td>${creditStatus}</td>
+        <td>${po.fulfilled_count}/${po.quantity}</td>
+        <td>
+          ${markPaidBtn}
+          <button class="btn btn-outline-primary btn-sm" onclick="viewOrderFulfillments(${po.order_id})" title="View Fulfillments">
+            <i class="bi bi-box"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function markCreditPaid(poId) {
+  if (!confirm('Mark this credit purchase as paid?')) return;
+  
+  try {
+    const response = await fetch(`/api/resellers/admin/orders/${poId}/mark-paid/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    
+    if (response.ok) {
+      alert('Credit payment marked as received');
+      loadResellerOrders();
+      loadResellerDashboard();
+    } else {
+      const err = await response.json();
+      throw new Error(err.detail || 'Failed to mark as paid');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function viewOrder(orderId) {
+  // Switch to orders tab and filter
+  document.querySelector('[data-bs-target="#ordersTab"]').click();
+  // TODO: Filter by order ID
+}
+
+function viewOrderFulfillments(orderId) {
+  // Switch to fulfillments tab and filter
+  document.querySelector('[data-bs-target="#fulfillmentsTab"]').click();
+  document.getElementById('fulfillmentOrderFilter').value = orderId;
+  loadFulfillments();
+}
+
+// Event listeners for reseller order filters
+document.getElementById('resellerOrderFilter')?.addEventListener('change', loadResellerOrders);
+document.getElementById('resellerOrderStatusFilter')?.addEventListener('change', loadResellerOrders);
+
+// Reseller search
+document.getElementById('resellerSearchInput')?.addEventListener('input', function(e) {
+  const query = e.target.value.toLowerCase();
+  const filtered = resellersData.filter(r => 
+    (r.company_name || '').toLowerCase().includes(query) ||
+    (r.admin_email || '').toLowerCase().includes(query) ||
+    (r.contact_email || '').toLowerCase().includes(query)
+  );
+  renderResellers(filtered);
 });
 
 // Initialize default dates for reports

@@ -56,6 +56,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     address = models.TextField(blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.USER)
 
+    # Reseller association - if user is a customer acquired by a reseller
+    reseller = models.ForeignKey(
+        "resellers.Reseller",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="acquired_users",
+        help_text="Reseller who acquired this user as a customer"
+    )
+
     # Django flags
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

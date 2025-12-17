@@ -154,9 +154,17 @@ class DeviceViewSet(viewsets.ModelViewSet):
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
 
+        # Company admin: see devices from their orders
         if getattr(user, "role", None) == "company_admin":
             return base.filter(
                 Q(user=user) | Q(originating_order__user=user)
+            ).distinct()
+
+        # Reseller: see devices they've sold
+        reseller = getattr(user, "reseller_account", None)
+        if reseller and reseller.is_active:
+            return base.filter(
+                Q(user=user) | Q(reseller=reseller)
             ).distinct()
 
         # For normal users, we return ALL their devices so they can see "Suspended" status.

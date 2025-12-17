@@ -182,6 +182,9 @@
                 </li>
                 <li class="nav-item"><a class="nav-link" href="/app/subscriptions/me/" title="Subscriptions"><i class="bi bi-credit-card"></i><span class="d-lg-none d-xl-inline ms-1">Subs</span></a></li>
               {% endif %}
+              {% if request.user.role == 'company_admin' %}
+                <li class="nav-item"><a class="nav-link" href="/app/reseller/" title="Reseller Panel"><i class="bi bi-shop"></i><span class="d-lg-none d-xl-inline ms-1">Reseller</span></a></li>
+              {% endif %}
               <li class="nav-item"><a class="nav-link" href="/app/account/" title="Account"><i class="bi bi-person-circle"></i><span class="d-lg-none d-xl-inline ms-1">Account</span></a></li>
             {% endif %}
             {% if request.user.is_superuser or request.user.role == 'superadmin' %}

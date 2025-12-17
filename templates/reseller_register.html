@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Become a Reseller · apS Fire Alarm{% endblock %}
+
+{% block head_extra %}
+<style>
+  .register-hero {
+    background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+    border-radius: 16px;
+    color: white;
+    padding: 3rem;
+    margin-bottom: 2rem;
+  }
+  .register-hero h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  .benefit-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+  }
+  .benefit-card:hover {
+    transform: translateY(-4px);
+  }
+  .benefit-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #0d6efd, #6610f2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .register-form {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    padding: 2rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="py-4">
+  <!-- Hero Section -->
+  <div class="register-hero text-center">
+    <h1><i class="bi bi-shop me-2"></i>Become a Reseller</h1>
+    <p class="lead mb-0 opacity-75">
+      Purchase devices in bulk, sell under your brand, and manage your own customers
+    </p>
+  </div>
+
+  <div class="row g-4">
+    <!-- Benefits Section -->
+    <div class="col-lg-4">
+      <h4 class="mb-4">Why become a reseller?</h4>
+      
+      <div class="card benefit-card mb-3">
+        <div class="card-body">
+          <div class="benefit-icon">
+            <i class="bi bi-percent"></i>
+          </div>
+          <h5>Bulk Discounts</h5>
+          <p class="text-muted mb-0">Get special pricing when purchasing devices in bulk quantities</p>
+        </div>
+      </div>
+      
+      <div class="card benefit-card mb-3">
+        <div class="card-body">
+          <div class="benefit-icon">
+            <i class="bi bi-palette"></i>
+          </div>
+          <h5>White Label</h5>
+          <p class="text-muted mb-0">Sell devices under your own brand with custom branding options</p>
+        </div>
+      </div>
+      
+      <div class="card benefit-card mb-3">
+        <div class="card-body">
+          <div class="benefit-icon">
+            <i class="bi bi-people"></i>
+          </div>
+          <h5>Customer Management</h5>
+          <p class="text-muted mb-0">Full control over your customer base and device assignments</p>
+        </div>
+      </div>
+      
+      <div class="card benefit-card mb-3">
+        <div class="card-body">
+          <div class="benefit-icon">
+            <i class="bi bi-graph-up-arrow"></i>
+          </div>
+          <h5>Dashboard & Analytics</h5>
+          <p class="text-muted mb-0">Track sales, monitor devices, and view performance metrics</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Registration Form -->
+    <div class="col-lg-8">
+      <div class="register-form">
+        <h4 class="mb-4"><i class="bi bi-building me-2 text-primary"></i>Register Your Company</h4>
+        
+        <form id="resellerRegisterForm">
+          {% csrf_token %}
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Company Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="company_name" required 
+                     placeholder="Your company's legal name">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Brand Name</label>
+              <input type="text" class="form-control" name="brand_name"
+                     placeholder="Name shown to your customers (optional)">
+            </div>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Contact Email <span class="text-danger">*</span></label>
+              <input type="email" class="form-control" name="contact_email" required
+                     value="{{ request.user.email }}" placeholder="business@company.com">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Contact Phone <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="contact_phone" required
+                     value="{{ request.user.phone_number|default:'' }}" placeholder="+880 1XXX-XXXXXX">
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Business Address</label>
+            <textarea class="form-control" name="address" rows="2" 
+                      placeholder="Street address, building, etc."></textarea>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">City</label>
+              <input type="text" class="form-control" name="city" placeholder="Dhaka">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Country</label>
+              <input type="text" class="form-control" name="country" value="Bangladesh">
+            </div>
+          </div>
+          
+          <hr class="my-4">
+          
+          <h5 class="mb-3">Business Registration (Optional)</h5>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Company Registration Number</label>
+              <input type="text" class="form-control" name="company_registration_number"
+                     placeholder="Trade license or registration number">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tax ID / TIN</label>
+              <input type="text" class="form-control" name="tax_id"
+                     placeholder="Tax identification number">
+            </div>
+          </div>
+          
+          <hr class="my-4">
+          
+          <h5 class="mb-3">Branding (Optional)</h5>
+          
+          <div class="row">
+            <div class="col-md-8 mb-3">
+              <label class="form-label">Logo URL</label>
+              <input type="url" class="form-control" name="logo_url"
+                     placeholder="https://yourcompany.com/logo.png">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Primary Brand Color</label>
+              <input type="color" class="form-control form-control-color w-100" 
+                     name="primary_color" value="#0d6efd">
+            </div>
+          </div>
+          
+          <div class="alert alert-info mb-4">
+            <i class="bi bi-info-circle me-2"></i>
+            Your application will be reviewed by our team. You'll be notified once approved.
+          </div>
+          
+          <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <a href="/" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+              <i class="bi bi-send me-2"></i>Submit Application
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="alert">
+    <div class="toast-header">
+      <strong class="me-auto" id="toastTitle">Notification</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body" id="toastBody"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('resellerRegisterForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+  
+  const formData = new FormData(e.target);
+  const data = {};
+  formData.forEach((value, key) => {
+    if (value) data[key] = value;
+  });
+  
+  try {
+    const response = await fetch('/api/resellers/register/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      },
+      body: JSON.stringify(data)
+    });
+    
+    if (response.ok) {
+      // Show success and redirect
+      const toast = document.getElementById('toast');
+      toast.classList.add('bg-success', 'text-white');
+      document.getElementById('toastTitle').textContent = 'Success!';
+      document.getElementById('toastBody').textContent = 'Your reseller application has been submitted!';
+      new bootstrap.Toast(toast).show();
+      
+      setTimeout(() => {
+        window.location.href = '/app/reseller/';
+      }, 1500);
+    } else {
+      const err = await response.json();
+      throw new Error(err.detail || Object.values(err).flat().join(', ') || 'Registration failed');
+    }
+  } catch (error) {
+    const toast = document.getElementById('toast');
+    toast.classList.add('bg-danger', 'text-white');
+    document.getElementById('toastTitle').textContent = 'Error';
+    document.getElementById('toastBody').textContent = error.message;
+    new bootstrap.Toast(toast).show();
+    
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-send me-2"></i>Submit Application';
+  }
+});
+</script>
+{% endblock %}
