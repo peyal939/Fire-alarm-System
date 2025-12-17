@@ -748,13 +748,15 @@
     failed: 'bg-danger'
   };
 
-  function computePackageTotal(pkg, quantity) {
+  function computePackageTotal(pkg, quantity, masterDevices = null) {
     if (!pkg) return null;
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) return null;
+    const masterQty = masterDevices !== null ? Number(masterDevices) : qty;
     const deviceRate = Number(pkg.price_per_device ?? 0);
     const mrfRate = Number(pkg.mrf ?? 0);
-    const total = qty * (deviceRate + mrfRate);
+    // Device price × all, MRF × masters only
+    const total = (qty * deviceRate) + (masterQty * mrfRate);
     return Number.isFinite(total) ? total : null;
   }
 
@@ -968,7 +970,8 @@
   function updateCartSubtotal() {
     if (!currentCartPackage || !cartSubtotal) return;
     const qty = parseInt(cartQuantity?.value) || 1;
-    const total = computePackageTotal(currentCartPackage, qty);
+    const masterQty = parseInt(cartMasterDevices?.value) || 0;
+    const total = computePackageTotal(currentCartPackage, qty, masterQty);
     cartSubtotal.textContent = formatMoney(total);
   }
   
@@ -1073,7 +1076,10 @@
           items.forEach(item => {
             const pkg = item.package;
             if (pkg) {
-              const subtotal = (Number(item.quantity) || 0) * ((Number(pkg.price_per_device) || 0) + (Number(pkg.mrf) || 0));
+              const qty = Number(item.quantity) || 0;
+              const masterQty = Number(item.number_of_master_devices) || 0;
+              // Device price × all, MRF × masters only
+              const subtotal = (qty * (Number(pkg.price_per_device) || 0)) + (masterQty * (Number(pkg.mrf) || 0));
               total += subtotal;
             }
           });

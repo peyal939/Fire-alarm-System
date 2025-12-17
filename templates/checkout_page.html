@@ -425,9 +425,11 @@
     const pkg = item.package;
     if (!pkg) return 0;
     const qty = Number(item.quantity) || 0;
+    const masterQty = Number(item.number_of_master_devices) || 0;
     const pricePerDevice = Number(pkg.price_per_device) || 0;
     const mrf = Number(pkg.mrf) || 0;
-    return qty * (pricePerDevice + mrf);
+    // Device price × all devices, MRF × masters only
+    return (qty * pricePerDevice) + (masterQty * mrf);
   }
   
   function showView(view) {
@@ -472,10 +474,11 @@
     cartData.items.forEach(item => {
       const pkg = item.package || {};
       const qty = Number(item.quantity) || 0;
+      const masterQty = Number(item.number_of_master_devices) || 0;
       const pricePerDevice = Number(pkg.price_per_device) || 0;
       const mrf = Number(pkg.mrf) || 0;
       const deviceTotal = pricePerDevice * qty;
-      const mrfTotal = mrf * qty;
+      const mrfTotal = mrf * masterQty;  // Only charge MRF for masters
       const subtotal = deviceTotal + mrfTotal;
       total += subtotal;
       

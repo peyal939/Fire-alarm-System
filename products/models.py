@@ -176,7 +176,8 @@ class Cart(models.Model):
         for item in self.items.select_related("package"):
             price = item.package.price_per_device or Decimal("0")
             mrf = item.package.mrf or Decimal("0")
-            total += (price + mrf) * item.quantity
+            # Device price for all devices, MRF only for master devices
+            total += (price * item.quantity) + (mrf * item.number_of_master_devices)
         return total
 
 
@@ -214,4 +215,5 @@ class CartItem(models.Model):
         from decimal import Decimal
         price = self.package.price_per_device or Decimal("0")
         mrf = self.package.mrf or Decimal("0")
-        return (price + mrf) * self.quantity
+        # Device price for all, MRF only for masters
+        return (price * self.quantity) + (mrf * self.number_of_master_devices)

@@ -288,14 +288,14 @@ def create_invoice_for_order(order) -> "Invoice":
             total=price_per_device * order.quantity,
         )
 
-    # MRF line (first month)
-    if mrf > 0:
+    # MRF line (first month) - only for master devices
+    if mrf > 0 and order.number_of_master_devices > 0:
         InvoiceLineItem.objects.create(
             invoice=invoice,
             description=f"{package.name} - Monthly Service Fee (1st Month)",
-            quantity=order.quantity,
+            quantity=order.number_of_master_devices,
             unit_price=mrf,
-            total=mrf * order.quantity,
+            total=mrf * order.number_of_master_devices,
         )
 
     logger.info("Created invoice %s for order %s", invoice.number, order.pk)

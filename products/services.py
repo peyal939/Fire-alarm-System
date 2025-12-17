@@ -20,18 +20,31 @@ from devices.models import Device
 logger = logging.getLogger(__name__)
 
 
-def calculate_order_total(package, quantity) -> Decimal:
-    """Return the upfront order total including device and MRF charges."""
-
+def calculate_order_total(package, quantity, number_of_master_devices=None) -> Decimal:
+    """Return the upfront order total including device and MRF charges.
+    
+    MRF is only charged for master devices, not slaves.
+    """
     if not package or quantity is None:
         return Decimal("0")
     try:
         qty = Decimal(quantity)
     except Exception:  # pragma: no cover - invalid input fallback
         qty = Decimal("0")
+    
+    # If number_of_master_devices not provided, default to quantity (legacy behavior)
+    if number_of_master_devices is None:
+        master_qty = qty
+    else:
+        try:
+            master_qty = Decimal(number_of_master_devices)
+        except Exception:
+            master_qty = qty
+    
     price_per_device = getattr(package, "price_per_device", Decimal("0")) or Decimal("0")
     mrf = getattr(package, "mrf", Decimal("0")) or Decimal("0")
-    return (price_per_device + mrf) * qty
+    # Device price for all, MRF only for masters
+    return (price_per_device * qty) + (mrf * master_qty)
 
 
 def _build_reference(order: Order) -> str:

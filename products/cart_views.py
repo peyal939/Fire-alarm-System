@@ -339,8 +339,12 @@ class CartCheckoutView(APIView):
 
         with transaction.atomic():
             for item in items:
-                # Calculate order total
-                total = calculate_order_total(item.package, item.quantity)
+                # Calculate order total - MRF only for master devices
+                total = calculate_order_total(
+                    item.package, 
+                    item.quantity,
+                    item.number_of_master_devices
+                )
 
                 # Create order
                 order = Order.objects.create(
