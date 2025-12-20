@@ -1,6 +1,12 @@
 """Serializers for the Reseller API."""
+
+import logging
+
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+
+from accounts.phone_utils import ensure_normalized_phone, phone_variants
+from notifications.sms import SMSClient
 
 from .models import (
     Reseller,
@@ -11,6 +17,8 @@ from .models import (
 )
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 class ResellerSerializer(serializers.ModelSerializer):
@@ -233,7 +241,7 @@ class ResellerCustomerSerializer(serializers.ModelSerializer):
 class ResellerCustomerCreateSerializer(serializers.Serializer):
     """Serializer for creating a new customer for a reseller."""
     email = serializers.EmailField()
-    phone_number = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    phone_number = serializers.CharField(max_length=32)
     full_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     
@@ -254,6 +262,28 @@ class ResellerCustomerCreateSerializer(serializers.Serializer):
             )
         return value
 
+    def validate_phone_number(self, value):
+        normalized = ensure_normalized_phone(value)
+        if not normalized:
+            raise serializers.ValidationError(
+                "Invalid phone number. Provide a Bangladeshi number (e.g., 01XXXXXXXXX)."
+            )
+
+        variants = phone_variants(normalized)
+        if variants and User.objects.filter(phone_number__in=variants).exists():
+            raise serializers.ValidationError(
+                "A user with this phone number already exists. Use Link Existing instead."
+            )
+        return normalized
+
+    def validate_password(self, value):
+        # Option B: reseller never sets customer password.
+        if value and str(value).strip():
+            raise serializers.ValidationError(
+                "Do not set a password here. The customer should set it using Forgot Password (OTP) in the mobile app."
+            )
+        return ""
+
     def create(self, validated_data):
         reseller = self.context["reseller"]
         request_user = self.context["request"].user
@@ -261,7 +291,7 @@ class ResellerCustomerCreateSerializer(serializers.Serializer):
         # Create the user account
         user = User.objects.create_user(
             email=validated_data["email"],
-            password=validated_data.get("password"),
+            password=None,
             phone_number=validated_data.get("phone_number") or None,
             full_name=validated_data.get("full_name", ""),
         )
@@ -283,6 +313,18 @@ class ResellerCustomerCreateSerializer(serializers.Serializer):
             notes=validated_data.get("notes", ""),
             created_by=request_user,
         )
+
+        # Best-effort onboarding SMS to customer.
+        try:
+            if user.phone_number:
+                msg = (
+                    "apS Fire Alarm: Your account has been created. "
+                    "Open the app → Forgot Password → enter your mobile number → verify OTP → set password."
+                )
+                SMSClient().send_text(user.phone_number, msg)
+        except Exception:
+            logger.exception("Failed to send onboarding SMS to customer user_id=%s", user.id)
+
         return customer
 
 
@@ -290,6 +332,7 @@ class ResellerLinkCustomerSerializer(serializers.Serializer):
     """Serializer for linking an existing user as a reseller customer."""
     user_id = serializers.IntegerField(required=False)
     email = serializers.EmailField(required=False)
+    phone_number = serializers.CharField(max_length=32, required=False, allow_blank=True)
     
     customer_reference = serializers.CharField(max_length=64, required=False, allow_blank=True)
     company_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
@@ -300,9 +343,9 @@ class ResellerLinkCustomerSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
-        if not attrs.get("user_id") and not attrs.get("email"):
+        if not attrs.get("user_id") and not attrs.get("email") and not attrs.get("phone_number"):
             raise serializers.ValidationError(
-                "Either user_id or email must be provided"
+                "Either user_id, email, or phone_number must be provided"
             )
         
         # Find the user
@@ -317,6 +360,14 @@ class ResellerLinkCustomerSerializer(serializers.Serializer):
                 user = User.objects.get(email=attrs["email"])
             except User.DoesNotExist:
                 raise serializers.ValidationError({"email": "User not found"})
+        elif attrs.get("phone_number"):
+            variants = phone_variants(attrs.get("phone_number"))
+            if not variants:
+                raise serializers.ValidationError({"phone_number": "Invalid phone number"})
+            try:
+                user = User.objects.get(phone_number__in=variants)
+            except User.DoesNotExist:
+                raise serializers.ValidationError({"phone_number": "User not found"})
         
         attrs["user"] = user
         
@@ -335,6 +386,7 @@ class ResellerLinkCustomerSerializer(serializers.Serializer):
         user = validated_data.pop("user")
         validated_data.pop("user_id", None)
         validated_data.pop("email", None)
+        validated_data.pop("phone_number", None)
 
         # Update user's reseller association if not set
         if not user.reseller:

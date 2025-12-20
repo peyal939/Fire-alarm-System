@@ -639,8 +639,9 @@
                 <input type="text" class="form-control" name="full_name">
               </div>
               <div class="mb-3">
-                <label class="form-label">Phone Number</label>
-                <input type="text" class="form-control" name="phone_number">
+                <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="phone_number" placeholder="01XXXXXXXXX" required>
+                <div class="form-text">Customer will set password in the mobile app using Forgot Password (OTP).</div>
               </div>
               <div class="mb-3">
                 <label class="form-label">Company Name</label>
@@ -668,9 +669,10 @@
           <div class="tab-pane fade" id="linkCustomerPane">
             <form id="linkCustomerForm">
               <div class="mb-3">
-                <label class="form-label">User Email <span class="text-danger">*</span></label>
-                <input type="email" class="form-control" name="email" required>
-                <div class="form-text">Enter the email of an existing platform user</div>
+                <label class="form-label">Existing User (Email or Phone) <span class="text-danger">*</span></label>
+                <input type="email" class="form-control mb-2" name="email" placeholder="Email (optional)">
+                <input type="text" class="form-control" name="phone_number" placeholder="Phone (optional, 01XXXXXXXXX)">
+                <div class="form-text">Provide either email or phone number for an existing platform user</div>
               </div>
               <div class="mb-3">
                 <label class="form-label">Company Name</label>
@@ -1489,6 +1491,19 @@ document.getElementById('saveCustomerBtn').addEventListener('click', async () =>
   const form = isNewCustomer ? document.getElementById('newCustomerForm') : document.getElementById('linkCustomerForm');
   const formData = new FormData(form);
   const data = Object.fromEntries(formData.entries());
+
+  // Option B UX validation
+  if (isNewCustomer) {
+    if (!data.phone_number) {
+      showToast('Error', 'Phone number is required (customer uses it for Forgot Password OTP).', 'error');
+      return;
+    }
+  } else {
+    if (!data.email && !data.phone_number) {
+      showToast('Error', 'Provide email or phone number to link an existing user.', 'error');
+      return;
+    }
+  }
   
   // Remove empty values
   Object.keys(data).forEach(key => {
