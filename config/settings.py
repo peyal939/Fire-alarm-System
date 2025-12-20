@@ -69,13 +69,33 @@ MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "firealarm")
 MONGO_COLLECTION_NAME = os.getenv("MONGO_COLLECTION_NAME", "sensordata")
 
 # SMS / OTP configuration
+def _parse_optional_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized == "":
+        return None
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    # Unknown value: treat as False (safe default)
+    return False
+
+
+_sms_url = os.getenv("SMS_GATEWAY_URL", "").strip()
+_sms_api_key = os.getenv("SMS_GATEWAY_API_KEY", "").strip()
+_sms_secret_key = os.getenv("SMS_GATEWAY_SECRET_KEY", "").strip()
+_sms_enabled_override = _parse_optional_bool(os.getenv("SMS_GATEWAY_ENABLED"))
+
 SMS_GATEWAY = {
-    "url": os.getenv("SMS_GATEWAY_URL", "").strip(),
-    "api_key": os.getenv("SMS_GATEWAY_API_KEY", "").strip(),
-    "secret_key": os.getenv("SMS_GATEWAY_SECRET_KEY", "").strip(),
+    "url": _sms_url,
+    "api_key": _sms_api_key,
+    "secret_key": _sms_secret_key,
     "caller_id": os.getenv("SMS_GATEWAY_CALLER_ID", "praniSheba"),
     "timeout": int(os.getenv("SMS_GATEWAY_TIMEOUT_SECONDS", "10") or "10"),
-    "enabled": os.getenv("SMS_GATEWAY_ENABLED", "false").lower() == "true",
+    # If SMS_GATEWAY_ENABLED is blank/unset, default to enabled when a URL is provided.
+    "enabled": _sms_enabled_override if _sms_enabled_override is not None else bool(_sms_url),
 }
 if not SMS_GATEWAY["url"]:
     SMS_GATEWAY["enabled"] = False

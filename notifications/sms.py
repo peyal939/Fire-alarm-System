@@ -57,7 +57,7 @@ class SMSClient:
         try:
             response = requests.post(
                 self.config.url,
-                json=payload,
+                data=payload,
                 timeout=self.config.timeout,
             )
             response.raise_for_status()
