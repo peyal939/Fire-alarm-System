@@ -243,6 +243,92 @@ if DEBUG:
         "https://*.trycloudflare.com",
     ]
 
+
+def _get_pymysql_converters():
+    """
+    Return PyMySQL converters that ensure datetime/date/time fields are properly
+    converted to Python datetime objects, even if stored as strings in MySQL.
+    
+    This fixes: AttributeError: 'str' object has no attribute 'utcoffset'
+    which occurs when Django's timezone.make_aware() receives a string instead
+    of a datetime object.
+    """
+    from datetime import datetime, date, time
+    try:
+        from pymysql.converters import conversions, FIELD_TYPE
+    except ImportError:
+        return {}  # PyMySQL not installed, skip custom converters
+    
+    converters = conversions.copy()
+    
+    def _convert_datetime(val):
+        """Convert datetime value, handling both datetime objects and strings."""
+        if val is None:
+            return None
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, str):
+            val = val.strip()
+            if not val or val in ('0000-00-00 00:00:00', '0000-00-00'):
+                return None
+            # Try common datetime formats
+            for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f'):
+                try:
+                    return datetime.strptime(val, fmt)
+                except ValueError:
+                    continue
+            # Last resort: try date only
+            try:
+                return datetime.strptime(val, '%Y-%m-%d')
+            except ValueError:
+                return None
+        return val
+    
+    def _convert_date(val):
+        """Convert date value, handling both date objects and strings."""
+        if val is None:
+            return None
+        if isinstance(val, date) and not isinstance(val, datetime):
+            return val
+        if isinstance(val, datetime):
+            return val.date()
+        if isinstance(val, str):
+            val = val.strip()
+            if not val or val == '0000-00-00':
+                return None
+            try:
+                return datetime.strptime(val, '%Y-%m-%d').date()
+            except ValueError:
+                return None
+        return val
+    
+    def _convert_time(val):
+        """Convert time value, handling both time objects and strings."""
+        if val is None:
+            return None
+        if isinstance(val, time):
+            return val
+        if isinstance(val, str):
+            val = val.strip()
+            if not val:
+                return None
+            for fmt in ('%H:%M:%S', '%H:%M:%S.%f', '%H:%M'):
+                try:
+                    return datetime.strptime(val, fmt).time()
+                except ValueError:
+                    continue
+            return None
+        return val
+    
+    # Override converters for datetime field types
+    converters[FIELD_TYPE.DATETIME] = _convert_datetime
+    converters[FIELD_TYPE.TIMESTAMP] = _convert_datetime
+    converters[FIELD_TYPE.DATE] = _convert_date
+    converters[FIELD_TYPE.TIME] = _convert_time
+    
+    return converters
+
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -259,6 +345,10 @@ DATABASES = {
             "read_timeout": 30,
             # Write timeout
             "write_timeout": 30,
+            # PyMySQL converters: ensure datetime fields are returned as proper
+            # datetime objects, not strings. This prevents AttributeError when
+            # Django's timezone.make_aware() receives a string instead of datetime.
+            "conv": _get_pymysql_converters(),
         },
         # Persist connections for 10 minutes to reduce connection overhead
         # Set to None for unlimited persistence (until server closes)
