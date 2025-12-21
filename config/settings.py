@@ -20,6 +20,10 @@ try:
 except Exception:
     pass
 
+# Patch Django's MySQL backend to handle datetime strings
+# This MUST be imported AFTER pymysql.install_as_MySQLdb() but BEFORE Django DB operations
+from config import mysql_datetime_patch  # noqa: F401
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env
