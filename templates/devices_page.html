@@ -114,10 +114,27 @@
     
     #mapPickerMaster, #mapPickerSlave, #mapPickerClaim { height: 280px; }
     
-    /* Ensure Choices dropdown is collapsed by default and not fixed-open */
+    /* Choices.js dropdown styling with scrollbar */
     .choices__list--dropdown {
-      max-height: 240px;
+      max-height: 250px;
       overflow-y: auto;
+    }
+    
+    /* Ensure dropdown in modal is not clipped */
+    #registerForUserModal .modal-body {
+      overflow: visible;
+    }
+    #registerForUserModal .choices {
+      position: relative;
+    }
+    #registerForUserModal .choices__list--dropdown {
+      position: absolute;
+      width: 100%;
+      z-index: 1050;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,.15);
+      border-radius: 0.25rem;
+      box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
     }
     
     .empty-state {
@@ -1550,7 +1567,12 @@
         allAdminUsersCache.forEach(u => {
           const opt = document.createElement('option');
           opt.value = u.id;
-          opt.textContent = u.email || u.phone_number || `User #${u.id}`;
+          // Show email and phone number together for easier identification
+          let label = u.email || '';
+          if (u.phone_number) {
+            label = label ? `${label} (${u.phone_number})` : u.phone_number;
+          }
+          opt.textContent = label || `User #${u.id}`;
           targetUserIdInput.appendChild(opt);
         });
         if (!userChoicesInstance && window.Choices) {
