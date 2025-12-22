@@ -314,11 +314,23 @@ class ReturnView(APIView):
             txn, success, payload = _update_transaction_from_verification(
                 order_id, verified
             )
+            # Determine redirect URL based on transaction type
+            actual_order_id = None  # The Order model ID, not sp_order_id
             if txn and (
                 (txn.reference or "").startswith("order:")
                 or (isinstance(txn.request_payload, dict) and txn.request_payload.get("order_id"))
             ):
-                redirect_url = _orders_redirect_url()
+                # Extract actual order ID from reference or request_payload
+                if (txn.reference or "").startswith("order:"):
+                    actual_order_id = txn.reference.split(":")[1] if ":" in txn.reference else None
+                elif isinstance(txn.request_payload, dict):
+                    actual_order_id = txn.request_payload.get("order_id")
+                
+                if success and actual_order_id:
+                    # Redirect to payment success page with order_id for successful order payments
+                    redirect_url = f"/app/payment/success/?order_id={actual_order_id}"
+                else:
+                    redirect_url = _orders_redirect_url()
             info.update(
                 {
                     "success": success,
@@ -373,16 +385,29 @@ class CancelView(APIView):
             or PaymentTransaction.objects.filter(customer_order_id=order_id).first()
         )
         redirect_url = reverse("subscriptions:user-dashboard")
+        is_order_payment = False
+        product_order_id = None
+        
         if txn:
             txn.status = PaymentTransactionStatus.CANCELLED
             txn.save(update_fields=["status"])
             _sync_subscription_charge(txn)
             _sync_order(txn)
-            if (
-                (txn.reference or "").startswith("order:")
-                or (isinstance(txn.request_payload, dict) and txn.request_payload.get("order_id"))
-            ):
+            
+            # Check if this was an order payment
+            if txn.reference and txn.reference.startswith("order:"):
+                is_order_payment = True
+                try:
+                    product_order_id = txn.reference.split(":")[1]
+                except (IndexError, ValueError):
+                    pass
+            elif isinstance(txn.request_payload, dict) and txn.request_payload.get("order_id"):
+                is_order_payment = True
+                product_order_id = txn.request_payload.get("order_id")
+            
+            if is_order_payment:
                 redirect_url = _orders_redirect_url()
+        
         info = {"message": "Payment cancelled", "order_id": order_id or None}
         info["redirect_url"] = redirect_url
         wants_json = (
@@ -392,6 +417,14 @@ class CancelView(APIView):
         )
         if wants_json:
             return Response(info)
+        
+        # For order payments, redirect to payment failed page with order info
+        if is_order_payment:
+            failed_url = "/app/payment/failed/"
+            if product_order_id:
+                failed_url += f"?order_id={product_order_id}&error=Payment%20was%20cancelled"
+            return redirect(failed_url)
+        
         messages.warning(request, "Payment was cancelled before completion.")
         return redirect(redirect_url)
 

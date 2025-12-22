@@ -86,6 +86,15 @@ class Device(AuditSoftDeleteModel):
         related_name="devices",
         help_text="Order that supplied this physical device",
     )
+    # Reseller who sold this device to the end user
+    reseller = models.ForeignKey(
+        "resellers.Reseller",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sold_devices",
+        help_text="Reseller who sold this device to the end user",
+    )
     package = models.ForeignKey(
         "products.Package",
         null=True,
@@ -136,6 +145,8 @@ class Device(AuditSoftDeleteModel):
             models.Index(fields=["device_role"]),
             models.Index(fields=["master"]),
             models.Index(fields=["originating_order"]),
+            # Composite index for common query pattern: lookup by hardware_id excluding soft-deleted
+            models.Index(fields=["hardware_identifier", "deleted_at"]),
         ]
         # Default ordering surfaces most recently active devices first while preserving stability
         ordering = ["-last_seen", "-registered_at"]

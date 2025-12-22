@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -12,6 +13,8 @@ from devices.alarm_state import schedule_next_reminder
 from devices.constants import AlertType
 from devices.enums import AlertStatus
 from devices.models import Device, Alert
+from products.models import Package, Order, OrderFulfillment
+from products.enums import OrderStatus
 
 
 def get_items(data):
@@ -19,21 +22,43 @@ def get_items(data):
     return data["results"] if isinstance(data, dict) and "results" in data else data
 
 
+def create_fulfillment(user, hid, role="master"):
+    """Helper to create order fulfillment for device registration."""
+    package, _ = Package.objects.get_or_create(
+        name="TestPackage",
+        defaults={
+            "min_quantity": 1,
+            "max_quantity": 5,
+            "price_per_device": Decimal("100.00"),
+            "mrf": Decimal("10.00"),
+        },
+    )
+    order = Order.objects.create(
+        user=user,
+        package=package,
+        quantity=1,
+        amount=Decimal("100.00"),
+        order_status=OrderStatus.PAID,
+    )
+    OrderFulfillment.objects.create(
+        order=order,
+        hardware_identifier=hid,
+        device_role=role,
+    )
+    return order
+
+
 class AlertResolveAndTelemetryFilterTests(APITestCase):
     def setUp(self):
-        # Create user and register device
-        r = self.client.post(
-            "/auth/register",
-            {"email": "filters@example.com", "password": "Passw0rd!"},
-            format="json",
+        # Create user and authenticate directly (bypasses OTP requirement)
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="filters@example.com", password="Passw0rd!"
         )
-        r = self.client.post(
-            "/auth/login",
-            {"email": "filters@example.com", "password": "Passw0rd!"},
-            format="json",
-        )
-        token = r.data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        self.client.force_authenticate(user=self.user)
+
+        # Create fulfillment before device registration
+        create_fulfillment(self.user, "DEVF")
 
         r = self.client.post(
             "/devices/register/",
@@ -47,7 +72,6 @@ class AlertResolveAndTelemetryFilterTests(APITestCase):
         )
         self.device_id = r.data["id"]
         self.device = Device.objects.get(id=self.device_id)
-        self.user = get_user_model().objects.get(email="filters@example.com")
 
     def test_alert_resolve_action(self):
         # Trigger only smoke_high alert (device_status is healthy)

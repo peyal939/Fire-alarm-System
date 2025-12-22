@@ -20,14 +20,39 @@ try:
 except Exception:
     pass
 
+# Patch Django's MySQL backend to handle datetime strings
+# This MUST be imported AFTER pymysql.install_as_MySQLdb() but BEFORE Django DB operations
+from config import mysql_datetime_patch  # noqa: F401
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me")
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+
+# SECRET_KEY: Use env var in production, allow default only in DEBUG mode
+_secret_key_env = os.getenv("DJANGO_SECRET_KEY", "").strip()
+if _secret_key_env:
+    SECRET_KEY = _secret_key_env
+elif DEBUG:
+    # Allow insecure default only during local development
+    SECRET_KEY = "dev-only-insecure-key-not-for-production"
+else:
+    raise RuntimeError(
+        "DJANGO_SECRET_KEY environment variable is required in production (DEBUG=False). "
+        "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
+
+# ALLOWED_HOSTS: In production, require explicit hosts; allow wildcard only in DEBUG
+_allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "").strip()
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
+elif DEBUG:
+    ALLOWED_HOSTS = ["*"]  # Allow all hosts in development
+else:
+    # Production without explicit ALLOWED_HOSTS - use safe default
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 APP_NAME = os.getenv("APP_NAME", "apS Fire Backend")
 HOST = os.getenv("HOST", "0.0.0.0")
@@ -48,13 +73,33 @@ MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "firealarm")
 MONGO_COLLECTION_NAME = os.getenv("MONGO_COLLECTION_NAME", "sensordata")
 
 # SMS / OTP configuration
+def _parse_optional_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized == "":
+        return None
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    # Unknown value: treat as False (safe default)
+    return False
+
+
+_sms_url = os.getenv("SMS_GATEWAY_URL", "").strip()
+_sms_api_key = os.getenv("SMS_GATEWAY_API_KEY", "").strip()
+_sms_secret_key = os.getenv("SMS_GATEWAY_SECRET_KEY", "").strip()
+_sms_enabled_override = _parse_optional_bool(os.getenv("SMS_GATEWAY_ENABLED"))
+
 SMS_GATEWAY = {
-    "url": os.getenv("SMS_GATEWAY_URL", "").strip(),
-    "api_key": os.getenv("SMS_GATEWAY_API_KEY", "").strip(),
-    "secret_key": os.getenv("SMS_GATEWAY_SECRET_KEY", "").strip(),
+    "url": _sms_url,
+    "api_key": _sms_api_key,
+    "secret_key": _sms_secret_key,
     "caller_id": os.getenv("SMS_GATEWAY_CALLER_ID", "praniSheba"),
     "timeout": int(os.getenv("SMS_GATEWAY_TIMEOUT_SECONDS", "10") or "10"),
-    "enabled": os.getenv("SMS_GATEWAY_ENABLED", "false").lower() == "true",
+    # If SMS_GATEWAY_ENABLED is blank/unset, default to enabled when a URL is provided.
+    "enabled": _sms_enabled_override if _sms_enabled_override is not None else bool(_sms_url),
 }
 if not SMS_GATEWAY["url"]:
     SMS_GATEWAY["enabled"] = False
@@ -72,7 +117,9 @@ OTP_SETTINGS = {
         "OTP_SMS_TEMPLATE",
         "Your praniSheba {purpose} code is {code}. It expires in {minutes} minutes.",
     ),
-    "test_bypass_code": os.getenv("OTP_TEST_BYPASS_CODE", "").strip() or None,
+    # SECURITY: OTP bypass code is only allowed in DEBUG mode (local development)
+    # In production (DEBUG=False), this is always None regardless of env var
+    "test_bypass_code": (os.getenv("OTP_TEST_BYPASS_CODE", "").strip() or None) if DEBUG else None,
     "login_enforced": os.getenv("OTP_LOGIN_ENFORCED", "true").lower() == "true",
 }
 
@@ -143,6 +190,7 @@ INSTALLED_APPS = [
     "otp",
     "firestations",
     "subscriptions",
+    "resellers",
     "drf_spectacular",
     "drf_spectacular_sidecar",
     "shurjopay",
@@ -199,6 +247,92 @@ if DEBUG:
         "https://*.trycloudflare.com",
     ]
 
+
+def _get_pymysql_converters():
+    """
+    Return PyMySQL converters that ensure datetime/date/time fields are properly
+    converted to Python datetime objects, even if stored as strings in MySQL.
+    
+    This fixes: AttributeError: 'str' object has no attribute 'utcoffset'
+    which occurs when Django's timezone.make_aware() receives a string instead
+    of a datetime object.
+    """
+    from datetime import datetime, date, time
+    try:
+        from pymysql.converters import conversions, FIELD_TYPE
+    except ImportError:
+        return {}  # PyMySQL not installed, skip custom converters
+    
+    converters = conversions.copy()
+    
+    def _convert_datetime(val):
+        """Convert datetime value, handling both datetime objects and strings."""
+        if val is None:
+            return None
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, str):
+            val = val.strip()
+            if not val or val in ('0000-00-00 00:00:00', '0000-00-00'):
+                return None
+            # Try common datetime formats
+            for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f'):
+                try:
+                    return datetime.strptime(val, fmt)
+                except ValueError:
+                    continue
+            # Last resort: try date only
+            try:
+                return datetime.strptime(val, '%Y-%m-%d')
+            except ValueError:
+                return None
+        return val
+    
+    def _convert_date(val):
+        """Convert date value, handling both date objects and strings."""
+        if val is None:
+            return None
+        if isinstance(val, date) and not isinstance(val, datetime):
+            return val
+        if isinstance(val, datetime):
+            return val.date()
+        if isinstance(val, str):
+            val = val.strip()
+            if not val or val == '0000-00-00':
+                return None
+            try:
+                return datetime.strptime(val, '%Y-%m-%d').date()
+            except ValueError:
+                return None
+        return val
+    
+    def _convert_time(val):
+        """Convert time value, handling both time objects and strings."""
+        if val is None:
+            return None
+        if isinstance(val, time):
+            return val
+        if isinstance(val, str):
+            val = val.strip()
+            if not val:
+                return None
+            for fmt in ('%H:%M:%S', '%H:%M:%S.%f', '%H:%M'):
+                try:
+                    return datetime.strptime(val, fmt).time()
+                except ValueError:
+                    continue
+            return None
+        return val
+    
+    # Override converters for datetime field types
+    converters[FIELD_TYPE.DATETIME] = _convert_datetime
+    converters[FIELD_TYPE.TIMESTAMP] = _convert_datetime
+    converters[FIELD_TYPE.DATE] = _convert_date
+    converters[FIELD_TYPE.TIME] = _convert_time
+    
+    return converters
+
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -209,7 +343,22 @@ DATABASES = {
         "PORT": os.getenv("MYSQL_PORT", "3306"),
         "OPTIONS": {
             "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
+            # Connection timeout to prevent hanging connections
+            "connect_timeout": 10,
+            # Read timeout for long queries
+            "read_timeout": 30,
+            # Write timeout
+            "write_timeout": 30,
+            # PyMySQL converters: ensure datetime fields are returned as proper
+            # datetime objects, not strings. This prevents AttributeError when
+            # Django's timezone.make_aware() receives a string instead of datetime.
+            "conv": _get_pymysql_converters(),
         },
+        # Persist connections for 10 minutes to reduce connection overhead
+        # Set to None for unlimited persistence (until server closes)
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "600")),
+        # Enable connection health checks before reusing a connection
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
@@ -342,12 +491,19 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": os.getenv("OPENAPI_VERSION", "1.0.0"),
     "SERVE_INCLUDE_SCHEMA": False,
+    # Use path-based operation ID to avoid collisions
+    "OPERATION_ID_CALLBACK": "drf_spectacular.extensions.OpenApiViewExtension.get_operation_id",
     "ENUM_NAME_OVERRIDES": {
         "PaymentTransactionStatusEnum": "shurjopay.enums.PaymentTransactionStatus",
         "DeviceSubscriptionStatusEnum": "subscriptions.enums.DeviceSubscriptionStatus",
         "SubscriptionChargeStatusEnum": "subscriptions.enums.SubscriptionChargeStatus",
         "AlertStatusEnum": "devices.enums.AlertStatus",
         "NotificationStatusEnum": "notifications.enums.NotificationStatus",
+        "OrderStatusEnum": "products.enums.OrderStatus",
+        "PaymentMethodEnum": "products.enums.PaymentMethod",
+        "InvoiceStatusEnum": "subscriptions.enums.InvoiceStatus",
+        "UserRoleEnum": "accounts.models.User.Role",
+        "DeviceRoleEnum": "devices.models.Device.DeviceRole",
     },
 }
 

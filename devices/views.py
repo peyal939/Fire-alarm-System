@@ -21,7 +21,9 @@ from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiResponse,
     OpenApiTypes,
+    inline_serializer,
 )
+from rest_framework import serializers as drf_serializers
 
 from . import services
 from .enums import AlertStatus
@@ -152,9 +154,17 @@ class DeviceViewSet(viewsets.ModelViewSet):
         if getattr(user, "role", None) == "superadmin" or user.is_superuser:
             return base
 
+        # Company admin: see devices from their orders
         if getattr(user, "role", None) == "company_admin":
             return base.filter(
                 Q(user=user) | Q(originating_order__user=user)
+            ).distinct()
+
+        # Reseller: see devices they've sold
+        reseller = getattr(user, "reseller_account", None)
+        if reseller and reseller.is_active:
+            return base.filter(
+                Q(user=user) | Q(reseller=reseller)
             ).distinct()
 
         # For normal users, we return ALL their devices so they can see "Suspended" status.
@@ -578,17 +588,16 @@ class DeviceViewSet(viewsets.ModelViewSet):
         tags=["Devices"],
         summary="Admin register a device for any user",
         description="Admin-only endpoint to register a device for any user by their email.",
-        request={
-            "type": "object",
-            "properties": {
-                "hardware_identifier": {"type": "string"},
-                "device_name": {"type": "string"},
-                "user_email": {"type": "string", "format": "email"},
-                "device_role": {"type": "string", "enum": ["master", "slave"]},
-                "package_id": {"type": "integer"},
+        request=inline_serializer(
+            name="AdminRegisterDeviceRequest",
+            fields={
+                "hardware_identifier": drf_serializers.CharField(),
+                "device_name": drf_serializers.CharField(required=False, allow_blank=True),
+                "user_email": drf_serializers.EmailField(),
+                "device_role": drf_serializers.ChoiceField(choices=["master", "slave"], required=False),
+                "package_id": drf_serializers.IntegerField(required=False),
             },
-            "required": ["hardware_identifier", "user_email"],
-        },
+        ),
         responses={201: DeviceSerializer},
     )
     @action(detail=False, methods=["post"], url_path="admin-register")
@@ -820,6 +829,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         phone_number = ser.validated_data["phone_number"]
         try:
+            # Transaction ensures DB rollback if MQTT publish fails
             with transaction.atomic():
                 now = timezone.now()
                 device.phone_number = phone_number
@@ -842,7 +852,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        device.refresh_from_db(fields=["phone_number", "phone_number_updated_at"])
         device.refresh_from_db(fields=["phone_number", "phone_number_updated_at"])
         return Response(self.get_serializer(device).data, status=200)
 

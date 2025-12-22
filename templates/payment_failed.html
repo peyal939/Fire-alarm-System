@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Payment Failed{% endblock %}
+{% block extra_css %}
+<style>
+  .payment-result-container {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+  
+  .error-icon {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 2rem;
+    animation: shake 0.5s ease-in-out;
+  }
+  
+  .error-icon i {
+    font-size: 4rem;
+    color: white;
+  }
+  
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-10px); }
+    40%, 80% { transform: translateX(10px); }
+  }
+  
+  .error-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #dc3545;
+    margin-bottom: 1rem;
+  }
+  
+  .error-message {
+    font-size: 1.1rem;
+    color: #6c757d;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+  }
+  
+  .action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .action-buttons .btn {
+    padding: 0.75rem 2rem;
+    font-weight: 500;
+    border-radius: 10px;
+  }
+  
+  .help-section {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 2rem;
+    text-align: left;
+  }
+  
+  .help-section h6 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 1rem;
+  }
+  
+  .help-section ul {
+    color: #6c757d;
+    padding-left: 1.25rem;
+    margin-bottom: 0;
+  }
+  
+  .help-section li {
+    margin-bottom: 0.5rem;
+  }
+  
+  .error-code {
+    background: #f8d7da;
+    color: #842029;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="payment-result-container">
+  
+  <div class="error-icon">
+    <i class="bi bi-x-lg"></i>
+  </div>
+  
+  <h1 class="error-title">Payment Failed</h1>
+  
+  <p class="error-message">
+    We couldn't process your payment. Don't worry, no charges have been made to your account.
+    Please try again or use a different payment method.
+  </p>
+  
+  <div class="error-code" id="errorCode">
+    <!-- Error details if available -->
+  </div>
+  
+  <div class="action-buttons" id="actionButtons">
+    <a href="/app/orders/" class="btn btn-primary">
+      <i class="bi bi-arrow-repeat me-2"></i>View My Orders
+    </a>
+    <a href="/app/products/" class="btn btn-outline-secondary">
+      <i class="bi bi-box-seam me-2"></i>Continue Shopping
+    </a>
+  </div>
+  
+  <div class="help-section">
+    <h6><i class="bi bi-question-circle me-2"></i>Common reasons for payment failure:</h6>
+    <ul>
+      <li>Insufficient funds in your account</li>
+      <li>Incorrect card details entered</li>
+      <li>Card expired or not activated for online transactions</li>
+      <li>Transaction declined by your bank</li>
+      <li>Network connectivity issues</li>
+    </ul>
+    <p class="mt-3 mb-0 small text-muted">
+      If the problem persists, please contact your bank or our support team.
+    </p>
+  </div>
+  
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  // Try to get error info from URL params
+  const urlParams = new URLSearchParams(window.location.search);
+  const errorMsg = urlParams.get('error');
+  const orderId = urlParams.get('order_id');
+  
+  if (errorMsg) {
+    const errorCode = document.getElementById('errorCode');
+    errorCode.textContent = 'Error: ' + decodeURIComponent(errorMsg);
+    errorCode.style.display = 'block';
+  }
+  
+  // If we have an order ID, show more specific actions
+  if (orderId) {
+    const actionsDiv = document.getElementById('actionButtons');
+    const userId = localStorage.getItem('user_id') || '';
+    
+    actionsDiv.innerHTML = `
+      <button class="btn btn-primary" id="retryPayBtn">
+        <i class="bi bi-credit-card me-2"></i>Retry Payment
+      </button>
+      <button class="btn btn-warning" id="switchCodBtn">
+        <i class="bi bi-cash me-2"></i>Switch to Cash on Delivery
+      </button>
+      <a href="/app/orders/" class="btn btn-outline-secondary">
+        <i class="bi bi-list me-2"></i>View All Orders
+      </a>
+    `;
+    
+    // Retry payment button
+    document.getElementById('retryPayBtn').addEventListener('click', async function() {
+      const btn = this;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+      
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/orders/${userId}/${orderId}/pay/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({})
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.checkout_url) {
+            window.location.href = result.checkout_url;
+            return;
+          }
+        }
+        
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to initiate payment');
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert(e.message || 'Failed to retry payment. Please try from your orders page.');
+      }
+    });
+    
+    // Switch to COD button
+    document.getElementById('switchCodBtn').addEventListener('click', async function() {
+      const btn = this;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Switching...';
+      
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/orders/${userId}/${orderId}/payment-method/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ payment_method: 'cod' })
+        });
+        
+        if (response.ok) {
+          alert('Switched to Cash on Delivery! Our team will confirm your order.');
+          window.location.href = '/app/orders/';
+          return;
+        }
+        
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to switch payment method');
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert(e.message || 'Failed to switch payment method. Please try from your orders page.');
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

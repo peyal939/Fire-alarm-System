@@ -4,7 +4,7 @@ from django.urls import path
 from django.utils.html import format_html
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from .models import Package, Order
+from .models import Package, Order, Cart, CartItem
 from .enums import OrderStatus
 from .forms import OrderFulfillmentForm
 from .services import fulfill_order
@@ -102,3 +102,35 @@ class OrderAdmin(admin.ModelAdmin):
         )
     fulfillment_actions.short_description = "Fulfillment"
     fulfillment_actions.allow_tags = True
+
+
+class CartItemInline(admin.TabularInline):
+    model = CartItem
+    extra = 0
+    readonly_fields = ("line_total", "added_at")
+    raw_id_fields = ("package",)
+
+
+@admin.register(Cart)
+class CartAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "item_count",
+        "cart_total",
+        "expires_at",
+        "is_expired",
+        "created_at",
+    )
+    list_filter = ("expires_at",)
+    search_fields = ("user__email",)
+    readonly_fields = ("created_at", "updated_at", "cart_total", "is_expired")
+    inlines = [CartItemInline]
+
+    def item_count(self, obj):
+        return obj.items.count()
+    item_count.short_description = "Items"
+
+    def cart_total(self, obj):
+        return f"BDT {obj.get_total():,.2f}"
+    cart_total.short_description = "Total"

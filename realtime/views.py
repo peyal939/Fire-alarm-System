@@ -265,7 +265,8 @@ def alerts_page(request):
 
 @login_required(login_url="/login")
 def products_page(request):
-    return render(request, "products_page.html")
+    is_admin = request.user.is_superuser or (hasattr(request.user, 'role') and request.user.role == 'superadmin')
+    return render(request, "products_page.html", {"is_admin": is_admin})
 
 
 @login_required(login_url="/login")
@@ -273,11 +274,30 @@ def firestations_page(request):
     return render(request, "firestations_page.html")
 
 
+@login_required(login_url="/login")
+def reseller_panel(request):
+    """Reseller panel for company admins with reseller accounts."""
+    user = request.user
+    # Check if user has a reseller account
+    reseller = getattr(user, "reseller_account", None)
+    if not reseller:
+        # Check if user is company_admin and can register
+        if getattr(user, "role", "") == "company_admin":
+            return render(request, "reseller_register.html")
+        # Otherwise redirect to home
+        from django.contrib import messages
+        messages.error(request, "You don't have access to the reseller panel.")
+        return redirect("/")
+    
+    return render(request, "reseller_panel.html", {"reseller": reseller})
+
+
 @superadmin_required
 def admin_panel(request):
+    from django.db.models import Sum
     from devices.models import Device
     from subscriptions.models import DeviceSubscription
-    from products.models import Package
+    from products.models import Package, Order
 
     users = User.objects.filter(deleted_at__isnull=True).order_by("-created_at")
     devices = (
@@ -291,6 +311,13 @@ def admin_panel(request):
     total_users = users.count()
     total_devices = devices.count()
     active_subscriptions = DeviceSubscription.objects.filter(status="active").count()
+    
+    # Order stats
+    total_orders = Order.objects.filter(deleted_at__isnull=True).count()
+    total_revenue = Order.objects.filter(
+        deleted_at__isnull=True,
+        order_status__in=['paid', 'processing', 'shipped', 'delivered']
+    ).aggregate(total=Sum('amount'))['total'] or 0
 
     return render(
         request,
@@ -302,6 +329,8 @@ def admin_panel(request):
             "total_users": total_users,
             "total_devices": total_devices,
             "active_subscriptions": active_subscriptions,
+            "total_orders": total_orders,
+            "total_revenue": total_revenue,
         },
     )
 
@@ -309,3 +338,50 @@ def admin_panel(request):
 @login_required(login_url="/login")
 def account_settings_page(request):
     return render(request, "account_settings.html")
+
+
+# ==================== E-Commerce Pages ====================
+
+@login_required(login_url="/login")
+def cart_page(request):
+    """Shopping cart page for non-admin users."""
+    # Admins should not access cart
+    if request.user.is_superuser or getattr(request.user, 'role', '') == 'superadmin':
+        from django.shortcuts import redirect
+        return redirect('products_page')
+    return render(request, "cart_page.html")
+
+
+@login_required(login_url="/login")
+def checkout_page(request):
+    """Checkout page for non-admin users."""
+    # Admins should not access checkout
+    if request.user.is_superuser or getattr(request.user, 'role', '') == 'superadmin':
+        from django.shortcuts import redirect
+        return redirect('products_page')
+    return render(request, "checkout_page.html")
+
+
+@login_required(login_url="/login")
+def orders_page(request):
+    """Orders list page for users."""
+    return render(request, "orders_page.html")
+
+
+@login_required(login_url="/login")
+def order_detail_page(request, order_id):
+    """Order detail page."""
+    return render(request, "order_detail_page.html", {"order_id": order_id})
+
+
+@login_required(login_url="/login")
+def payment_success_page(request):
+    """Payment success confirmation page."""
+    return render(request, "payment_success.html")
+
+
+@login_required(login_url="/login")
+def payment_failed_page(request):
+    """Payment failed page."""
+    return render(request, "payment_failed.html")
+

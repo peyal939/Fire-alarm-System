@@ -1,29 +1,55 @@
+from decimal import Decimal
 from unittest import mock
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from devices.constants import DeviceConfigurationPublishError
 from devices.models import Device
+from products.models import Package, Order, OrderFulfillment
+from products.enums import OrderStatus
+
+
+def create_fulfillment(user, hid, role="master"):
+    """Helper to create order fulfillment for device registration."""
+    package, _ = Package.objects.get_or_create(
+        name="TestPackage",
+        defaults={
+            "min_quantity": 1,
+            "max_quantity": 5,
+            "price_per_device": Decimal("100.00"),
+            "mrf": Decimal("10.00"),
+        },
+    )
+    order = Order.objects.create(
+        user=user,
+        package=package,
+        quantity=1,
+        amount=Decimal("100.00"),
+        order_status=OrderStatus.PAID,
+    )
+    OrderFulfillment.objects.create(
+        order=order,
+        hardware_identifier=hid,
+        device_role=role,
+    )
+    return order
 
 
 class DevicePhoneAssignmentTests(APITestCase):
     def setUp(self):
-        self.client.post(
-            "/auth/register",
-            {"email": "owner@example.com", "password": "Passw0rd!"},
-            format="json",
+        # Create user and authenticate directly (bypasses OTP requirement)
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email="owner@example.com", password="Passw0rd!"
         )
-        login = self.client.post(
-            "/auth/login",
-            {"email": "owner@example.com", "password": "Passw0rd!"},
-            format="json",
-        )
-        self.token = login.data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+        self.client.force_authenticate(user=self.user)
 
     def _register_device(self) -> Device:
+        # Create fulfillment before device registration
+        create_fulfillment(self.user, "DEV-PHONE")
         response = self.client.post(
             "/devices/register/",
             {

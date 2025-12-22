@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 
-from .models import Package, Order
+from .models import Package, Order, OrderFulfillment
+from .enums import PaymentMethod
 from .services import calculate_order_total
 
 
@@ -21,7 +24,23 @@ class PackageSerializer(serializers.ModelSerializer):
         read_only_fields = ("id",)
 
 
+class PackageSummarySerializer(serializers.ModelSerializer):
+    """Minimal package info for order display (with pricing)."""
+    class Meta:
+        model = Package
+        fields = ("id", "name", "price_per_device", "mrf", "min_quantity", "max_quantity")
+
+
 class OrderSerializer(serializers.ModelSerializer):
+    # Additional fields for admin panel display
+    user_email = serializers.SerializerMethodField()
+    user_phone = serializers.SerializerMethodField()
+    package_name = serializers.SerializerMethodField()
+    total_amount = serializers.DecimalField(source='amount', max_digits=10, decimal_places=2, read_only=True)
+    status = serializers.CharField(source='order_status', read_only=True)
+    created_at = serializers.DateTimeField(source='ordered_at', read_only=True)
+    package = PackageSummarySerializer(read_only=True)
+    
     class Meta:
         model = Order
         fields = (
@@ -40,23 +59,53 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer_city",
             "customer_post_code",
             "customer_email",
+            "payment_method",
             "order_status",
             "gateway_transaction_id",
             "gateway_response",
             "shipping_address",
             "ordered_at",
             "assigned_devices",
+            # Additional computed fields for admin panel
+            "user_email",
+            "user_phone",
+            "package_name",
+            "total_amount",
+            "status",
+            "created_at",
         )
         read_only_fields = (
             "id",
             "user",
             "amount",
             "reference",
+            "payment_method",
             "order_status",
             "gateway_transaction_id",
             "gateway_response",
             "ordered_at",
         )
+    
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_user_email(self, obj) -> str | None:
+        if obj.user:
+            return obj.user.email or obj.user.get_username()
+        return None
+    
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_user_phone(self, obj) -> str | None:
+        # Try customer_phone first, then user's phone
+        if obj.customer_phone:
+            return obj.customer_phone
+        if obj.user and hasattr(obj.user, 'phone'):
+            return obj.user.phone
+        return None
+    
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_package_name(self, obj) -> str | None:
+        if obj.package:
+            return obj.package.name
+        return None
 
 
 class OrderCreateSerializer(serializers.Serializer):
@@ -67,6 +116,10 @@ class OrderCreateSerializer(serializers.Serializer):
     number_of_master_devices = serializers.IntegerField(min_value=0, default=1)
     number_of_slave_devices = serializers.IntegerField(min_value=0, default=1)
     shipping_address = serializers.CharField(allow_blank=True, required=False)
+    payment_method = serializers.ChoiceField(
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.ONLINE,
+    )
     # optional customer info (reference is server-assigned)
     currency = serializers.CharField(required=False, allow_blank=True, default="BDT")
     customer_name = serializers.CharField(required=False, allow_blank=True)
@@ -112,6 +165,7 @@ class OrderCreateSerializer(serializers.Serializer):
         total = calculate_order_total(package, qty)
         master_devices = validated_data.get("number_of_master_devices", 1)
         slave_devices = validated_data.get("number_of_slave_devices", 1)
+        payment_method = validated_data.get("payment_method", PaymentMethod.ONLINE)
         # build kwargs for optional customer/currency fields; reference will be assigned server-side
         extra = {
             "currency": validated_data.get("currency", "BDT") or "BDT",
@@ -121,6 +175,7 @@ class OrderCreateSerializer(serializers.Serializer):
             "customer_city": validated_data.get("customer_city", ""),
             "customer_post_code": validated_data.get("customer_post_code", ""),
             "customer_email": validated_data.get("customer_email", ""),
+            "payment_method": payment_method,
         }
         order = Order.objects.create(
             user=user,
@@ -150,3 +205,22 @@ class OrderPaymentInitSerializer(serializers.Serializer):
     """
 
     order_id = serializers.IntegerField(help_text="ID of the order to initiate payment for")
+
+
+class OrderFulfillmentSerializer(serializers.ModelSerializer):
+    order_id = serializers.IntegerField(read_only=True)
+    user_email = serializers.EmailField(source="order.user.email", read_only=True)
+
+    class Meta:
+        model = OrderFulfillment
+        fields = (
+            "id",
+            "order_id",
+            "user_email",
+            "hardware_identifier",
+            "device_role",
+            "master_hardware_identifier",
+            "is_claimed",
+            "created_at",
+        )
+        read_only_fields = fields

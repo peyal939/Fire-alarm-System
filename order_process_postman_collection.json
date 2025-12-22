@@ -1,0 +1,1676 @@
+{
+    "info": {
+        "name": "🔥 Fire Alarm - Complete Order Process",
+        "description": "Complete end-to-end order workflow collection.\n\n## Flow Overview:\n1. **Auth** → Login/Register to get JWT token\n2. **Browse** → View available packages\n3. **Cart** → Add items, update quantities\n4. **Checkout** → Convert cart to orders\n5. **Payment** → Initiate and complete payment\n6. **Track** → View order status\n7. **Fulfillment** → Admin assigns devices\n\n## Variables:\n- `base_url`: API base URL (https://firealarm.pranisheba.com.bd)\n- `access_token`: JWT access token (auto-set on login)\n- `refresh_token`: JWT refresh token (auto-set on login)\n- `user_id`: Current user's ID (auto-set on login)\n- `order_id`: Last created order ID\n- `cart_item_id`: Last cart item ID\n- `package_id`: Selected package ID",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "https://firealarm.pranisheba.com.bd",
+            "type": "string"
+        },
+        {
+            "key": "access_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "refresh_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "order_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "cart_item_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "package_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "session_id",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{access_token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "📋 COMPLETE ORDER FLOW",
+            "description": "Run these in sequence for a complete order experience",
+            "item": [
+                {
+                    "name": "Step 1: Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/login",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "login"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"password123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "description": "Login to get JWT tokens. If OTP is required, use 'Login Verify' next."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "// Direct login (tokens returned)",
+                                    "if (jsonData.access) {",
+                                    "    pm.collectionVariables.set('access_token', jsonData.access);",
+                                    "    console.log('✅ Access token saved');",
+                                    "}",
+                                    "if (jsonData.refresh) {",
+                                    "    pm.collectionVariables.set('refresh_token', jsonData.refresh);",
+                                    "    console.log('✅ Refresh token saved');",
+                                    "}",
+                                    "if (jsonData.user && jsonData.user.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.user.id);",
+                                    "    console.log('✅ User ID saved: ' + jsonData.user.id);",
+                                    "}",
+                                    "",
+                                    "// OTP required flow",
+                                    "if (jsonData.session_id) {",
+                                    "    pm.collectionVariables.set('session_id', jsonData.session_id);",
+                                    "    console.log('⚠️ OTP required. Session ID saved. Run \"Login Verify\" next.');",
+                                    "}",
+                                    "",
+                                    "pm.test('Login initiated', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 1b: Login Verify (if OTP required)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/login/verify",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "login", "verify"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"session_id\": \"{{session_id}}\",\n    \"code\": \"1234\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "description": "Verify OTP code after login. Replace 'code' with actual OTP received."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.access) {",
+                                    "    pm.collectionVariables.set('access_token', jsonData.access);",
+                                    "    console.log('✅ Access token saved');",
+                                    "}",
+                                    "if (jsonData.refresh) {",
+                                    "    pm.collectionVariables.set('refresh_token', jsonData.refresh);",
+                                    "    console.log('✅ Refresh token saved');",
+                                    "}",
+                                    "if (jsonData.user && jsonData.user.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.user.id);",
+                                    "    console.log('✅ User ID saved: ' + jsonData.user.id);",
+                                    "}",
+                                    "",
+                                    "pm.test('OTP verified', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 2: Get My Profile",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/auth/me",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "me"]
+                        },
+                        "description": "Verify authentication and get user details including user_id"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.id);",
+                                    "    console.log('✅ User ID confirmed: ' + jsonData.id);",
+                                    "}",
+                                    "",
+                                    "pm.test('User authenticated', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(jsonData).to.have.property('id');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 3: Browse Packages",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/packages/",
+                            "host": ["{{base_url}}"],
+                            "path": ["packages", ""]
+                        },
+                        "description": "View all available packages. Auto-saves first package_id."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (Array.isArray(jsonData) && jsonData.length > 0) {",
+                                    "    pm.collectionVariables.set('package_id', jsonData[0].id);",
+                                    "    console.log('✅ First package ID saved: ' + jsonData[0].id);",
+                                    "    console.log('📦 Package: ' + jsonData[0].name + ' - Price: ' + jsonData[0].price_per_device);",
+                                    "}",
+                                    "",
+                                    "pm.test('Packages retrieved', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 4: View My Cart",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/cart/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", ""]
+                        },
+                        "description": "View current cart contents. Cart is auto-created if not exists."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "console.log('🛒 Cart items: ' + (jsonData.items ? jsonData.items.length : 0));",
+                                    "if (jsonData.total) {",
+                                    "    console.log('💰 Cart total: ' + jsonData.total);",
+                                    "}",
+                                    "",
+                                    "pm.test('Cart retrieved', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 5: Add Item to Cart",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"package_id\": {{package_id}},\n    \"quantity\": 2,\n    \"number_of_master_devices\": 1,\n    \"number_of_slave_devices\": 1\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Add a SINGLE package to the cart. If already exists, updates quantity.\n\nFor adding multiple packages at once, use 'Step 5b: Bulk Add Items'."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.id) {",
+                                    "    pm.collectionVariables.set('cart_item_id', jsonData.id);",
+                                    "    console.log('✅ Cart item ID saved: ' + jsonData.id);",
+                                    "}",
+                                    "",
+                                    "pm.test('Item added to cart', function() {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 5b: Bulk Add Items to Cart (Multiple Packages)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/bulk/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", "bulk", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"items\": [\n        {\n            \"package_id\": 1,\n            \"quantity\": 2,\n            \"number_of_master_devices\": 1,\n            \"number_of_slave_devices\": 1\n        },\n        {\n            \"package_id\": 2,\n            \"quantity\": 1,\n            \"number_of_master_devices\": 1,\n            \"number_of_slave_devices\": 0\n        }\n    ]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Add MULTIPLE packages to cart in ONE request.\n\n**Benefits:**\n- Reduces API calls (add 10 packages = 1 call instead of 10)\n- Atomic operation\n- Returns full cart after processing\n\n**Behavior:**\n- New package → creates cart item\n- Existing package → updates quantity\n\n**Limits:**\n- Max 50 items per request\n- No duplicate package_ids in same request"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.summary) {",
+                                    "    console.log('✅ Bulk add completed:');",
+                                    "    console.log('   Created: ' + jsonData.summary.items_created);",
+                                    "    console.log('   Updated: ' + jsonData.summary.items_updated);",
+                                    "    console.log('   Total processed: ' + jsonData.summary.total_items_processed);",
+                                    "}",
+                                    "",
+                                    "if (jsonData.cart && jsonData.cart.item_count) {",
+                                    "    console.log('🛒 Cart now has ' + jsonData.cart.item_count + ' items');",
+                                    "}",
+                                    "",
+                                    "pm.test('Bulk add successful', function() {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 5c: Add More Items Later",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/bulk/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", "bulk", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"items\": [\n        {\n            \"package_id\": 3,\n            \"quantity\": 1,\n            \"number_of_master_devices\": 1,\n            \"number_of_slave_devices\": 0\n        }\n    ]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Add MORE items to an existing cart.\n\nCart persists between requests - you can keep adding items over time.\n\nCart expires after 7 days of inactivity (refreshed on each add/update)."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.cart && jsonData.cart.item_count) {",
+                                    "    console.log('🛒 Cart now has ' + jsonData.cart.item_count + ' total items');",
+                                    "}",
+                                    "",
+                                    "pm.test('Items added to existing cart', function() {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 6: Update Cart Item (Optional)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/{{cart_item_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", "{{cart_item_id}}", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"quantity\": 3,\n    \"number_of_master_devices\": 2,\n    \"number_of_slave_devices\": 1\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Update quantity of an existing cart item."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Cart item updated', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "var jsonData = pm.response.json();",
+                                    "console.log('✅ Updated quantity to: ' + jsonData.quantity);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 7: View Cart Before Checkout",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/cart/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", ""]
+                        },
+                        "description": "Final cart review before checkout"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "console.log('🛒 Final cart review:');",
+                                    "console.log('   Items: ' + (jsonData.items ? jsonData.items.length : 0));",
+                                    "console.log('   Total: ' + (jsonData.total || 'N/A'));",
+                                    "",
+                                    "pm.test('Cart ready for checkout', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(jsonData.items).to.be.an('array');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 8: CHECKOUT - Create Orders",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/checkout/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "checkout", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"shipping_address\": \"123 Main Street, Dhaka\",\n    \"customer_name\": \"John Doe\",\n    \"customer_phone\": \"+8801712345678\",\n    \"customer_email\": \"john@example.com\",\n    \"customer_address\": \"123 Main Street\",\n    \"customer_city\": \"Dhaka\",\n    \"customer_post_code\": \"1205\",\n    \"payment_method\": \"online\",\n    \"currency\": \"BDT\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Convert cart to order(s).\n\n**payment_method options:**\n- `online` - Pay via payment gateway\n- `cod` - Cash on Delivery\n\n**Note:** Cart is cleared after successful checkout."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.orders && jsonData.orders.length > 0) {",
+                                    "    pm.collectionVariables.set('order_id', jsonData.orders[0].id);",
+                                    "    console.log('✅ Order created! ID: ' + jsonData.orders[0].id);",
+                                    "    console.log('💰 Amount: ' + jsonData.orders[0].amount);",
+                                    "    console.log('📋 Status: ' + jsonData.orders[0].order_status);",
+                                    "}",
+                                    "",
+                                    "pm.test('Checkout successful', function() {",
+                                    "    pm.response.to.have.status(201);",
+                                    "    pm.expect(jsonData.orders).to.be.an('array').that.is.not.empty;",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 9: View My Orders",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", ""]
+                        },
+                        "description": "List all orders for the current user."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "console.log('📦 Total orders: ' + jsonData.length);",
+                                    "if (jsonData.length > 0) {",
+                                    "    pm.collectionVariables.set('order_id', jsonData[0].id);",
+                                    "    console.log('   Latest order ID: ' + jsonData[0].id);",
+                                    "}",
+                                    "",
+                                    "pm.test('Orders retrieved', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 10: View Order Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", ""]
+                        },
+                        "description": "Get detailed information about a specific order."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "console.log('📋 Order Details:');",
+                                    "console.log('   ID: ' + jsonData.id);",
+                                    "console.log('   Status: ' + jsonData.order_status);",
+                                    "console.log('   Amount: ' + jsonData.amount + ' ' + jsonData.currency);",
+                                    "console.log('   Payment Method: ' + jsonData.payment_method);",
+                                    "",
+                                    "pm.test('Order details retrieved', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 11: Initiate Payment (Online Only)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/pay/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", "pay", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Initiate payment via SurjoPay gateway.\n\n**Response:**\n- `checkout_url` - Redirect user to this URL to complete payment\n- `sp_order_id` - SurjoPay order reference\n- `transaction_id` - Internal transaction ID\n\n**Note:** Only works for orders with `payment_method: online`"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.checkout_url) {",
+                                    "    console.log('✅ Payment initiated!');",
+                                    "    console.log('🔗 Checkout URL: ' + jsonData.checkout_url);",
+                                    "    console.log('📝 SP Order ID: ' + jsonData.sp_order_id);",
+                                    "}",
+                                    "",
+                                    "pm.test('Payment initiated', function() {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Step 12: Verify Order Status After Payment",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", ""]
+                        },
+                        "description": "Check if order status changed to 'paid' after payment completion."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "console.log('📋 Order Status: ' + jsonData.order_status);",
+                                    "",
+                                    "if (jsonData.order_status === 'paid') {",
+                                    "    console.log('✅ Payment confirmed!');",
+                                    "} else {",
+                                    "    console.log('⏳ Payment pending or awaiting confirmation');",
+                                    "}",
+                                    "",
+                                    "pm.test('Order status checked', function() {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "🔐 Authentication",
+            "item": [
+                {
+                    "name": "Register - Init",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/register/init",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "register", "init"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"newuser@example.com\",\n    \"phone_number\": \"+8801700000000\",\n    \"password\": \"password123\",\n    \"confirm_password\": \"password123\",\n    \"full_name\": \"New User\",\n    \"address\": \"Dhaka, Bangladesh\",\n    \"role\": \"user\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "description": "Start registration process. OTP will be sent to phone."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.session_id) {",
+                                    "    pm.collectionVariables.set('session_id', jsonData.session_id);",
+                                    "    console.log('✅ Session ID saved. Check phone for OTP.');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Register - Verify OTP",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/register/verify",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "register", "verify"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"session_id\": \"{{session_id}}\",\n    \"code\": \"1234\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "description": "Verify OTP to complete registration."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.access) {",
+                                    "    pm.collectionVariables.set('access_token', jsonData.access);",
+                                    "    pm.collectionVariables.set('refresh_token', jsonData.refresh);",
+                                    "    console.log('✅ Registration complete! Tokens saved.');",
+                                    "}",
+                                    "if (jsonData.user && jsonData.user.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.user.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/login",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "login"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"password123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.access) {",
+                                    "    pm.collectionVariables.set('access_token', jsonData.access);",
+                                    "    pm.collectionVariables.set('refresh_token', jsonData.refresh);",
+                                    "}",
+                                    "if (jsonData.user && jsonData.user.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.user.id);",
+                                    "}",
+                                    "if (jsonData.session_id) {",
+                                    "    pm.collectionVariables.set('session_id', jsonData.session_id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Login - Verify OTP",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/login/verify",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "login", "verify"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"session_id\": \"{{session_id}}\",\n    \"code\": \"1234\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.access) {",
+                                    "    pm.collectionVariables.set('access_token', jsonData.access);",
+                                    "    pm.collectionVariables.set('refresh_token', jsonData.refresh);",
+                                    "}",
+                                    "if (jsonData.user && jsonData.user.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.user.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Refresh Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/refresh",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "refresh"]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"refresh\": \"{{refresh_token}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.access) {",
+                                    "    pm.collectionVariables.set('access_token', jsonData.access);",
+                                    "    console.log('✅ Token refreshed');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get My Profile",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/auth/me",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "me"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.id) {",
+                                    "    pm.collectionVariables.set('user_id', jsonData.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "📦 Packages",
+            "item": [
+                {
+                    "name": "List All Packages",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/packages/",
+                            "host": ["{{base_url}}"],
+                            "path": ["packages", ""]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (Array.isArray(jsonData) && jsonData.length > 0) {",
+                                    "    pm.collectionVariables.set('package_id', jsonData[0].id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Package Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/packages/{{package_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["packages", "{{package_id}}", ""]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🛒 Cart Management",
+            "description": "Shopping cart operations - add, update, remove items",
+            "item": [
+                {
+                    "name": "View Cart",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/cart/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", ""]
+                        },
+                        "description": "Get current user's cart. Cart is automatically identified by JWT token."
+                    }
+                },
+                {
+                    "name": "Add Item to Cart",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"package_id\": {{package_id}},\n    \"quantity\": 1,\n    \"number_of_master_devices\": 1,\n    \"number_of_slave_devices\": 0\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Add a SINGLE package to cart. If package already exists, updates the quantity. For multiple packages, use 'Bulk Add Items to Cart'."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.id) {",
+                                    "    pm.collectionVariables.set('cart_item_id', jsonData.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Bulk Add Items to Cart",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/bulk/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", "bulk", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"items\": [\n        {\n            \"package_id\": 1,\n            \"quantity\": 2,\n            \"number_of_master_devices\": 1,\n            \"number_of_slave_devices\": 1\n        },\n        {\n            \"package_id\": 2,\n            \"quantity\": 1,\n            \"number_of_master_devices\": 1,\n            \"number_of_slave_devices\": 0\n        },\n        {\n            \"package_id\": 3,\n            \"quantity\": 3,\n            \"number_of_master_devices\": 2,\n            \"number_of_slave_devices\": 1\n        }\n    ]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Add MULTIPLE packages to cart in a single request.\n\n**Benefits:**\n- Reduces API calls for mobile apps\n- Atomic operation - all succeed or none\n- Returns full cart after processing\n\n**Limits:**\n- Max 50 items per request\n- No duplicate package_ids allowed"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "",
+                                    "if (jsonData.summary) {",
+                                    "    console.log('✅ Bulk add completed:');",
+                                    "    console.log('   Created: ' + jsonData.summary.items_created);",
+                                    "    console.log('   Updated: ' + jsonData.summary.items_updated);",
+                                    "}",
+                                    "",
+                                    "pm.test('Bulk add successful', function() {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Update Cart Item",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/{{cart_item_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", "{{cart_item_id}}", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"quantity\": 5,\n    \"number_of_master_devices\": 3,\n    \"number_of_slave_devices\": 2\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Update quantity or device counts for a cart item."
+                    }
+                },
+                {
+                    "name": "Remove Cart Item",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/cart/items/{{cart_item_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "items", "{{cart_item_id}}", ""]
+                        },
+                        "description": "Remove a specific item from cart."
+                    }
+                },
+                {
+                    "name": "Clear Entire Cart",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/cart/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", ""]
+                        },
+                        "description": "Remove all items from cart."
+                    }
+                },
+                {
+                    "name": "Checkout Cart",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cart/checkout/",
+                            "host": ["{{base_url}}"],
+                            "path": ["cart", "checkout", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"shipping_address\": \"123 Main Street, Dhaka\",\n    \"customer_name\": \"John Doe\",\n    \"customer_phone\": \"+8801712345678\",\n    \"customer_email\": \"john@example.com\",\n    \"customer_address\": \"123 Main Street\",\n    \"customer_city\": \"Dhaka\",\n    \"customer_post_code\": \"1205\",\n    \"payment_method\": \"online\",\n    \"currency\": \"BDT\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Convert cart to orders.\n\n**payment_method:**\n- `online` - Pay via SurjoPay\n- `cod` - Cash on Delivery\n\nCreates one order per cart item. Cart is cleared after checkout."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.orders && jsonData.orders.length > 0) {",
+                                    "    pm.collectionVariables.set('order_id', jsonData.orders[0].id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "📋 Orders",
+            "description": "Order management - view, update, payment",
+            "item": [
+                {
+                    "name": "List My Orders",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", ""]
+                        },
+                        "description": "List all orders for the current user."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (Array.isArray(jsonData) && jsonData.length > 0) {",
+                                    "    pm.collectionVariables.set('order_id', jsonData[0].id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "List Orders by Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/?status=pending",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", ""],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "pending",
+                                    "description": "Filter: pending, paid, cancelled, failed, delivered, processing, shipped, refunded, partial"
+                                }
+                            ]
+                        },
+                        "description": "Filter orders by status.\n\n**Available statuses:**\n- pending\n- paid\n- cancelled\n- failed\n- delivered\n- processing\n- shipped\n- refunded\n- partial"
+                    }
+                },
+                {
+                    "name": "Get Order Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", ""]
+                        },
+                        "description": "Get detailed information about a specific order."
+                    }
+                },
+                {
+                    "name": "Update Order",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"shipping_address\": \"Updated Address, Dhaka\",\n    \"quantity\": 3,\n    \"number_of_master_devices\": 2,\n    \"number_of_slave_devices\": 1\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Update mutable order fields before payment."
+                    }
+                },
+                {
+                    "name": "Delete Order",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", ""]
+                        },
+                        "description": "Soft-delete an order (cancel)."
+                    }
+                },
+                {
+                    "name": "Change Payment Method",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/payment-method/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", "payment-method", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"payment_method\": \"cod\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Change payment method.\n\n**Options:**\n- `online` - Pay via gateway\n- `cod` - Cash on Delivery"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "💳 Payment",
+            "description": "Payment operations",
+            "item": [
+                {
+                    "name": "Initiate Payment",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/pay/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", "pay", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Initiate payment for an order.\n\n**Response:**\n- `checkout_url` - Redirect URL for payment\n- `sp_order_id` - SurjoPay reference\n- `transaction_id` - Internal reference\n\n**Note:** Only for orders with payment_method: online"
+                    }
+                },
+                {
+                    "name": "Payment Webhook (Simulate)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/payment/notify/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "payment", "notify", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"order_id\": \"{{order_id}}\",\n    \"transaction_id\": \"tx_abc123\",\n    \"gateway_response\": {\n        \"status\": \"success\"\n    }\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "description": "Webhook endpoint for payment gateway callbacks.\n\nThis is typically called by the payment provider, not the mobile app."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🔧 Admin Operations",
+            "description": "Admin-only endpoints for order management",
+            "item": [
+                {
+                    "name": "List All Orders (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/orders/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", ""]
+                        },
+                        "description": "Admin only: List all orders in the system."
+                    }
+                },
+                {
+                    "name": "Update Order Status (Admin)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/update_status/{{user_id}}/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "update_status", "{{user_id}}", "{{order_id}}", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"order_status\": \"paid\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Admin only: Update order status.\n\n**Available statuses:**\n- pending\n- paid\n- cancelled\n- failed\n- delivered\n- processing\n- shipped\n- refunded\n- partial"
+                    }
+                },
+                {
+                    "name": "Fulfill Order (Admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{user_id}}/{{order_id}}/fulfill/",
+                            "host": ["{{base_url}}"],
+                            "path": ["orders", "{{user_id}}", "{{order_id}}", "fulfill", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"hardware_identifier\": \"DEVICE-001-ABC\",\n    \"device_role\": \"master\",\n    \"master_hardware_identifier\": null\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Admin only: Assign a device to an order.\n\n**device_role:**\n- `master`\n- `slave` (requires master_hardware_identifier)"
+                    }
+                },
+                {
+                    "name": "List Fulfillments (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/fulfillments/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "fulfillments", ""]
+                        },
+                        "description": "Admin only: List all device fulfillments."
+                    }
+                },
+                {
+                    "name": "Dashboard Overview (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/dashboard/overview/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "dashboard", "overview", ""]
+                        },
+                        "description": "Admin only: Get dashboard statistics."
+                    }
+                },
+                {
+                    "name": "Admin Orders List",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/orders/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "orders", ""]
+                        },
+                        "description": "Admin only: List all orders with advanced filtering."
+                    }
+                },
+                {
+                    "name": "Admin Order Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/orders/{{order_id}}/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "orders", "{{order_id}}", ""]
+                        },
+                        "description": "Admin only: Get single order details."
+                    }
+                },
+                {
+                    "name": "Admin Update Order",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/manage/orders/{{order_id}}/update/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "orders", "{{order_id}}", "update", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"order_status\": \"processing\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Admin only: Update order via manage endpoint."
+                    }
+                },
+                {
+                    "name": "Admin Bulk Update Orders",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/manage/orders/bulk-update/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "orders", "bulk-update", ""]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"order_ids\": [1, 2, 3],\n    \"order_status\": \"shipped\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Admin only: Bulk update multiple orders at once."
+                    }
+                },
+                {
+                    "name": "Orders Report (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/reports/orders/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "reports", "orders", ""]
+                        },
+                        "description": "Admin only: Get orders report."
+                    }
+                },
+                {
+                    "name": "Payments Report (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/reports/payments/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "reports", "payments", ""]
+                        },
+                        "description": "Admin only: Get payments report."
+                    }
+                },
+                {
+                    "name": "Revenue Trend (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/dashboard/revenue-trend/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "dashboard", "revenue-trend", ""]
+                        },
+                        "description": "Admin only: Get revenue trend data."
+                    }
+                },
+                {
+                    "name": "Order Status Breakdown (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/manage/dashboard/order-status/",
+                            "host": ["{{base_url}}"],
+                            "path": ["manage", "dashboard", "order-status", ""]
+                        },
+                        "description": "Admin only: Get order status breakdown."
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Auto-refresh token on 401",
+                    "if (pm.response.code === 401) {",
+                    "    console.log('⚠️ Unauthorized - Token may have expired. Use Refresh Token endpoint.');",
+                    "}"
+                ]
+            }
+        }
+    ]
+}

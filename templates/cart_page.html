@@ -1,0 +1,695 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Shopping Cart{% endblock %}
+{% block extra_css %}
+<style>
+  .cart-page-header {
+    background: linear-gradient(135deg, #6f42c1 0%, #9b59b6 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .cart-page-header h1 {
+    margin: 0;
+    font-weight: 700;
+  }
+  
+  .cart-page-header p {
+    margin: 0.5rem 0 0;
+    opacity: 0.9;
+  }
+  
+  .cart-container {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 2rem;
+    align-items: start;
+  }
+  
+  @media (max-width: 991px) {
+    .cart-container {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .cart-items-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  
+  .cart-items-card .card-header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .cart-item {
+    padding: 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  
+  .cart-item:last-child {
+    border-bottom: none;
+  }
+  
+  .cart-item-info h5 {
+    margin: 0 0 0.5rem;
+    font-weight: 600;
+    color: #212529;
+  }
+  
+  .cart-item-meta {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+  
+  .cart-item-meta span {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  
+  .cart-item-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .quantity-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .quantity-control .btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+  }
+  
+  .quantity-control input {
+    width: 60px;
+    text-align: center;
+    border-radius: 8px;
+  }
+  
+  .device-inputs {
+    display: flex;
+    gap: 0.75rem;
+  }
+  
+  .device-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .device-input-group label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 500;
+  }
+  
+  .device-input-group input {
+    width: 70px;
+    text-align: center;
+    border-radius: 8px;
+    padding: 0.375rem 0.5rem;
+  }
+  
+  .cart-item-price {
+    text-align: right;
+    min-width: 120px;
+  }
+  
+  .cart-item-price .unit-price {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+  
+  .cart-item-price .subtotal {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #198754;
+  }
+  
+  .cart-item-actions {
+    margin-top: 0.5rem;
+  }
+  
+  .btn-remove-item {
+    color: #dc3545;
+    font-size: 0.875rem;
+    padding: 0;
+    border: none;
+    background: none;
+  }
+  
+  .btn-remove-item:hover {
+    color: #b02a37;
+    text-decoration: underline;
+  }
+  
+  .cart-summary-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    position: sticky;
+    top: 100px;
+  }
+  
+  .cart-summary-card .card-header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .cart-summary-card .card-body {
+    padding: 1.5rem;
+  }
+  
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .summary-row:last-of-type {
+    border-bottom: none;
+  }
+  
+  .summary-row.total {
+    font-size: 1.25rem;
+    font-weight: 700;
+    border-top: 2px solid #dee2e6;
+    margin-top: 0.5rem;
+    padding-top: 1rem;
+  }
+  
+  .summary-row.total .value {
+    color: #198754;
+  }
+  
+  .btn-checkout {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 12px;
+    margin-top: 1.5rem;
+  }
+  
+  .btn-continue-shopping {
+    width: 100%;
+    margin-top: 0.75rem;
+    color: #6c757d;
+  }
+  
+  .empty-cart {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  
+  .empty-cart i {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 1rem;
+  }
+  
+  .empty-cart h4 {
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+  
+  .empty-cart p {
+    color: #adb5bd;
+    margin-bottom: 1.5rem;
+  }
+  
+  .cart-loading {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+  }
+  
+  .cart-error {
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .device-error {
+    color: #dc3545;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  
+  @media (max-width: 767px) {
+    .cart-item {
+      grid-template-columns: 1fr;
+    }
+    
+    .cart-item-price {
+      text-align: left;
+    }
+    
+    .device-inputs {
+      flex-direction: column;
+    }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="py-4" id="cartPage" data-user-id="{{ request.user.id }}">
+  
+  <div class="cart-page-header">
+    <h1><i class="bi bi-cart3 me-2"></i>Shopping Cart</h1>
+    <p>Review your items before checkout</p>
+  </div>
+  
+  <div id="cartLoading" class="cart-loading">
+    <div class="spinner-border text-primary mb-3" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>Loading your cart...</p>
+  </div>
+  
+  <div id="cartError" class="cart-error" style="display: none;">
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <span id="cartErrorMsg">Failed to load cart.</span>
+    </div>
+    <button class="btn btn-primary" onclick="loadCart()">Try Again</button>
+  </div>
+  
+  <div id="emptyCart" class="empty-cart" style="display: none;">
+    <i class="bi bi-cart-x"></i>
+    <h4>Your cart is empty</h4>
+    <p>Browse our packages and add items to your cart</p>
+    <a href="/app/products/" class="btn btn-primary">
+      <i class="bi bi-box-seam me-2"></i>Browse Packages
+    </a>
+  </div>
+  
+  <div id="cartContent" class="cart-container" style="display: none;">
+    <div class="cart-items-card card">
+      <div class="card-header">
+        <i class="bi bi-bag me-2"></i>Cart Items (<span id="itemCount">0</span>)
+      </div>
+      <div class="card-body p-0" id="cartItemsList">
+        <!-- Cart items will be rendered here -->
+      </div>
+    </div>
+    
+    <div class="cart-summary-card card">
+      <div class="card-header">
+        <i class="bi bi-receipt me-2"></i>Order Summary
+      </div>
+      <div class="card-body">
+        <div id="summaryItems">
+          <!-- Summary items -->
+        </div>
+        <div class="summary-row total">
+          <span>Total</span>
+          <span class="value" id="cartTotal">৳0.00</span>
+        </div>
+        
+        <button class="btn btn-primary btn-checkout" id="checkoutBtn" disabled>
+          <i class="bi bi-credit-card me-2"></i>Proceed to Checkout
+        </button>
+        
+        <a href="/app/products/" class="btn btn-link btn-continue-shopping">
+          <i class="bi bi-arrow-left me-1"></i>Continue Shopping
+        </a>
+        
+        <div class="text-center mt-3">
+          <button class="btn btn-sm btn-outline-danger" id="clearCartBtn">
+            <i class="bi bi-trash me-1"></i>Clear Cart
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const pageRoot = document.getElementById('cartPage');
+  const userId = pageRoot.dataset.userId;
+  
+  const cartLoading = document.getElementById('cartLoading');
+  const cartError = document.getElementById('cartError');
+  const cartErrorMsg = document.getElementById('cartErrorMsg');
+  const emptyCart = document.getElementById('emptyCart');
+  const cartContent = document.getElementById('cartContent');
+  const cartItemsList = document.getElementById('cartItemsList');
+  const summaryItems = document.getElementById('summaryItems');
+  const itemCount = document.getElementById('itemCount');
+  const cartTotal = document.getElementById('cartTotal');
+  const checkoutBtn = document.getElementById('checkoutBtn');
+  const clearCartBtn = document.getElementById('clearCartBtn');
+  
+  let cartData = null;
+  let updateTimeout = null;
+  
+  function formatMoney(v) {
+    if (v === null || v === undefined || v === '') return '৳0.00';
+    const n = Number(v);
+    return isNaN(n) ? v : '৳' + n.toFixed(2);
+  }
+  
+  function computeItemTotal(item) {
+    const pkg = item.package;
+    if (!pkg) return 0;
+    const qty = Number(item.quantity) || 0;
+    const masterQty = Number(item.number_of_master_devices) || 0;
+    const pricePerDevice = Number(pkg.price_per_device) || 0;
+    const mrf = Number(pkg.mrf) || 0;
+    // Device price × all devices, MRF × masters only
+    return (qty * pricePerDevice) + (masterQty * mrf);
+  }
+  
+  function showView(view) {
+    cartLoading.style.display = view === 'loading' ? '' : 'none';
+    cartError.style.display = view === 'error' ? '' : 'none';
+    emptyCart.style.display = view === 'empty' ? '' : 'none';
+    cartContent.style.display = view === 'content' ? '' : 'none';
+  }
+  
+  async function loadCart() {
+    showView('loading');
+    try {
+      cartData = await apiGet('/cart/');
+      renderCart();
+    } catch (e) {
+      console.error('Failed to load cart:', e);
+      cartErrorMsg.textContent = e.message || 'Failed to load cart.';
+      showView('error');
+    }
+  }
+  
+  function renderCart() {
+    if (!cartData || !cartData.items || cartData.items.length === 0) {
+      showView('empty');
+      updateCartBadge(0);
+      return;
+    }
+    
+    showView('content');
+    const items = cartData.items;
+    itemCount.textContent = items.length;
+    updateCartBadge(items.length);
+    
+    // Render cart items
+    cartItemsList.innerHTML = items.map(item => renderCartItem(item)).join('');
+    
+    // Attach event listeners
+    attachItemListeners();
+    
+    // Render summary
+    renderSummary();
+  }
+  
+  function renderCartItem(item) {
+    const pkg = item.package || {};
+    const subtotal = computeItemTotal(item);
+    const pricePerUnit = (Number(pkg.price_per_device) || 0) + (Number(pkg.mrf) || 0);
+    
+    return `
+      <div class="cart-item" data-item-id="${item.id}">
+        <div class="cart-item-info">
+          <h5>${escapeHtml(pkg.name || 'Package')}</h5>
+          <div class="cart-item-meta">
+            <span><strong>Range:</strong> ${pkg.min_quantity || 1} - ${pkg.max_quantity || 100} devices</span>
+            <span><strong>Price:</strong> ${formatMoney(pkg.price_per_device)}/device + ${formatMoney(pkg.mrf)} MRF</span>
+          </div>
+        </div>
+        
+        <div class="cart-item-controls">
+          <div class="quantity-control">
+            <button class="btn btn-outline-secondary btn-qty-minus" data-item-id="${item.id}" title="Decrease">
+              <i class="bi bi-dash"></i>
+            </button>
+            <input type="number" class="form-control item-qty" data-item-id="${item.id}" 
+                   value="${item.quantity}" min="${pkg.min_quantity || 1}" max="${pkg.max_quantity || 100}" />
+            <button class="btn btn-outline-secondary btn-qty-plus" data-item-id="${item.id}" title="Increase">
+              <i class="bi bi-plus"></i>
+            </button>
+          </div>
+          
+          <div class="device-inputs">
+            <div class="device-input-group">
+              <label>Master</label>
+              <input type="number" class="form-control item-master" data-item-id="${item.id}"
+                     value="${item.number_of_master_devices || 0}" min="0" />
+            </div>
+            <div class="device-input-group">
+              <label>Slave</label>
+              <input type="number" class="form-control item-slave" data-item-id="${item.id}"
+                     value="${item.number_of_slave_devices || 0}" min="0" />
+            </div>
+          </div>
+          <div class="device-error" data-item-id="${item.id}" style="display: none;"></div>
+          
+          <div class="cart-item-actions">
+            <button class="btn-remove-item" data-item-id="${item.id}">
+              <i class="bi bi-trash me-1"></i>Remove
+            </button>
+          </div>
+        </div>
+        
+        <div class="cart-item-price">
+          <div class="unit-price">
+            <div>Device: ${formatMoney(pkg.price_per_device)} × ${item.quantity} = ${formatMoney((Number(pkg.price_per_device) || 0) * item.quantity)}</div>
+            <div class="text-muted small">MRF: ${formatMoney(pkg.mrf)} × ${item.number_of_master_devices || 0} = ${formatMoney((Number(pkg.mrf) || 0) * (item.number_of_master_devices || 0))}</div>
+          </div>
+          <div class="subtotal">${formatMoney(subtotal)}</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function renderSummary() {
+    if (!cartData || !cartData.items) return;
+    
+    let total = 0;
+    let summaryHtml = '';
+    
+    cartData.items.forEach(item => {
+      const pkg = item.package || {};
+      const qty = Number(item.quantity) || 0;
+      const masterQty = Number(item.number_of_master_devices) || 0;
+      const pricePerDevice = Number(pkg.price_per_device) || 0;
+      const mrf = Number(pkg.mrf) || 0;
+      const deviceTotal = pricePerDevice * qty;
+      const mrfTotal = mrf * masterQty;  // Only charge MRF for masters
+      const subtotal = deviceTotal + mrfTotal;
+      total += subtotal;
+      
+      summaryHtml += `
+        <div class="summary-row">
+          <span>${escapeHtml(pkg.name || 'Package')} - Device × ${qty}</span>
+          <span>${formatMoney(deviceTotal)}</span>
+        </div>
+        <div class="summary-row text-muted small">
+          <span>${escapeHtml(pkg.name || 'Package')} - MRF (1st Month) × ${masterQty}</span>
+          <span>${formatMoney(mrfTotal)}</span>
+        </div>
+      `;
+    });
+    
+    summaryItems.innerHTML = summaryHtml;
+    cartTotal.textContent = formatMoney(total);
+    checkoutBtn.disabled = total <= 0;
+  }
+  
+  function attachItemListeners() {
+    // Quantity minus buttons
+    document.querySelectorAll('.btn-qty-minus').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.dataset.itemId;
+        const input = document.querySelector(`.item-qty[data-item-id="${itemId}"]`);
+        const min = parseInt(input.min) || 1;
+        let val = parseInt(input.value) || 1;
+        if (val > min) {
+          input.value = val - 1;
+          scheduleUpdate(itemId);
+        }
+      });
+    });
+    
+    // Quantity plus buttons
+    document.querySelectorAll('.btn-qty-plus').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.dataset.itemId;
+        const input = document.querySelector(`.item-qty[data-item-id="${itemId}"]`);
+        const max = parseInt(input.max) || 100;
+        let val = parseInt(input.value) || 1;
+        if (val < max) {
+          input.value = val + 1;
+          scheduleUpdate(itemId);
+        }
+      });
+    });
+    
+    // Quantity input changes
+    document.querySelectorAll('.item-qty').forEach(input => {
+      input.addEventListener('change', () => {
+        scheduleUpdate(input.dataset.itemId);
+      });
+    });
+    
+    // Master/slave input changes
+    document.querySelectorAll('.item-master, .item-slave').forEach(input => {
+      input.addEventListener('change', () => {
+        scheduleUpdate(input.dataset.itemId);
+      });
+    });
+    
+    // Remove buttons
+    document.querySelectorAll('.btn-remove-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        removeItem(btn.dataset.itemId);
+      });
+    });
+  }
+  
+  function scheduleUpdate(itemId) {
+    if (updateTimeout) clearTimeout(updateTimeout);
+    updateTimeout = setTimeout(() => updateItem(itemId), 500);
+  }
+  
+  async function updateItem(itemId) {
+    const qtyInput = document.querySelector(`.item-qty[data-item-id="${itemId}"]`);
+    const masterInput = document.querySelector(`.item-master[data-item-id="${itemId}"]`);
+    const slaveInput = document.querySelector(`.item-slave[data-item-id="${itemId}"]`);
+    const errorEl = document.querySelector(`.device-error[data-item-id="${itemId}"]`);
+    
+    const quantity = parseInt(qtyInput.value) || 1;
+    const master = parseInt(masterInput.value) || 0;
+    const slave = parseInt(slaveInput.value) || 0;
+    
+    // Validate devices
+    if (master + slave > quantity) {
+      errorEl.textContent = `Total devices (${master + slave}) cannot exceed quantity (${quantity})`;
+      errorEl.style.display = 'block';
+      return;
+    }
+    errorEl.style.display = 'none';
+    
+    try {
+      await apiPatch(`/cart/items/${itemId}/`, {
+        quantity: quantity,
+        number_of_master_devices: master,
+        number_of_slave_devices: slave
+      });
+      
+      // Update local data
+      const item = cartData.items.find(i => i.id == itemId);
+      if (item) {
+        item.quantity = quantity;
+        item.number_of_master_devices = master;
+        item.number_of_slave_devices = slave;
+      }
+      
+      // Re-render summary and price
+      renderSummary();
+      
+      // Update subtotal display
+      const priceEl = document.querySelector(`.cart-item[data-item-id="${itemId}"] .subtotal`);
+      const unitPriceEl = document.querySelector(`.cart-item[data-item-id="${itemId}"] .unit-price`);
+      if (item && priceEl) {
+        const subtotal = computeItemTotal(item);
+        const pricePerUnit = (Number(item.package.price_per_device) || 0) + (Number(item.package.mrf) || 0);
+        priceEl.textContent = formatMoney(subtotal);
+        unitPriceEl.textContent = `${formatMoney(pricePerUnit)} × ${quantity}`;
+      }
+    } catch (e) {
+      console.error('Failed to update item:', e);
+      showToast('Failed to update item', 'error');
+    }
+  }
+  
+  async function removeItem(itemId) {
+    if (!confirm('Remove this item from cart?')) return;
+    
+    try {
+      await apiDelete(`/cart/items/${itemId}/`);
+      cartData.items = cartData.items.filter(i => i.id != itemId);
+      renderCart();
+      showToast('Item removed from cart', 'success');
+    } catch (e) {
+      console.error('Failed to remove item:', e);
+      showToast('Failed to remove item', 'error');
+    }
+  }
+  
+  async function clearCart() {
+    if (!confirm('Clear all items from cart?')) return;
+    
+    try {
+      await apiDelete('/cart/');
+      cartData.items = [];
+      renderCart();
+      showToast('Cart cleared', 'success');
+    } catch (e) {
+      console.error('Failed to clear cart:', e);
+      showToast('Failed to clear cart', 'error');
+    }
+  }
+  
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  
+  function showToast(msg, type) {
+    // Simple toast - could be enhanced
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `<i class="bi bi-${type === 'error' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>${msg}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+  
+  function updateCartBadge(count) {
+    const badge = document.getElementById('cartBadge');
+    if (badge) {
+      badge.textContent = count;
+      badge.style.display = count > 0 ? '' : 'none';
+    }
+  }
+  
+  // Event listeners
+  checkoutBtn.addEventListener('click', () => {
+    window.location.href = '/app/checkout/';
+  });
+  
+  clearCartBtn.addEventListener('click', clearCart);
+  
+  // Expose loadCart globally for retry button
+  window.loadCart = loadCart;
+  
+  // Initial load
+  loadCart();
+})();
+</script>
+{% endblock %}

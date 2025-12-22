@@ -114,10 +114,27 @@
     
     #mapPickerMaster, #mapPickerSlave, #mapPickerClaim { height: 280px; }
     
-    /* Ensure Choices dropdown is collapsed by default and not fixed-open */
+    /* Choices.js dropdown styling with scrollbar */
     .choices__list--dropdown {
-      max-height: 240px;
+      max-height: 250px;
       overflow-y: auto;
+    }
+    
+    /* Ensure dropdown in modal is not clipped */
+    #registerForUserModal .modal-body {
+      overflow: visible;
+    }
+    #registerForUserModal .choices {
+      position: relative;
+    }
+    #registerForUserModal .choices__list--dropdown {
+      position: absolute;
+      width: 100%;
+      z-index: 1050;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,.15);
+      border-radius: 0.25rem;
+      box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
     }
     
     .empty-state {
@@ -228,10 +245,10 @@
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
               <div class="input-group">
-                 <input name="hardware_identifier" class="form-control" required maxlength="64" list="masterProvisionedList" autocomplete="off" />
+                 <input name="hardware_identifier" class="form-control" required minlength="3" maxlength="64" list="masterProvisionedList" autocomplete="off" />
                  <datalist id="masterProvisionedList"></datalist>
               </div>
-              <div class="form-text">Enter ID or select from provisioned devices.</div>
+              <div class="form-text">Enter ID or select from provisioned devices (3–64 characters).</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
@@ -278,10 +295,10 @@
             <div class="col-md-6">
               <label class="form-label">Hardware Identifier</label>
               <div class="input-group">
-                 <input name="hardware_identifier" class="form-control" required maxlength="64" list="slaveProvisionedList" autocomplete="off" />
+                 <input name="hardware_identifier" class="form-control" required minlength="3" maxlength="64" list="slaveProvisionedList" autocomplete="off" />
                  <datalist id="slaveProvisionedList"></datalist>
               </div>
-              <div class="form-text">Enter ID or select from provisioned devices.</div>
+              <div class="form-text">Enter ID or select from provisioned devices (3–64 characters).</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Device Name (optional)</label>
@@ -398,7 +415,8 @@
               <div class="row g-3">
                 <div class="col-md-6">
                   <label class="form-label">Hardware Identifier</label>
-                  <input name="hardware_identifier" class="form-control" maxlength="64" />
+                  <input name="hardware_identifier" class="form-control" minlength="3" maxlength="64" />
+                  <div class="form-text">3–64 characters</div>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Device Name</label>
@@ -515,7 +533,8 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Hardware Identifier</label>
-                <input name="hardware_identifier" class="form-control" required maxlength="64" />
+                <input name="hardware_identifier" class="form-control" required minlength="3" maxlength="64" />
+                <div class="form-text">3–64 characters</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Device Name (optional)</label>
@@ -1157,6 +1176,13 @@
       const lat = parseNumber(editDeviceForm.latitude.value);
       const lon = parseNumber(editDeviceForm.longitude.value);
 
+      // Validate hardware_identifier length if provided
+      if (hid && (hid.length < 3 || hid.length > 64)) {
+        editDeviceError.textContent = 'Hardware identifier must be 3–64 characters.';
+        editDeviceError.classList.remove('d-none');
+        return;
+      }
+
       const payload = {};
       if (hid) payload.hardware_identifier = hid;
       if (name) payload.device_name = name;
@@ -1208,6 +1234,7 @@
         : null;
 
       if (!hid) { alert('Hardware identifier is required'); return; }
+      if (hid.length < 3 || hid.length > 64) { alert('Hardware identifier must be 3–64 characters'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
       if (role === 'slave' && !masterId) { alert('Please select a master.'); return; }
 
@@ -1321,6 +1348,7 @@
       const lat = parseNumber(registerMasterForm.latitude.value);
       const lon = parseNumber(registerMasterForm.longitude.value);
       if (!hid) { alert('Hardware identifier is required'); return; }
+      if (hid.length < 3 || hid.length > 64) { alert('Hardware identifier must be 3–64 characters'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
       masterError.classList.add('d-none');
       masterError.textContent = '';
@@ -1348,6 +1376,7 @@
       const lon = parseNumber(registerSlaveForm.longitude.value);
       const masterId = parseInt(registerSlaveForm.master_id.value) || null;
       if (!hid) { alert('Hardware identifier is required'); return; }
+      if (hid.length < 3 || hid.length > 64) { alert('Hardware identifier must be 3–64 characters'); return; }
       if (lat == null || lon == null) { alert('Latitude and Longitude are required'); return; }
       if (!masterId) { alert('Please select a master.'); return; }
       slaveError.classList.add('d-none');
@@ -1538,7 +1567,12 @@
         allAdminUsersCache.forEach(u => {
           const opt = document.createElement('option');
           opt.value = u.id;
-          opt.textContent = u.email || u.phone_number || `User #${u.id}`;
+          // Show email and phone number together for easier identification
+          let label = u.email || '';
+          if (u.phone_number) {
+            label = label ? `${label} (${u.phone_number})` : u.phone_number;
+          }
+          opt.textContent = label || `User #${u.id}`;
           targetUserIdInput.appendChild(opt);
         });
         if (!userChoicesInstance && window.Choices) {

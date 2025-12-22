@@ -1,10 +1,10 @@
 """Views for FCM device registration and notification management."""
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 
 from .models import FCMDevice, NotificationLog
 from .serializers import (
@@ -68,15 +68,13 @@ class FCMDeviceViewSet(viewsets.ModelViewSet):
         description="Send a test push notification to all registered devices",
         request=TestNotificationSerializer,
         responses={
-            200: {
-                "description": "Test notification sent",
-                "examples": {
-                    "application/json": {
-                        "message": "Test notification sent successfully",
-                        "results": {"success": 1, "failure": 0, "invalid_tokens": []},
-                    }
+            200: inline_serializer(
+                name="TestNotificationResponse",
+                fields={
+                    "message": drf_serializers.CharField(),
+                    "results": drf_serializers.DictField(),
                 },
-            }
+            )
         },
     )
     @action(detail=False, methods=["post"])

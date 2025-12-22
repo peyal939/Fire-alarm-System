@@ -5,6 +5,7 @@ from contextlib import suppress
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
+from django.db import close_old_connections
 from django.utils import timezone
 from channels.generic.websocket import AsyncWebsocketConsumer
 
@@ -43,7 +44,14 @@ class DeviceConsumer(AsyncWebsocketConsumer):
         await self.accept()
         WEBSOCKETS.add(self)
         await self.channel_layer.group_add("devices", self.channel_name)
-        initial_states = await sync_to_async(device_cache.get_all_states)()
+        
+        def _get_initial_states():
+            try:
+                return device_cache.get_all_states()
+            finally:
+                close_old_connections()
+        
+        initial_states = await sync_to_async(_get_initial_states)()
         for payload in initial_states:
             if await self._can_view_payload(payload):
                 await self.send(text_data=json.dumps(payload))
@@ -131,19 +139,26 @@ class DeviceConsumer(AsyncWebsocketConsumer):
         if cached is not None:
             return cached
 
-        owner_id = await sync_to_async(
-            lambda: Device.objects.filter(
-                hardware_identifier=device_id,
-                deleted_at__isnull=True,
-            )
-            .values_list("user_id", flat=True)
-            .first()
-        )()
+        def _fetch_owner_id():
+            try:
+                return Device.objects.filter(
+                    hardware_identifier=device_id,
+                    deleted_at__isnull=True,
+                ).values_list("user_id", flat=True).first()
+            finally:
+                close_old_connections()
+
+        owner_id = await sync_to_async(_fetch_owner_id)()
         if owner_id is not None:
             self._owner_cache[device_id] = owner_id
             payload["owner_id"] = owner_id
             if len(payload.keys()) > 1:
-                await sync_to_async(device_cache.set_device_state)(device_id, payload)
+                def _set_state():
+                    try:
+                        device_cache.set_device_state(device_id, payload)
+                    finally:
+                        close_old_connections()
+                await sync_to_async(_set_state)()
         return owner_id
 
     async def _can_view_payload(self, payload: dict) -> bool:
@@ -191,11 +206,14 @@ class DeviceConsumer(AsyncWebsocketConsumer):
     def _db_check_subscription(self, device_id: str) -> bool:
         from devices.views import _subscription_access_q
 
-        now = timezone.now()
-        return (
-            Device.objects.filter(
-                hardware_identifier=device_id, deleted_at__isnull=True
+        try:
+            now = timezone.now()
+            return (
+                Device.objects.filter(
+                    hardware_identifier=device_id, deleted_at__isnull=True
+                )
+                .filter(_subscription_access_q(relation="subscription", now=now))
+                .exists()
             )
-            .filter(_subscription_access_q(relation="subscription", now=now))
-            .exists()
-        )
+        finally:
+            close_old_connections()

@@ -96,6 +96,28 @@
     opacity: 1;
     color: #198754;
   }
+  /* Order status badges */
+  .badge-pending { background: #ffc107; color: #000; }
+  .badge-paid { background: #198754; }
+  .badge-processing { background: #0dcaf0; color: #000; }
+  .badge-shipped { background: #0d6efd; }
+  .badge-delivered { background: #20c997; }
+  .badge-cancelled { background: #dc3545; }
+  .badge-refunded { background: #6c757d; }
+  /* Dashboard cards */
+  .dashboard-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .dashboard-card .card-body { padding: 1.5rem; }
+  .dashboard-stat { font-size: 2rem; font-weight: 700; }
+  .dashboard-label { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+  .growth-positive { color: #198754; }
+  .growth-negative { color: #dc3545; }
+  /* Report section */
+  .report-card { border-left: 4px solid #0d6efd; }
+  .date-filter { max-width: 160px; }
 </style>
 {% endblock %}
 
@@ -111,41 +133,67 @@
 
   <!-- Stats Cards -->
   <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-lg-2 col-md-4 col-sm-6">
       <div class="card stat-card users shadow-sm">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <div class="text-muted small text-uppercase">Total Users</div>
+              <div class="text-muted small text-uppercase">Users</div>
               <div class="stat-number text-primary">{{ total_users }}</div>
             </div>
-            <i class="bi bi-people-fill text-primary" style="font-size: 2.5rem; opacity: 0.3;"></i>
+            <i class="bi bi-people-fill text-primary" style="font-size: 2rem; opacity: 0.3;"></i>
           </div>
         </div>
       </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-lg-2 col-md-4 col-sm-6">
       <div class="card stat-card devices shadow-sm">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <div class="text-muted small text-uppercase">Total Devices</div>
+              <div class="text-muted small text-uppercase">Devices</div>
               <div class="stat-number text-success">{{ total_devices }}</div>
             </div>
-            <i class="bi bi-device-hdd-fill text-success" style="font-size: 2.5rem; opacity: 0.3;"></i>
+            <i class="bi bi-device-hdd-fill text-success" style="font-size: 2rem; opacity: 0.3;"></i>
           </div>
         </div>
       </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-lg-2 col-md-4 col-sm-6">
       <div class="card stat-card subscriptions shadow-sm">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <div class="text-muted small text-uppercase">Active Subscriptions</div>
+              <div class="text-muted small text-uppercase">Subscriptions</div>
               <div class="stat-number text-warning">{{ active_subscriptions }}</div>
             </div>
-            <i class="bi bi-credit-card-fill text-warning" style="font-size: 2.5rem; opacity: 0.3;"></i>
+            <i class="bi bi-credit-card-fill text-warning" style="font-size: 2rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card shadow-sm" style="border-left-color: #6f42c1;">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Orders</div>
+              <div class="stat-number" style="color: #6f42c1;">{{ total_orders|default:0 }}</div>
+            </div>
+            <i class="bi bi-bag-fill" style="font-size: 2rem; opacity: 0.3; color: #6f42c1;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 col-md-8 col-sm-12">
+      <div class="card stat-card shadow-sm" style="border-left-color: #198754;">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Total Revenue</div>
+              <div class="stat-number" style="color: #198754;">৳{{ total_revenue|floatformat:0|default:0 }}</div>
+            </div>
+            <i class="bi bi-currency-exchange" style="font-size: 2rem; opacity: 0.3; color: #198754;"></i>
           </div>
         </div>
       </div>
@@ -155,13 +203,38 @@
   <!-- Tabs -->
   <ul class="nav admin-tabs mb-3" id="adminTabs" role="tablist">
     <li class="nav-item">
-      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#usersTab" type="button">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dashboardTab" type="button">
+        <i class="bi bi-graph-up me-1"></i>Dashboard
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ordersTab" type="button">
+        <i class="bi bi-bag me-1"></i>Orders
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#fulfillmentsTab" type="button">
+        <i class="bi bi-box-seam me-1"></i>Fulfillments
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#usersTab" type="button">
         <i class="bi bi-people me-1"></i>Users
       </button>
     </li>
     <li class="nav-item">
       <button class="nav-link" data-bs-toggle="tab" data-bs-target="#devicesTab" type="button">
         <i class="bi bi-device-hdd me-1"></i>Devices
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#resellersTab" type="button">
+        <i class="bi bi-shop me-1"></i>Resellers
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#reportsTab" type="button">
+        <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
       </button>
     </li>
     <li class="nav-item">
@@ -172,8 +245,512 @@
   </ul>
 
   <div class="tab-content">
+    <!-- Dashboard Tab -->
+    <div class="tab-pane fade show active" id="dashboardTab">
+      <div class="row g-4 mb-4">
+        <!-- Revenue Card -->
+        <div class="col-lg-3 col-md-6">
+          <div class="card dashboard-card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <div class="dashboard-label">Today's Revenue</div>
+                  <div class="dashboard-stat text-success" id="dashTodayRevenue">৳0</div>
+                </div>
+                <div class="bg-success-subtle p-2 rounded">
+                  <i class="bi bi-currency-dollar text-success fs-4"></i>
+                </div>
+              </div>
+              <div class="small text-muted">
+                From <span id="dashTodayOrders">0</span> orders today
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Monthly Revenue Card -->
+        <div class="col-lg-3 col-md-6">
+          <div class="card dashboard-card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <div class="dashboard-label">This Month Revenue</div>
+                  <div class="dashboard-stat text-primary" id="dashMonthRevenue">৳0</div>
+                </div>
+                <div class="bg-primary-subtle p-2 rounded">
+                  <i class="bi bi-graph-up-arrow text-primary fs-4"></i>
+                </div>
+              </div>
+              <div class="small text-muted">
+                <span id="dashMonthOrders">0</span> orders this month
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Pending Orders Card -->
+        <div class="col-lg-3 col-md-6">
+          <div class="card dashboard-card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <div class="dashboard-label">Pending Orders</div>
+                  <div class="dashboard-stat text-warning" id="dashPendingOrders">0</div>
+                </div>
+                <div class="bg-warning-subtle p-2 rounded">
+                  <i class="bi bi-clock-history text-warning fs-4"></i>
+                </div>
+              </div>
+              <div class="small text-muted">Awaiting action</div>
+            </div>
+          </div>
+        </div>
+        <!-- Active Subscriptions Card -->
+        <div class="col-lg-3 col-md-6">
+          <div class="card dashboard-card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <div class="dashboard-label">Active Subscriptions</div>
+                  <div class="dashboard-stat text-info" id="dashActiveSubscriptions">0</div>
+                </div>
+                <div class="bg-info-subtle p-2 rounded">
+                  <i class="bi bi-person-check text-info fs-4"></i>
+                </div>
+              </div>
+              <div class="small text-muted">Recurring revenue</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+          <div class="card dashboard-card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+              <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Revenue Trend (Last 30 Days)</h6>
+              <button class="btn btn-outline-primary btn-sm" onclick="loadDashboard()">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="revenueTrendChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card dashboard-card">
+            <div class="card-header bg-white border-0 py-3">
+              <h6 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Order Status Breakdown</h6>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="orderStatusChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Orders -->
+      <div class="row g-4">
+        <div class="col-12">
+          <div class="card dashboard-card">
+            <div class="card-header bg-white py-3">
+              <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Orders</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-admin table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>Order ID</th>
+                      <th>Customer</th>
+                      <th>Package</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dashRecentOrdersBody">
+                    <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Tab -->
+    <div class="tab-pane fade" id="ordersTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="row align-items-center">
+            <div class="col-md-4">
+              <div class="d-flex align-items-center gap-3">
+                <h5 class="mb-0">Orders</h5>
+                <span class="badge bg-secondary" id="totalOrdersCount">0</span>
+              </div>
+            </div>
+            <div class="col-md-8">
+              <div class="d-flex gap-2 justify-content-end flex-wrap">
+                <select class="form-select form-select-sm" id="orderStatusFilter" style="width: auto;">
+                  <option value="">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="processing">Processing</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <input type="text" class="form-control form-control-sm search-box" id="orderSearch" placeholder="Search orders...">
+                <button class="btn btn-outline-primary btn-sm" onclick="loadOrders()">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-admin table-hover table-sortable mb-0" id="ordersTable">
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="order-id">Order ID</th>
+                  <th class="sortable" data-sort="customer">Customer</th>
+                  <th class="sortable" data-sort="package">Package</th>
+                  <th class="sortable" data-sort="qty">Qty</th>
+                  <th class="sortable" data-sort="amount">Amount</th>
+                  <th class="sortable" data-sort="payment">Payment</th>
+                  <th class="sortable" data-sort="status">Status</th>
+                  <th class="sortable" data-sort="date">Date</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody">
+                <tr><td colspan="9" class="text-center py-4 text-muted">Loading orders...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card-footer bg-white">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="small text-muted">
+              Showing <span id="ordersShowing">0</span> of <span id="ordersTotalCount">0</span>
+            </div>
+            <nav>
+              <ul class="pagination pagination-sm mb-0" id="ordersPagination"></ul>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fulfillments Tab -->
+    <div class="tab-pane fade" id="fulfillmentsTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0">Fulfillments</h5>
+            <span class="badge bg-secondary" id="fulfillmentCount">0</span>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <input type="text" id="fulfillmentSearch" class="form-control form-control-sm" placeholder="Search hardware..." style="width: 200px;">
+            <input type="number" id="fulfillmentOrderFilter" class="form-control form-control-sm" placeholder="Order ID" style="width: 140px;">
+            <button class="btn btn-outline-primary btn-sm" onclick="loadFulfillments()"><i class="bi bi-arrow-clockwise"></i></button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-admin mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Order</th>
+                  <th>User</th>
+                  <th>Hardware</th>
+                  <th>Role</th>
+                  <th>Master</th>
+                  <th>Claimed</th>
+                  <th>Date</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fulfillmentTableBody">
+                <tr><td colspan="9" class="text-center py-4 text-muted">Loading fulfillments...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+          <div class="small text-muted">Showing <span id="fulfillmentShowing">0</span> of <span id="fulfillmentTotal">0</span></div>
+          <nav><ul class="pagination pagination-sm mb-0" id="fulfillmentPagination"></ul></nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resellers Tab -->
+    <div class="tab-pane fade" id="resellersTab">
+      <!-- Reseller Dashboard Stats -->
+      <div class="row g-3 mb-4" id="resellerDashboardStats">
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-primary bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-primary" id="statTotalResellers">-</div>
+              <small class="text-muted">Total Resellers</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-warning bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-warning" id="statPendingResellers">-</div>
+              <small class="text-muted">Pending</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-success bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-success" id="statActiveResellers">-</div>
+              <small class="text-muted">Active</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-info bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-info" id="statDevicesSold">-</div>
+              <small class="text-muted">Devices Sold</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-secondary bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0" id="statTotalOrders">-</div>
+              <small class="text-muted">Total Orders</small>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 col-sm-4">
+          <div class="card border-0 bg-danger bg-opacity-10">
+            <div class="card-body text-center py-3">
+              <div class="h3 mb-0 text-danger" id="statCreditOutstanding">-</div>
+              <small class="text-muted">Credit Outstanding</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reseller Tabs -->
+      <ul class="nav nav-tabs mb-3" id="resellerSubTabs">
+        <li class="nav-item">
+          <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#resellerListPane">Resellers</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#resellerOrdersPane">Purchase Orders</button>
+        </li>
+      </ul>
+      
+      <div class="tab-content">
+        <!-- Resellers List Pane -->
+        <div class="tab-pane fade show active" id="resellerListPane">
+          <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-shop text-primary me-2"></i>Reseller Management</h5>
+                <input type="text" class="form-control form-control-sm search-box" placeholder="Search resellers..." id="resellerSearchInput">
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-admin table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>Company</th>
+                      <th>Admin</th>
+                      <th>Contact</th>
+                      <th>Status</th>
+                      <th>Devices</th>
+                      <th>Customers</th>
+                      <th>Credit</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resellersTableBody">
+                    <tr>
+                      <td colspan="8" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                          <span class="visually-hidden">Loading...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Reseller Orders Pane -->
+        <div class="tab-pane fade" id="resellerOrdersPane">
+          <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-receipt text-primary me-2"></i>Reseller Purchase Orders</h5>
+                <div class="d-flex gap-2">
+                  <select class="form-select form-select-sm" id="resellerOrderFilter" style="width: 150px;">
+                    <option value="">All Orders</option>
+                    <option value="credit">Credit Only</option>
+                  </select>
+                  <select class="form-select form-select-sm" id="resellerOrderStatusFilter" style="width: 150px;">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="delivered">Delivered</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-admin table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>PO#</th>
+                      <th>Reseller</th>
+                      <th>Order#</th>
+                      <th>Package</th>
+                      <th>Qty</th>
+                      <th>Amount</th>
+                      <th>Discount</th>
+                      <th>Status</th>
+                      <th>Credit</th>
+                      <th>Fulfilled</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resellerOrdersTableBody">
+                    <tr>
+                      <td colspan="11" class="text-center py-4 text-muted">Select "Purchase Orders" tab to load data</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports Tab -->
+    <div class="tab-pane fade" id="reportsTab">
+      <div class="row g-4">
+        <!-- Report Filters -->
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+              <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Report Filters</h5>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label">Report Type</label>
+                  <select class="form-select" id="reportType">
+                    <option value="orders">Orders Report</option>
+                    <option value="payments">Payments Report</option>
+                    <option value="subscriptions">Subscriptions Report</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Start Date</label>
+                  <input type="date" class="form-control" id="reportStartDate">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">End Date</label>
+                  <input type="date" class="form-control" id="reportEndDate">
+                </div>
+                <div class="col-md-3">
+                  <button class="btn btn-primary w-100" onclick="loadReport()">
+                    <i class="bi bi-search me-2"></i>Generate Report
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Report Summary Cards -->
+        <div class="col-md-3">
+          <div class="report-card">
+            <div class="report-card-icon bg-primary-subtle text-primary">
+              <i class="bi bi-receipt"></i>
+            </div>
+            <div class="report-card-title">Total Records</div>
+            <div class="report-card-value" id="reportTotalRecords">0</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="report-card">
+            <div class="report-card-icon bg-success-subtle text-success">
+              <i class="bi bi-currency-dollar"></i>
+            </div>
+            <div class="report-card-title">Total Amount</div>
+            <div class="report-card-value" id="reportTotalAmount">৳0</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="report-card">
+            <div class="report-card-icon bg-info-subtle text-info">
+              <i class="bi bi-check-circle"></i>
+            </div>
+            <div class="report-card-title">Successful</div>
+            <div class="report-card-value" id="reportSuccessCount">0</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="report-card">
+            <div class="report-card-icon bg-warning-subtle text-warning">
+              <i class="bi bi-hourglass-split"></i>
+            </div>
+            <div class="report-card-title">Pending</div>
+            <div class="report-card-value" id="reportPendingCount">0</div>
+          </div>
+        </div>
+
+        <!-- Report Table -->
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+              <h5 class="mb-0" id="reportTableTitle">Report Results</h5>
+              <button class="export-btn" onclick="downloadReportCSV()">
+                <i class="bi bi-download me-2"></i>Download CSV
+              </button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-admin table-hover mb-0" id="reportTable">
+                  <thead id="reportTableHead">
+                    <tr>
+                      <td colspan="6" class="text-center py-3 text-muted">Select report type and date range, then click Generate Report</td>
+                    </tr>
+                  </thead>
+                  <tbody id="reportTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard Tab -->
     <!-- Users Tab -->
-    <div class="tab-pane fade show active" id="usersTab">
+    <div class="tab-pane fade" id="usersTab">
       <div class="card shadow-sm">
         <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
           <div class="d-flex align-items-center gap-3">
@@ -549,9 +1126,39 @@
   </div>
 </div>
 
+<!-- Order Fulfillment Modal -->
+<div class="modal fade" id="fulfillModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>Fulfill Order #<span id="fulfillOrderIdDisplay"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="fulfillMasterSection" class="mb-4">
+          <h6 class="border-bottom pb-2">Master Devices (<span id="fulfillMasterCount">0</span>)</h6>
+          <div id="fulfillMasterRows"></div>
+        </div>
+        <div id="fulfillSlaveSection" class="mb-4">
+          <h6 class="border-bottom pb-2">Slave Devices (<span id="fulfillSlaveCount">0</span>)</h6>
+          <div id="fulfillSlaveRows"></div>
+        </div>
+        <div class="alert alert-danger d-none" id="fulfillError"></div>
+        <div class="alert alert-success d-none" id="fulfillSuccess">Order fulfilled successfully!</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="fulfillSubmitBtn">Fulfill Order</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<!-- Chart.js UMD build -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <script src="{% static 'js/change-password.js' %}"></script>
 <script>
 // ===== CSRF Token Helper =====
@@ -561,6 +1168,14 @@ function getCsrfToken() {
     .find(row => row.startsWith('csrftoken='))
     ?.split('=')[1];
   return cookieValue || '';
+}
+
+// ===== HTML Escape Helper =====
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ===== Error Message Parser =====
@@ -625,7 +1240,7 @@ function initSortableTables() {
 
 function sortTable(table, sortKey, asc) {
   const tbody = table.querySelector('tbody');
-  const rows = Array.from(tbody.querySelectorAll('tr[data-user-id], tr[data-device-id]'));
+  const rows = Array.from(tbody.querySelectorAll('tr[data-user-id], tr[data-device-id], tr[data-order-id]'));
   const headerCells = Array.from(table.querySelectorAll('th'));
   const colIndex = headerCells.findIndex(th => th.dataset.sort === sortKey);
   
@@ -854,6 +1469,1169 @@ document.getElementById('addDeviceForm').addEventListener('submit', async functi
   } catch (err) {
     alert('Error creating device: ' + err.message);
   }
+});
+
+// ===== ORDERS MANAGEMENT =====
+let currentOrderPage = 1;
+let ordersPerPage = 10;
+
+async function loadOrders(page = 1) {
+  currentOrderPage = page;
+  const statusFilter = document.getElementById('orderStatusFilter').value;
+  const searchQuery = document.getElementById('orderSearch').value;
+  
+  let url = `/manage/orders/?page=${page}&page_size=${ordersPerPage}`;
+  if (statusFilter) url += `&status=${statusFilter}`;
+  if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
+  
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch orders');
+    const data = await resp.json();
+    
+    // Store orders for fulfillment modal access
+    window.adminOrdersData = {};
+    data.results.forEach(o => window.adminOrdersData[o.id] = o);
+    
+    renderOrders(data.results);
+    document.getElementById('totalOrdersCount').textContent = data.count;
+    document.getElementById('ordersShowing').textContent = data.results.length;
+    document.getElementById('ordersTotalCount').textContent = data.count;
+    renderOrdersPagination(data.count, page);
+  } catch (err) {
+    console.error('Error loading orders:', err);
+    document.getElementById('ordersTableBody').innerHTML = 
+      '<tr><td colspan="9" class="text-center py-4 text-danger">Error loading orders</td></tr>';
+  }
+}
+
+function renderOrders(orders) {
+  const tbody = document.getElementById('ordersTableBody');
+  if (!orders.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">No orders found</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = orders.map(order => {
+    const statusNorm = (order.status || '').toLowerCase();
+    const paymentMethod = (order.payment_method || 'online').toLowerCase();
+    const isCod = paymentMethod === 'cod';
+    const totalDevicesNeeded = (order.number_of_master_devices || 0) + (order.number_of_slave_devices || 0);
+    const assignedDevices = order.assigned_devices || 0;
+    const isFulfilled = assignedDevices >= totalDevicesNeeded && totalDevicesNeeded > 0;
+    const canFulfill = statusNorm === 'paid' && !isFulfilled;
+    const canMarkPaid = isCod && statusNorm === 'pending';
+    
+    let actionsHtml = `
+      <div class="btn-group">
+        ${canFulfill ? `<button class="btn btn-success btn-sm" onclick="openFulfillModalById(${order.id})"><i class="bi bi-box-seam me-1"></i>Fulfill</button>` : ''}
+        ${canMarkPaid ? `<button class="btn btn-warning btn-sm" onclick="updateOrderStatus(${order.id}, 'paid')"><i class="bi bi-cash me-1"></i>Mark Paid (COD)</button>` : ''}
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+            Update
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" onclick="updateOrderStatus(${order.id}, 'processing')"><i class="bi bi-gear me-2"></i>Processing</a></li>
+            <li><a class="dropdown-item" href="#" onclick="updateOrderStatus(${order.id}, 'shipped')"><i class="bi bi-truck me-2"></i>Shipped</a></li>
+            <li><a class="dropdown-item" href="#" onclick="updateOrderStatus(${order.id}, 'delivered')"><i class="bi bi-check-circle me-2"></i>Delivered</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="#" onclick="updateOrderStatus(${order.id}, 'cancelled')"><i class="bi bi-x-circle me-2"></i>Cancelled</a></li>
+          </ul>
+        </div>
+      </div>`;
+    
+    return `
+    <tr class="order-row" data-order-id="${order.id}">
+      <td data-value="${order.id}"><span class="fw-semibold">#${order.id}</span></td>
+      <td data-value="${(order.user_email || '').toLowerCase()}">
+        <div>${order.user_email || 'N/A'}</div>
+        <small class="text-muted">${order.user_phone || ''}</small>
+      </td>
+      <td data-value="${(order.package_name || '').toLowerCase()}">${order.package_name || 'N/A'}</td>
+      <td data-value="${order.quantity || 0}">${order.quantity}</td>
+      <td data-value="${order.total_amount || order.amount || 0}">৳${parseFloat(order.total_amount || order.amount || 0).toLocaleString()}</td>
+      <td data-value="${paymentMethod}">
+        <span class="badge ${isCod ? 'bg-warning text-dark' : 'bg-success-subtle text-success'}">${isCod ? 'Cash on Delivery' : 'Online'}</span>
+      </td>
+      <td data-value="${(order.status || '').toLowerCase()}">
+        <span class="status-badge status-${order.status}">${order.status}</span>
+        ${isFulfilled ? '<span class="badge bg-success ms-1">Fulfilled</span>' : ''}
+      </td>
+      <td data-value="${order.created_at || ''}"><small>${new Date(order.created_at).toLocaleDateString('en-BD', {timeZone: 'Asia/Dhaka'})}</small></td>
+      <td class="text-end">${actionsHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderOrdersPagination(total, currentPage) {
+  const totalPages = Math.ceil(total / ordersPerPage);
+  const pagination = document.getElementById('ordersPagination');
+  
+  if (totalPages <= 1) {
+    pagination.innerHTML = '';
+    return;
+  }
+  
+  let html = '';
+  html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+    <a class="page-link" href="#" onclick="loadOrders(${currentPage - 1})">&laquo;</a>
+  </li>`;
+  
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+      html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+        <a class="page-link" href="#" onclick="loadOrders(${i})">${i}</a>
+      </li>`;
+    } else if (i === currentPage - 3 || i === currentPage + 3) {
+      html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+  }
+  
+  html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+    <a class="page-link" href="#" onclick="loadOrders(${currentPage + 1})">&raquo;</a>
+  </li>`;
+  
+  pagination.innerHTML = html;
+}
+
+async function updateOrderStatus(orderId, newStatus) {
+  if (!confirm(`Update order #${orderId} status to "${newStatus}"?`)) return;
+  
+  try {
+    const resp = await fetch(`/manage/orders/${orderId}/update/`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      },
+      body: JSON.stringify({ order_status: newStatus })
+    });
+    
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to update order');
+    }
+    
+    alert('Order status updated successfully!');
+    loadOrders(currentOrderPage);
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ===== ORDER FULFILLMENT =====
+let currentFulfillOrder = null;
+let currentFulfillUserId = null;
+let fulfillModal = null;
+
+// Initialize modal after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  const fulfillModalEl = document.getElementById('fulfillModal');
+  if (fulfillModalEl) {
+    fulfillModal = new bootstrap.Modal(fulfillModalEl);
+  }
+});
+
+function openFulfillModalById(orderId) {
+  const orderData = window.adminOrdersData && window.adminOrdersData[orderId];
+  if (!orderData) {
+    alert('Order data not found');
+    return;
+  }
+  openFulfillModal(orderId, orderData.user, orderData);
+}
+
+function openFulfillModal(orderId, userId, orderData) {
+  currentFulfillOrder = orderData;
+  currentFulfillUserId = userId;
+  
+  document.getElementById('fulfillOrderIdDisplay').textContent = orderId;
+  document.getElementById('fulfillError').classList.add('d-none');
+  document.getElementById('fulfillSuccess').classList.add('d-none');
+  document.getElementById('fulfillSubmitBtn').disabled = false;
+  document.getElementById('fulfillSubmitBtn').textContent = 'Fulfill Order';
+  
+  const nMaster = orderData.number_of_master_devices || 0;
+  const nSlave = orderData.number_of_slave_devices || 0;
+  
+  document.getElementById('fulfillMasterCount').textContent = nMaster;
+  document.getElementById('fulfillSlaveCount').textContent = nSlave;
+  
+  // Generate Master Rows
+  const fulfillMasterRows = document.getElementById('fulfillMasterRows');
+  fulfillMasterRows.innerHTML = '';
+  if (nMaster > 0) {
+    document.getElementById('fulfillMasterSection').style.display = '';
+    for (let i = 0; i < nMaster; i++) {
+      const row = document.createElement('div');
+      row.className = 'row mb-2 align-items-center';
+      row.innerHTML = `
+        <div class="col-auto"><span class="badge bg-primary">Master ${i+1}</span></div>
+        <div class="col">
+          <input type="text" class="form-control master-id-input" placeholder="Hardware ID" required oninput="updateMasterDropdowns()">
+        </div>
+      `;
+      fulfillMasterRows.appendChild(row);
+    }
+  } else {
+    document.getElementById('fulfillMasterSection').style.display = 'none';
+  }
+  
+  // Generate Slave Rows
+  const fulfillSlaveRows = document.getElementById('fulfillSlaveRows');
+  fulfillSlaveRows.innerHTML = '';
+  if (nSlave > 0) {
+    document.getElementById('fulfillSlaveSection').style.display = '';
+    for (let i = 0; i < nSlave; i++) {
+      const row = document.createElement('div');
+      row.className = 'row mb-2 align-items-center';
+      row.innerHTML = `
+        <div class="col-auto"><span class="badge bg-secondary">Slave ${i+1}</span></div>
+        <div class="col">
+          <input type="text" class="form-control slave-id-input" placeholder="Hardware ID" required>
+        </div>
+        <div class="col">
+          <select class="form-select slave-master-select">
+            <option value="">Select Master...</option>
+          </select>
+        </div>
+      `;
+      fulfillSlaveRows.appendChild(row);
+    }
+    updateMasterDropdowns();
+  } else {
+    document.getElementById('fulfillSlaveSection').style.display = 'none';
+  }
+  
+  fulfillModal.show();
+}
+
+function updateMasterDropdowns() {
+  const masterInputs = document.querySelectorAll('#fulfillMasterRows .master-id-input');
+  const slaveSelects = document.querySelectorAll('#fulfillSlaveRows .slave-master-select');
+  
+  const masterIds = Array.from(masterInputs).map(input => input.value.trim()).filter(val => val !== '');
+  
+  slaveSelects.forEach(select => {
+    const currentVal = select.value;
+    while (select.options.length > 1) {
+      select.remove(1);
+    }
+    
+    masterIds.forEach(id => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = id;
+      select.appendChild(opt);
+    });
+    
+    if (masterIds.includes(currentVal)) {
+      select.value = currentVal;
+    } else if (masterIds.length === 1) {
+      select.value = masterIds[0];
+    }
+  });
+}
+
+document.getElementById('fulfillSubmitBtn')?.addEventListener('click', async () => {
+  if (!currentFulfillOrder) return;
+  
+  const fulfillError = document.getElementById('fulfillError');
+  const fulfillSuccess = document.getElementById('fulfillSuccess');
+  const fulfillSubmitBtn = document.getElementById('fulfillSubmitBtn');
+  
+  fulfillError.classList.add('d-none');
+  
+  // Collect Data
+  const masterInputs = document.querySelectorAll('#fulfillMasterRows .master-id-input');
+  const slaveInputs = document.querySelectorAll('#fulfillSlaveRows .slave-id-input');
+  const slaveSelects = document.querySelectorAll('#fulfillSlaveRows .slave-master-select');
+  
+  const masterIds = Array.from(masterInputs).map(input => input.value.trim());
+  const slaveData = [];
+  
+  // Validate Masters
+  if (masterIds.some(id => !id)) {
+    fulfillError.textContent = "All Master Device IDs are required.";
+    fulfillError.classList.remove('d-none');
+    return;
+  }
+  
+  // Validate Slaves
+  let slaveError = false;
+  slaveInputs.forEach((input, index) => {
+    const hid = input.value.trim();
+    const masterId = slaveSelects[index]?.value || null;
+    
+    if (!hid) {
+      slaveError = true;
+      return;
+    }
+    slaveData.push({
+      id: hid,
+      master_id: masterId || null
+    });
+  });
+  
+  if (slaveError) {
+    fulfillError.textContent = "All Slave Device IDs are required.";
+    fulfillError.classList.remove('d-none');
+    return;
+  }
+  
+  fulfillSubmitBtn.disabled = true;
+  fulfillSubmitBtn.textContent = 'Processing...';
+  
+  try {
+    const resp = await fetch(`/orders/${currentFulfillUserId}/${currentFulfillOrder.id}/fulfill/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      },
+      body: JSON.stringify({
+        master_ids: masterIds,
+        slave_data: slaveData
+      })
+    });
+    
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to fulfill order');
+    }
+    
+    fulfillSuccess.classList.remove('d-none');
+    fulfillSubmitBtn.textContent = 'Fulfilled';
+    
+    setTimeout(() => {
+      fulfillModal.hide();
+      loadOrders(currentOrderPage);
+    }, 1500);
+    
+  } catch (err) {
+    fulfillSubmitBtn.disabled = false;
+    fulfillSubmitBtn.textContent = 'Fulfill Order';
+    fulfillError.textContent = err.message || 'Failed to fulfill order';
+    fulfillError.classList.remove('d-none');
+  }
+});
+
+// Order search with debounce
+let orderSearchTimeout;
+document.getElementById('orderSearch')?.addEventListener('input', function() {
+  clearTimeout(orderSearchTimeout);
+  orderSearchTimeout = setTimeout(() => loadOrders(1), 300);
+});
+
+document.getElementById('orderStatusFilter')?.addEventListener('change', () => loadOrders(1));
+
+// ===== FULFILLMENTS MANAGEMENT =====
+let fulfillmentPage = 1;
+let fulfillmentPageSize = 20;
+
+async function loadFulfillments(page = 1) {
+  fulfillmentPage = page;
+  const search = document.getElementById('fulfillmentSearch').value;
+  const orderFilter = document.getElementById('fulfillmentOrderFilter').value;
+
+  let url = `/manage/fulfillments/?page=${page}&page_size=${fulfillmentPageSize}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (orderFilter) url += `&order_id=${orderFilter}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch fulfillments');
+    const data = await resp.json();
+    renderFulfillments(data.results || []);
+    document.getElementById('fulfillmentCount').textContent = data.count || 0;
+    document.getElementById('fulfillmentShowing').textContent = (data.results || []).length;
+    document.getElementById('fulfillmentTotal').textContent = data.count || 0;
+    renderFulfillmentPagination(data.count || 0, page);
+  } catch (err) {
+    console.error('Error loading fulfillments:', err);
+    document.getElementById('fulfillmentTableBody').innerHTML = '<tr><td colspan="9" class="text-center py-4 text-danger">Error loading fulfillments</td></tr>';
+  }
+}
+
+function renderFulfillments(items) {
+  const tbody = document.getElementById('fulfillmentTableBody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">No fulfillments found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map(f => {
+    const roleBadge = f.device_role === 'master'
+      ? '<span class="badge bg-primary">Master</span>'
+      : '<span class="badge bg-info text-dark">Slave</span>';
+    const claimedBadge = f.is_claimed ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>';
+    const dateStr = f.created_at ? new Date(f.created_at).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' }) : '';
+    return `
+      <tr>
+        <td>${f.id}</td>
+        <td>#${f.order_id}</td>
+        <td>${f.user_email || ''}</td>
+        <td><code>${f.hardware_identifier}</code></td>
+        <td>${roleBadge}</td>
+        <td>${f.master_hardware_identifier || ''}</td>
+        <td>${claimedBadge}</td>
+        <td>${dateStr}</td>
+        <td class="text-end">
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" onclick="promptMoveFulfillment(${f.id})"><i class="bi bi-arrow-left-right"></i></button>
+            <button class="btn btn-outline-danger" onclick="deleteFulfillment(${f.id})"><i class="bi bi-trash"></i></button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function renderFulfillmentPagination(total, page) {
+  const totalPages = Math.ceil(total / fulfillmentPageSize);
+  const ul = document.getElementById('fulfillmentPagination');
+  if (totalPages <= 1) { ul.innerHTML = ''; return; }
+  let html = '';
+  html += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadFulfillments(${page-1})">&laquo;</a></li>`;
+  for (let i=1; i<=totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page-2 && i <= page+2)) {
+      html += `<li class="page-item ${i===page ? 'active' : ''}"><a class="page-link" href="#" onclick="loadFulfillments(${i})">${i}</a></li>`;
+    } else if (i === page-3 || i === page+3) {
+      html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+    }
+  }
+  html += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadFulfillments(${page+1})">&raquo;</a></li>`;
+  ul.innerHTML = html;
+}
+
+async function deleteFulfillment(id) {
+  if (!confirm('Delete this fulfillment? This will free the slot.')) return;
+  try {
+    const resp = await fetch(`/manage/fulfillments/${id}/`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}`, 'X-CSRFToken': getCsrfToken() }
+    });
+    if (!resp.ok) throw new Error('Failed to delete fulfillment');
+    loadFulfillments(fulfillmentPage);
+    loadOrders(currentOrderPage);
+  } catch (err) {
+    alert('Error deleting fulfillment: ' + err.message);
+  }
+}
+
+async function promptMoveFulfillment(id) {
+  const target = prompt('Enter target paid order ID to move this fulfillment:');
+  if (!target) return;
+  try {
+    const resp = await fetch(`/manage/fulfillments/${id}/`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}`, 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ new_order_id: target })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to move fulfillment');
+    }
+    loadFulfillments(fulfillmentPage);
+    loadOrders(currentOrderPage);
+  } catch (err) {
+    alert('Error moving fulfillment: ' + err.message);
+  }
+}
+
+document.getElementById('fulfillmentSearch')?.addEventListener('input', function(){
+  clearTimeout(window._fulfillSearchTimer);
+  window._fulfillSearchTimer = setTimeout(() => loadFulfillments(1), 300);
+});
+
+document.getElementById('fulfillmentOrderFilter')?.addEventListener('change', () => loadFulfillments(1));
+
+// ===== REPORTS =====
+let currentReportData = [];
+
+async function loadReport() {
+  const reportType = document.getElementById('reportType').value;
+  const startDate = document.getElementById('reportStartDate').value;
+  const endDate = document.getElementById('reportEndDate').value;
+  
+  let url = `/manage/reports/${reportType}/?output_format=json`;
+  if (startDate) url += `&date_from=${startDate}`;
+  if (endDate) url += `&date_to=${endDate}`;
+  
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch report');
+    const data = await resp.json();
+    
+    currentReportData = data;
+    renderReportSummary(data, reportType);
+    renderReportTable(data, reportType);
+  } catch (err) {
+    console.error('Error loading report:', err);
+    alert('Error loading report: ' + err.message);
+  }
+}
+
+function renderReportSummary(data, reportType) {
+  const summary = data.summary || {};
+  
+  if (reportType === 'orders') {
+    document.getElementById('reportTotalRecords').textContent = summary.total_orders || 0;
+    document.getElementById('reportTotalAmount').textContent = '৳' + parseFloat(summary.total_revenue || 0).toLocaleString();
+    // Count delivered and pending from status_breakdown
+    const statusBreakdown = data.status_breakdown || [];
+    const delivered = statusBreakdown.find(s => s.order_status === 'delivered')?.count || 0;
+    const pending = statusBreakdown.find(s => s.order_status === 'pending')?.count || 0;
+    document.getElementById('reportSuccessCount').textContent = delivered;
+    document.getElementById('reportPendingCount').textContent = pending;
+  } else if (reportType === 'payments') {
+    const onlineTx = Number(summary.total_transactions || 0);
+    const codOrders = Number(summary.cod_orders || 0);
+    const totalRecords = onlineTx + codOrders;
+    const totalAmount = parseFloat(summary.total_amount || 0) || 0;
+    const successCount = Number(summary.successful_transactions || 0) + codOrders;
+    document.getElementById('reportTotalRecords').textContent = totalRecords;
+    document.getElementById('reportTotalAmount').textContent = '৳' + totalAmount.toLocaleString();
+    document.getElementById('reportSuccessCount').textContent = successCount;
+    document.getElementById('reportPendingCount').textContent = totalRecords - successCount;
+  } else if (reportType === 'subscriptions') {
+    document.getElementById('reportTotalRecords').textContent = summary.active_subscriptions || 0;
+    document.getElementById('reportTotalAmount').textContent = '৳' + parseFloat(summary.mrr || 0).toLocaleString();
+    document.getElementById('reportSuccessCount').textContent = summary.new_subscriptions_in_period || 0;
+    document.getElementById('reportPendingCount').textContent = summary.failed_charges || 0;
+  }
+}
+
+function renderReportTable(data, reportType) {
+  const thead = document.getElementById('reportTableHead');
+  const tbody = document.getElementById('reportTableBody');
+  document.getElementById('reportTableTitle').textContent = 
+    reportType.charAt(0).toUpperCase() + reportType.slice(1) + ' Report';
+  
+  if (reportType === 'orders') {
+    const records = data.orders || [];
+    thead.innerHTML = `<tr>
+      <th>Order ID</th><th>Customer</th><th>Package</th><th>Qty</th><th>Amount</th><th>Status</th><th>Date</th>
+    </tr>`;
+    tbody.innerHTML = records.length ? records.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.user_email || 'N/A'}</td>
+        <td>${r.package_name || 'N/A'}</td>
+        <td>${r.quantity}</td>
+        <td>৳${parseFloat(r.total_amount || r.amount || 0).toLocaleString()}</td>
+        <td><span class="status-badge status-${r.status || r.order_status}">${r.status || r.order_status}</span></td>
+        <td>${new Date(r.created_at || r.ordered_at).toLocaleDateString('en-BD', {timeZone: 'Asia/Dhaka'})}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="7" class="text-center py-4 text-muted">No records found</td></tr>';
+  } else if (reportType === 'payments') {
+    const records = data.records || [];
+    thead.innerHTML = `<tr>
+      <th>Type</th><th>Payment Method</th><th>ID</th><th>Order ID</th><th>Amount</th><th>Status</th><th>Date</th>
+    </tr>`;
+    tbody.innerHTML = records.length ? records.map(r => {
+      const status = (r.status || '').toLowerCase();
+      const badgeClass = status ? `status-${status}` : 'status-pending';
+      const methodLabel = r.payment_method === 'cod' ? 'Cash on Delivery' : 'Online';
+      return `
+        <tr>
+          <td>${r.type}</td>
+          <td><span class="badge ${r.payment_method === 'cod' ? 'bg-warning text-dark' : 'bg-success-subtle text-success'}">${methodLabel}</span></td>
+          <td>${r.id}</td>
+          <td>${r.order_id || ''}</td>
+          <td>৳${parseFloat(r.amount || 0).toLocaleString()}</td>
+          <td><span class="status-badge ${badgeClass}">${r.status || ''}</span></td>
+          <td>${r.created_at ? new Date(r.created_at).toLocaleString('en-BD', {timeZone: 'Asia/Dhaka'}) : ''}</td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="7" class="text-center py-4 text-muted">No payment records found</td></tr>';
+  } else if (reportType === 'subscriptions') {
+    // Subscriptions report shows actual subscriptions with MRR
+    const records = data.subscriptions || [];
+    thead.innerHTML = `<tr>
+      <th>ID</th><th>Device</th><th>Customer</th><th>Package</th><th>MRR</th><th>Status</th><th>Next Due</th>
+    </tr>`;
+    tbody.innerHTML = records.length ? records.map(r => `
+      <tr>
+        <td>#${r.id}</td>
+        <td>${r.device_name || 'N/A'}</td>
+        <td>${r.user_email || 'N/A'}</td>
+        <td>${r.package_name || 'N/A'}</td>
+        <td>৳${parseFloat(r.monthly_amount || 0).toLocaleString()}</td>
+        <td><span class="status-badge status-${r.status}">${r.status}</span></td>
+        <td>${r.next_due_at ? new Date(r.next_due_at).toLocaleDateString('en-BD', {timeZone: 'Asia/Dhaka'}) : 'N/A'}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="7" class="text-center py-4 text-muted">No subscription records found</td></tr>';
+  }
+}
+
+function downloadReportCSV() {
+  const reportType = document.getElementById('reportType').value;
+  const startDate = document.getElementById('reportStartDate').value;
+  const endDate = document.getElementById('reportEndDate').value;
+  
+  let url = `/manage/reports/${reportType}/?output_format=csv`;
+  if (startDate) url += `&date_from=${startDate}`;
+  if (endDate) url += `&date_to=${endDate}`;
+  
+  // Open in new window to trigger download
+  window.open(url, '_blank');
+}
+
+// ===== DASHBOARD =====
+let revenueTrendChart = null;
+let orderStatusChart = null;
+
+async function loadDashboard() {
+  await Promise.all([
+    loadDashboardOverview(),
+    loadRevenueTrend(),
+    loadOrderStatusBreakdown(),
+    loadRecentOrders()
+  ]);
+}
+
+async function loadDashboardOverview() {
+  try {
+    const resp = await fetch('/manage/dashboard/overview/', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch dashboard overview');
+    const data = await resp.json();
+    
+    // Today stats
+    document.getElementById('dashTodayOrders').textContent = data.orders?.today || 0;
+    document.getElementById('dashTodayRevenue').textContent = '৳' + parseFloat(data.revenue?.today || 0).toLocaleString();
+    // This month stats
+    document.getElementById('dashMonthOrders').textContent = data.orders?.this_month || 0;
+    document.getElementById('dashMonthRevenue').textContent = '৳' + parseFloat(data.revenue?.this_month || 0).toLocaleString();
+    document.getElementById('dashPendingOrders').textContent = data.orders?.pending || 0;
+    document.getElementById('dashActiveSubscriptions').textContent = data.subscriptions?.active || 0;
+  } catch (err) {
+    console.error('Error loading dashboard overview:', err);
+  }
+}
+
+async function loadRecentOrders() {
+  try {
+    const resp = await fetch('/manage/orders/?page_size=5', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch recent orders');
+    const data = await resp.json();
+    
+    const tbody = document.getElementById('dashRecentOrdersBody');
+    const orders = data.results || [];
+    tbody.innerHTML = orders.length ? orders.map(order => `
+      <tr>
+        <td>#${order.id}</td>
+        <td>${order.user_email || 'N/A'}</td>
+        <td>${order.package_name || 'N/A'}</td>
+        <td>৳${parseFloat(order.total_amount || 0).toLocaleString()}</td>
+        <td><span class="status-badge status-${order.status}">${order.status}</span></td>
+        <td>${new Date(order.created_at).toLocaleDateString('en-BD', {timeZone: 'Asia/Dhaka'})}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="6" class="text-center py-4 text-muted">No recent orders</td></tr>';
+  } catch (err) {
+    console.error('Error loading recent orders:', err);
+    document.getElementById('dashRecentOrdersBody').innerHTML = 
+      '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading orders</td></tr>';
+  }
+}
+
+async function loadRevenueTrend() {
+  try {
+    const resp = await fetch('/manage/dashboard/revenue-trend/?days=30', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch revenue trend');
+    const response = await resp.json();
+    
+    const ctx = document.getElementById('revenueTrendChart').getContext('2d');
+    
+    if (revenueTrendChart) {
+      revenueTrendChart.destroy();
+    }
+    
+    const trendData = response.data || [];
+    
+    revenueTrendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trendData.map(d => d.date),
+        datasets: [{
+          label: 'Revenue (৳)',
+          data: trendData.map(d => parseFloat(d.order_revenue || 0) + parseFloat(d.subscription_revenue || 0)),
+          borderColor: '#198754',
+          backgroundColor: 'rgba(25, 135, 84, 0.1)',
+          fill: true,
+          tension: 0.4
+        }, {
+          label: 'Orders',
+          data: trendData.map(d => d.order_count || 0),
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13, 110, 253, 0.1)',
+          fill: false,
+          tension: 0.4,
+          yAxisID: 'y1'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            position: 'left',
+            title: { display: true, text: 'Revenue (৳)' }
+          },
+          y1: {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'Orders' },
+            grid: { drawOnChartArea: false }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Error loading revenue trend:', err);
+  }
+}
+
+async function loadOrderStatusBreakdown() {
+  try {
+    const resp = await fetch('/manage/dashboard/order-status/', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    if (!resp.ok) throw new Error('Failed to fetch order status');
+    const response = await resp.json();
+    
+    const ctx = document.getElementById('orderStatusChart').getContext('2d');
+    
+    if (orderStatusChart) {
+      orderStatusChart.destroy();
+    }
+    
+    const statusColors = {
+      pending: '#ffc107',
+      paid: '#17a2b8',
+      processing: '#6f42c1',
+      shipped: '#0d6efd',
+      delivered: '#198754',
+      cancelled: '#dc3545'
+    };
+    
+    const breakdown = response.breakdown || [];
+    
+    orderStatusChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: breakdown.map(d => (d.order_status || '').charAt(0).toUpperCase() + (d.order_status || '').slice(1)),
+        datasets: [{
+          data: breakdown.map(d => d.count),
+          backgroundColor: breakdown.map(d => statusColors[d.order_status] || '#6c757d')
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom'
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Error loading order status breakdown:', err);
+  }
+}
+
+// Expose functions used by inline handlers (module scope is isolated by default)
+Object.assign(window, {
+  deleteDevice,
+  deleteFulfillment,
+  deleteUser,
+  downloadReportCSV,
+  editDevice,
+  editUser,
+  loadDashboard,
+  loadFulfillments,
+  loadOrders,
+  loadReport,
+  openFulfillModal,
+  openFulfillModalById,
+  promptMoveFulfillment,
+  updateOrderStatus,
+  viewUserDevices
+});
+
+// Load data when tabs are shown
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+  tab.addEventListener('shown.bs.tab', function(e) {
+    const target = e.target.getAttribute('data-bs-target');
+    if (target === '#ordersTab') loadOrders();
+    if (target === '#dashboardTab') loadDashboard();
+    if (target === '#fulfillmentsTab') loadFulfillments();
+    if (target === '#resellersTab') {
+      loadResellerDashboard();
+      loadResellers();
+    }
+    if (target === '#resellerOrdersPane') loadResellerOrders();
+  });
+});
+
+// ==================== Resellers Management ====================
+let resellersData = [];
+let resellerOrdersData = [];
+
+async function loadResellerDashboard() {
+  try {
+    const response = await fetch('/api/resellers/admin/dashboard/', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (!response.ok) throw new Error('Failed to load dashboard');
+    
+    const data = await response.json();
+    
+    // Update stats
+    document.getElementById('statTotalResellers').textContent = data.resellers?.total || 0;
+    document.getElementById('statPendingResellers').textContent = data.resellers?.pending || 0;
+    document.getElementById('statActiveResellers').textContent = data.resellers?.active || 0;
+    document.getElementById('statDevicesSold').textContent = data.devices_sold_by_resellers || 0;
+    document.getElementById('statTotalOrders').textContent = data.purchase_orders?.total_orders || 0;
+    document.getElementById('statCreditOutstanding').textContent = '৳' + parseFloat(data.purchase_orders?.credit_outstanding || 0).toLocaleString();
+    
+  } catch (error) {
+    console.error('Failed to load reseller dashboard:', error);
+  }
+}
+
+async function loadResellers() {
+  const tbody = document.getElementById('resellersTableBody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+  
+  try {
+    const response = await fetch('/api/resellers/admin/resellers/', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (!response.ok) throw new Error('Failed to load resellers');
+    
+    const data = await response.json();
+    resellersData = Array.isArray(data) ? data : (data.results || []);
+    renderResellers(resellersData);
+  } catch (error) {
+    console.error('Failed to load resellers:', error);
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Failed to load resellers</td></tr>';
+  }
+}
+
+function renderResellers(data) {
+  const tbody = document.getElementById('resellersTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No resellers registered yet</td></tr>';
+    return;
+  }
+  
+  const statusColors = {
+    'pending': 'warning',
+    'active': 'success',
+    'suspended': 'danger',
+    'terminated': 'secondary'
+  };
+  
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td>
+        <div class="fw-semibold">${escapeHtml(r.company_name)}</div>
+        ${r.brand_name ? `<small class="text-muted">${escapeHtml(r.brand_name)}</small>` : ''}
+      </td>
+      <td>${escapeHtml(r.admin_email || '-')}</td>
+      <td>
+        <div>${escapeHtml(r.contact_email)}</div>
+        <small class="text-muted">${escapeHtml(r.contact_phone || '-')}</small>
+      </td>
+      <td>
+        <span class="badge bg-${statusColors[r.status] || 'secondary'}">${r.status}</span>
+      </td>
+      <td>${r.device_count || 0}</td>
+      <td>${r.customer_count || 0}</td>
+      <td>
+        <div>৳${parseFloat(r.credit_limit || 0).toLocaleString()}</div>
+        <small class="text-muted">Used: ৳${parseFloat(r.current_credit_used || 0).toLocaleString()}</small>
+      </td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          ${r.status === 'pending' ? `
+            <button class="btn btn-success" onclick="activateReseller(${r.id})" title="Activate">
+              <i class="bi bi-check-lg"></i>
+            </button>
+          ` : ''}
+          ${r.status === 'active' ? `
+            <button class="btn btn-warning" onclick="suspendReseller(${r.id})" title="Suspend">
+              <i class="bi bi-pause"></i>
+            </button>
+          ` : ''}
+          ${r.status === 'suspended' ? `
+            <button class="btn btn-success" onclick="activateReseller(${r.id})" title="Reactivate">
+              <i class="bi bi-play"></i>
+            </button>
+            <button class="btn btn-danger" onclick="terminateReseller(${r.id})" title="Terminate">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          ` : ''}
+          <button class="btn btn-outline-primary" onclick="editReseller(${r.id})" title="Edit">
+            <i class="bi bi-pencil"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function activateReseller(id) {
+  if (!confirm('Activate this reseller?')) return;
+  try {
+    const response = await fetch(`/api/resellers/admin/resellers/${id}/activate/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (response.ok) {
+      alert('Reseller activated successfully');
+      loadResellers();
+    } else {
+      throw new Error('Failed to activate');
+    }
+  } catch (e) {
+    alert('Failed to activate reseller: ' + e.message);
+  }
+}
+
+async function suspendReseller(id) {
+  if (!confirm('Suspend this reseller? They will not be able to manage devices.')) return;
+  try {
+    const response = await fetch(`/api/resellers/admin/resellers/${id}/suspend/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (response.ok) {
+      alert('Reseller suspended');
+      loadResellers();
+      loadResellerDashboard();
+    } else {
+      throw new Error('Failed to suspend');
+    }
+  } catch (e) {
+    alert('Failed to suspend reseller: ' + e.message);
+  }
+}
+
+async function terminateReseller(id) {
+  if (!confirm('Terminate this reseller? This action cannot be undone.')) return;
+  try {
+    const response = await fetch(`/api/resellers/admin/resellers/${id}/terminate/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (response.ok) {
+      alert('Reseller terminated');
+      loadResellers();
+      loadResellerDashboard();
+    } else {
+      throw new Error('Failed to terminate');
+    }
+  } catch (e) {
+    alert('Failed to terminate reseller: ' + e.message);
+  }
+}
+
+function editReseller(id) {
+  // For now, redirect to Django admin
+  window.open(`/admin/resellers/reseller/${id}/change/`, '_blank');
+}
+
+// ==================== Reseller Orders Management ====================
+async function loadResellerOrders() {
+  const tbody = document.getElementById('resellerOrdersTableBody');
+  tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+  
+  try {
+    let url = '/api/resellers/admin/orders/';
+    const params = new URLSearchParams();
+    
+    const creditFilter = document.getElementById('resellerOrderFilter')?.value;
+    if (creditFilter === 'credit') params.append('credit_only', 'true');
+    
+    const statusFilter = document.getElementById('resellerOrderStatusFilter')?.value;
+    if (statusFilter) params.append('status', statusFilter);
+    
+    if (params.toString()) url += '?' + params.toString();
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    if (!response.ok) throw new Error('Failed to load orders');
+    
+    resellerOrdersData = await response.json();
+    renderResellerOrders(resellerOrdersData);
+  } catch (error) {
+    console.error('Failed to load reseller orders:', error);
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-danger">Failed to load orders</td></tr>';
+  }
+}
+
+function renderResellerOrders(data) {
+  const tbody = document.getElementById('resellerOrdersTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-muted">No purchase orders found</td></tr>';
+    return;
+  }
+  
+  const statusColors = {
+    'pending': 'warning',
+    'paid': 'info',
+    'processing': 'primary',
+    'shipped': 'primary',
+    'delivered': 'success',
+    'cancelled': 'danger'
+  };
+  
+  tbody.innerHTML = data.map(po => {
+    const creditStatus = po.is_credit_purchase 
+      ? (po.credit_paid_at 
+          ? '<span class="badge bg-success">Paid</span>' 
+          : `<span class="badge bg-warning">Due ${po.credit_due_date || 'N/A'}</span>`)
+      : '<span class="badge bg-secondary">Cash</span>';
+    
+    const markPaidBtn = po.is_credit_purchase && !po.credit_paid_at
+      ? `<button class="btn btn-success btn-sm" onclick="markCreditPaid(${po.id})" title="Mark Paid"><i class="bi bi-check"></i></button>`
+      : '';
+    
+    return `
+      <tr>
+        <td><strong>PO-${po.id}</strong></td>
+        <td>${escapeHtml(po.reseller_name)}</td>
+        <td><a href="#" onclick="viewOrder(${po.order_id})">#${po.order_id}</a></td>
+        <td>${escapeHtml(po.package_name || '-')}</td>
+        <td>${po.quantity}</td>
+        <td>৳${parseFloat(po.final_amount).toLocaleString()}</td>
+        <td class="text-success">-৳${parseFloat(po.discount_applied).toLocaleString()}</td>
+        <td><span class="badge bg-${statusColors[po.order_status] || 'secondary'}">${po.order_status}</span></td>
+        <td>${creditStatus}</td>
+        <td>${po.fulfilled_count}/${po.quantity}</td>
+        <td>
+          ${markPaidBtn}
+          <button class="btn btn-outline-primary btn-sm" onclick="viewOrderFulfillments(${po.order_id})" title="View Fulfillments">
+            <i class="bi bi-box"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function markCreditPaid(poId) {
+  if (!confirm('Mark this credit purchase as paid?')) return;
+  
+  try {
+    const response = await fetch(`/api/resellers/admin/orders/${poId}/mark-paid/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'X-CSRFToken': getCsrfToken()
+      }
+    });
+    
+    if (response.ok) {
+      alert('Credit payment marked as received');
+      loadResellerOrders();
+      loadResellerDashboard();
+    } else {
+      const err = await response.json();
+      throw new Error(err.detail || 'Failed to mark as paid');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function viewOrder(orderId) {
+  // Switch to orders tab and filter
+  document.querySelector('[data-bs-target="#ordersTab"]').click();
+  // TODO: Filter by order ID
+}
+
+function viewOrderFulfillments(orderId) {
+  // Switch to fulfillments tab and filter
+  document.querySelector('[data-bs-target="#fulfillmentsTab"]').click();
+  document.getElementById('fulfillmentOrderFilter').value = orderId;
+  loadFulfillments();
+}
+
+// Event listeners for reseller order filters
+document.getElementById('resellerOrderFilter')?.addEventListener('change', loadResellerOrders);
+document.getElementById('resellerOrderStatusFilter')?.addEventListener('change', loadResellerOrders);
+
+// Reseller search
+document.getElementById('resellerSearchInput')?.addEventListener('input', function(e) {
+  const query = e.target.value.toLowerCase();
+  const filtered = resellersData.filter(r => 
+    (r.company_name || '').toLowerCase().includes(query) ||
+    (r.admin_email || '').toLowerCase().includes(query) ||
+    (r.contact_email || '').toLowerCase().includes(query)
+  );
+  renderResellers(filtered);
+});
+
+// Initialize default dates for reports
+document.addEventListener('DOMContentLoaded', function() {
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  const startDateInput = document.getElementById('reportStartDate');
+  const endDateInput = document.getElementById('reportEndDate');
+  
+  if (startDateInput) startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+  if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
+  
+  // Load dashboard on page load if it's the active tab
+  loadDashboard();
 });
 </script>
 {% endblock %}

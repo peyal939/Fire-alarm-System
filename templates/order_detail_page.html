@@ -1,0 +1,832 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Order #{{ order_id }}{% endblock %}
+{% block extra_css %}
+<style>
+  .order-detail-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .order-detail-header h1 {
+    margin: 0;
+    font-weight: 700;
+  }
+  
+  .order-detail-header .breadcrumb-nav {
+    margin-bottom: 1rem;
+  }
+  
+  .order-detail-header .breadcrumb-nav a {
+    color: rgba(255,255,255,0.8);
+    text-decoration: none;
+  }
+  
+  .order-detail-header .breadcrumb-nav a:hover {
+    color: white;
+  }
+  
+  .order-detail-container {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 2rem;
+    align-items: start;
+  }
+  
+  @media (max-width: 991px) {
+    .order-detail-container {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .detail-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  
+  .detail-card .card-header {
+    background: #f8f9fa;
+    padding: 1rem 1.5rem;
+    font-weight: 600;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .detail-card .card-body {
+    padding: 1.5rem;
+  }
+  
+  .status-timeline {
+    position: relative;
+    padding-left: 2rem;
+  }
+  
+  .timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+  }
+  
+  .timeline-item:last-child {
+    padding-bottom: 0;
+  }
+  
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -2rem;
+    top: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #dee2e6;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px #dee2e6;
+  }
+  
+  .timeline-item.completed::before {
+    background: #198754;
+    box-shadow: 0 0 0 2px #198754;
+  }
+  
+  .timeline-item.current::before {
+    background: #0d6efd;
+    box-shadow: 0 0 0 2px #0d6efd;
+    animation: pulse 2s infinite;
+  }
+  
+  .timeline-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: calc(-2rem + 7px);
+    top: 16px;
+    width: 2px;
+    height: calc(100% - 8px);
+    background: #dee2e6;
+  }
+  
+  .timeline-item.completed:not(:last-child)::after {
+    background: #198754;
+  }
+  
+  .timeline-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.25rem;
+  }
+  
+  .timeline-date {
+    font-size: 0.8rem;
+    color: #6c757d;
+  }
+  
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 2px #0d6efd; }
+    50% { box-shadow: 0 0 0 6px rgba(13, 110, 253, 0.3); }
+    100% { box-shadow: 0 0 0 2px #0d6efd; }
+  }
+  
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+  
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .info-item.full-width {
+    grid-column: 1 / -1;
+  }
+  
+  .info-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+  }
+  
+  .info-value {
+    font-weight: 500;
+    color: #212529;
+  }
+  
+  .info-value.large {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #198754;
+  }
+  
+  .status-badge {
+    display: inline-block;
+    padding: 0.5em 1em;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  
+  .status-pending { background: #fff3cd; color: #856404; }
+  .status-paid { background: #cff4fc; color: #055160; }
+  .status-delivered { background: #d1e7dd; color: #0f5132; }
+  .status-cancelled { background: #e2e3e5; color: #41464b; }
+  .status-failed { background: #f8d7da; color: #842029; }
+  
+  .sidebar-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    overflow: hidden;
+    position: sticky;
+    top: 100px;
+  }
+  
+  .sidebar-card .card-header {
+    background: #f8f9fa;
+    padding: 1rem 1.5rem;
+    font-weight: 600;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .sidebar-card .card-body {
+    padding: 1.5rem;
+  }
+  
+  .action-btn {
+    width: 100%;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  
+  .action-btn:last-child {
+    margin-bottom: 0;
+  }
+  
+  .device-table {
+    width: 100%;
+    margin-top: 1rem;
+  }
+  
+  .device-table th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+    padding: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+  }
+  
+  .device-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9rem;
+  }
+  
+  .device-table tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .loading-state {
+    text-align: center;
+    padding: 4rem;
+    color: #6c757d;
+  }
+  
+  .error-state {
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .fulfillment-info {
+    background: #d1e7dd;
+    border-radius: 10px;
+    padding: 1rem;
+    margin-top: 1rem;
+  }
+  
+  .fulfillment-info .label {
+    font-size: 0.8rem;
+    color: #0f5132;
+    font-weight: 600;
+  }
+  
+  .fulfillment-info .value {
+    font-size: 1.1rem;
+    color: #0f5132;
+    font-weight: 700;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="py-4" id="orderDetailPage" data-user-id="{{ request.user.id }}" data-order-id="{{ order_id }}">
+  
+  <div id="loadingState" class="loading-state">
+    <div class="spinner-border text-primary mb-3" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>Loading order details...</p>
+  </div>
+  
+  <div id="errorState" class="error-state" style="display: none;">
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <span id="errorMsg">Failed to load order.</span>
+    </div>
+    <a href="/app/orders/" class="btn btn-primary">Back to Orders</a>
+  </div>
+  
+  <div id="orderContent" style="display: none;">
+    <div class="order-detail-header">
+      <div class="breadcrumb-nav">
+        <a href="/app/orders/"><i class="bi bi-arrow-left me-1"></i>Back to Orders</a>
+      </div>
+      <h1><i class="bi bi-bag me-2"></i>Order #<span id="headerOrderId">-</span></h1>
+    </div>
+    
+    <div class="order-detail-container">
+      <div class="main-content">
+        
+        <!-- Status Timeline -->
+        <div class="detail-card">
+          <div class="card-header">
+            <i class="bi bi-clock-history me-2"></i>Order Status
+          </div>
+          <div class="card-body">
+            <div class="status-timeline" id="statusTimeline">
+              <!-- Timeline items will be rendered here -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Order Items -->
+        <div class="detail-card">
+          <div class="card-header">
+            <i class="bi bi-box me-2"></i>Order Items
+          </div>
+          <div class="card-body">
+            <div class="info-grid" id="orderItems">
+              <!-- Order items info -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Shipping Information -->
+        <div class="detail-card" id="shippingCard">
+          <div class="card-header">
+            <i class="bi bi-geo-alt me-2"></i>Shipping Information
+          </div>
+          <div class="card-body">
+            <div class="info-grid" id="shippingInfo">
+              <!-- Shipping info -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Customer Information -->
+        <div class="detail-card" id="customerCard" style="display: none;">
+          <div class="card-header">
+            <i class="bi bi-person me-2"></i>Customer Information
+          </div>
+          <div class="card-body">
+            <div class="info-grid" id="customerInfo">
+              <!-- Customer info -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Assigned Devices -->
+        <div class="detail-card" id="devicesCard" style="display: none;">
+          <div class="card-header">
+            <i class="bi bi-cpu me-2"></i>Assigned Devices
+          </div>
+          <div class="card-body">
+            <div id="devicesInfo">
+              <!-- Devices will be listed here -->
+            </div>
+          </div>
+        </div>
+        
+      </div>
+      
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-card">
+          <div class="card-header">
+            <i class="bi bi-receipt me-2"></i>Order Summary
+          </div>
+          <div class="card-body">
+            <div class="info-item mb-3">
+              <span class="info-label">Status</span>
+              <span id="orderStatus"></span>
+            </div>
+            <div id="priceBreakdown" class="mb-3">
+              <div class="info-item mb-2">
+                <span class="info-label">Device Cost</span>
+                <span class="info-value" id="deviceCost">-</span>
+              </div>
+              <div class="info-item mb-2">
+                <span class="info-label">MRF (1st Month)</span>
+                <span class="info-value" id="mrfCost">-</span>
+              </div>
+              <hr class="my-2" style="margin: 0.5rem 0;" />
+              <div class="info-item">
+                <span class="info-label">Total Amount</span>
+                <span class="info-value large" id="orderAmount">-</span>
+              </div>
+            </div>
+            <div class="info-item mb-3">
+              <span class="info-label">Order Date</span>
+              <span class="info-value" id="orderDate">-</span>
+            </div>
+            <div class="info-item" id="currencyInfo">
+              <span class="info-label">Currency</span>
+              <span class="info-value" id="orderCurrency">BDT</span>
+            </div>
+            
+            <div id="fulfillmentStatus" class="fulfillment-info" style="display: none;">
+              <div class="label">Fulfillment Status</div>
+              <div class="value"><i class="bi bi-check-circle me-1"></i><span id="fulfillmentText">Fulfilled</span></div>
+            </div>
+            
+            <hr class="my-3" />
+            
+            <div id="actionButtons">
+              <!-- Action buttons will be rendered here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const pageRoot = document.getElementById('orderDetailPage');
+  const userId = pageRoot.dataset.userId;
+  const orderId = pageRoot.dataset.orderId;
+  
+  const loadingState = document.getElementById('loadingState');
+  const errorState = document.getElementById('errorState');
+  const errorMsg = document.getElementById('errorMsg');
+  const orderContent = document.getElementById('orderContent');
+  
+  let orderData = null;
+  
+  const statusClasses = {
+    pending: 'status-pending',
+    paid: 'status-paid',
+    delivered: 'status-delivered',
+    cancelled: 'status-cancelled',
+    failed: 'status-failed'
+  };
+  
+  const statusOrder = ['pending', 'paid', 'delivered'];
+  
+  function formatMoney(v) {
+    if (v === null || v === undefined || v === '') return '৳0.00';
+    const n = Number(v);
+    return isNaN(n) ? v : '৳' + n.toFixed(2);
+  }
+  
+  function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+  
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  
+  function showView(view) {
+    loadingState.style.display = view === 'loading' ? '' : 'none';
+    errorState.style.display = view === 'error' ? '' : 'none';
+    orderContent.style.display = view === 'content' ? '' : 'none';
+  }
+  
+  async function loadOrder() {
+    showView('loading');
+    try {
+      const data = await apiGet(`/orders/${userId}/${orderId}/`);
+      orderData = data;
+      renderOrder();
+      showView('content');
+    } catch (e) {
+      console.error('Failed to load order:', e);
+      errorMsg.textContent = e.message || 'Failed to load order.';
+      showView('error');
+    }
+  }
+  
+  function renderOrder() {
+    if (!orderData) return;
+    
+    const order = orderData;
+    const pkg = order.package || {};
+    const status = (order.order_status || 'pending').toLowerCase();
+    const orderUserId = typeof order.user === 'object' ? order.user.id : order.user;
+    
+    // Header
+    document.getElementById('headerOrderId').textContent = order.id;
+    
+    // Status badge
+    const statusClass = statusClasses[status] || 'status-pending';
+    document.getElementById('orderStatus').innerHTML = 
+      `<span class="status-badge ${statusClass}">${escapeHtml(order.order_status || 'Pending')}</span>`;
+    
+    // Price breakdown
+    const qty = Number(order.quantity) || 0;
+    const pricePerDevice = Number(pkg.price_per_device) || 0;
+    const mrf = Number(pkg.mrf) || 0;
+    const deviceTotal = pricePerDevice * qty;
+    const mrfTotal = mrf * qty;
+    
+    document.getElementById('deviceCost').textContent = `${formatMoney(pricePerDevice)} × ${qty} = ${formatMoney(deviceTotal)}`;
+    document.getElementById('mrfCost').textContent = `${formatMoney(mrf)} × ${qty} = ${formatMoney(mrfTotal)}`;
+    document.getElementById('orderAmount').textContent = formatMoney(order.amount);
+    document.getElementById('orderDate').textContent = formatDate(order.ordered_at || order.created_at);
+    document.getElementById('orderCurrency').textContent = order.currency || 'BDT';
+    
+    // Status Timeline
+    renderTimeline(status);
+    
+    // Order Items
+    const itemsHtml = `
+      <div class="info-item">
+        <span class="info-label">Package</span>
+        <span class="info-value">${escapeHtml(pkg.name || 'Package')}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Quantity</span>
+        <span class="info-value">${order.quantity || 0}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Master Devices</span>
+        <span class="info-value">${order.number_of_master_devices || 0}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Slave Devices</span>
+        <span class="info-value">${order.number_of_slave_devices || 0}</span>
+      </div>
+      ${pkg.price_per_device ? `
+      <div class="info-item">
+        <span class="info-label">Price per Device</span>
+        <span class="info-value">${formatMoney(pkg.price_per_device)}</span>
+      </div>
+      ` : ''}
+      ${pkg.mrf ? `
+      <div class="info-item">
+        <span class="info-label">Monthly Fee (MRF)</span>
+        <span class="info-value">${formatMoney(pkg.mrf)}</span>
+      </div>
+      ` : ''}
+    `;
+    document.getElementById('orderItems').innerHTML = itemsHtml;
+    
+    // Shipping Info
+    const shippingHtml = `
+      <div class="info-item full-width">
+        <span class="info-label">Shipping Address</span>
+        <span class="info-value">${order.shipping_address ? escapeHtml(order.shipping_address) : '<em class="text-muted">Not provided</em>'}</span>
+      </div>
+    `;
+    document.getElementById('shippingInfo').innerHTML = shippingHtml;
+    
+    // Customer Info
+    const hasCustomerInfo = order.customer_name || order.customer_phone || order.customer_email || order.customer_city;
+    if (hasCustomerInfo) {
+      document.getElementById('customerCard').style.display = '';
+      let customerHtml = '';
+      if (order.customer_name) {
+        customerHtml += `<div class="info-item"><span class="info-label">Name</span><span class="info-value">${escapeHtml(order.customer_name)}</span></div>`;
+      }
+      if (order.customer_phone) {
+        customerHtml += `<div class="info-item"><span class="info-label">Phone</span><span class="info-value">${escapeHtml(order.customer_phone)}</span></div>`;
+      }
+      if (order.customer_email) {
+        customerHtml += `<div class="info-item"><span class="info-label">Email</span><span class="info-value">${escapeHtml(order.customer_email)}</span></div>`;
+      }
+      if (order.customer_city) {
+        customerHtml += `<div class="info-item"><span class="info-label">City</span><span class="info-value">${escapeHtml(order.customer_city)}</span></div>`;
+      }
+      if (order.customer_post_code) {
+        customerHtml += `<div class="info-item"><span class="info-label">Post Code</span><span class="info-value">${escapeHtml(order.customer_post_code)}</span></div>`;
+      }
+      if (order.customer_address) {
+        customerHtml += `<div class="info-item full-width"><span class="info-label">Billing Address</span><span class="info-value">${escapeHtml(order.customer_address)}</span></div>`;
+      }
+      document.getElementById('customerInfo').innerHTML = customerHtml;
+    }
+    
+    // Fulfillment Status
+    const totalDevices = (order.number_of_master_devices || 0) + (order.number_of_slave_devices || 0);
+    const assignedDevices = order.assigned_devices || 0;
+    const isFulfilled = assignedDevices >= totalDevices && totalDevices > 0;
+    
+    if (isFulfilled || assignedDevices > 0) {
+      document.getElementById('fulfillmentStatus').style.display = '';
+      document.getElementById('fulfillmentText').textContent = 
+        isFulfilled ? `Fulfilled (${assignedDevices} devices)` : `${assignedDevices}/${totalDevices} devices assigned`;
+    }
+    
+    // Assigned Devices
+    if (order.devices && order.devices.length > 0) {
+      document.getElementById('devicesCard').style.display = '';
+      let devicesHtml = `
+        <table class="device-table">
+          <thead>
+            <tr>
+              <th>Device ID</th>
+              <th>Type</th>
+              <th>Serial Number</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      order.devices.forEach(device => {
+        devicesHtml += `
+          <tr>
+            <td>${escapeHtml(device.id || '-')}</td>
+            <td>${escapeHtml(device.device_type || '-')}</td>
+            <td>${escapeHtml(device.serial_number || '-')}</td>
+          </tr>
+        `;
+      });
+      devicesHtml += '</tbody></table>';
+      document.getElementById('devicesInfo').innerHTML = devicesHtml;
+    }
+    
+    // Action Buttons
+    const canPay = (status === 'pending' || status === 'failed') && Number(order.amount) > 0;
+    const canDownloadInvoice = ['paid', 'processing', 'shipped', 'delivered'].includes(status);
+    const canChangePaymentMethod = (status === 'pending' || status === 'failed');
+    const currentPaymentMethod = (order.payment_method || 'online').toLowerCase();
+    const isOnlinePayment = currentPaymentMethod === 'online';
+    let actionsHtml = '';
+    
+    if (canPay && isOnlinePayment) {
+      actionsHtml += `
+        <button class="btn btn-primary action-btn" id="payNowBtn">
+          <i class="bi bi-credit-card me-2"></i>Pay Now (Online)
+        </button>
+      `;
+    }
+    
+    if (canChangePaymentMethod) {
+      if (isOnlinePayment) {
+        actionsHtml += `
+          <button class="btn btn-outline-warning action-btn" id="switchToCodBtn" title="Switch to Cash on Delivery">
+            <i class="bi bi-cash me-2"></i>Switch to COD
+          </button>
+        `;
+      } else {
+        actionsHtml += `
+          <button class="btn btn-warning action-btn" id="switchToOnlineBtn" title="Switch to Online Payment">
+            <i class="bi bi-credit-card me-2"></i>Pay Online Instead
+          </button>
+        `;
+      }
+    }
+    
+    if (canDownloadInvoice) {
+      actionsHtml += `
+        <button class="btn btn-success action-btn" id="downloadInvoiceBtn">
+          <i class="bi bi-file-earmark-pdf me-2"></i>Download Invoice
+        </button>
+      `;
+    }
+    
+    actionsHtml += `
+      <a href="/app/orders/" class="btn btn-outline-secondary action-btn">
+        <i class="bi bi-arrow-left me-2"></i>Back to Orders
+      </a>
+    `;
+    
+    document.getElementById('actionButtons').innerHTML = actionsHtml;
+    
+    // Attach pay button listener
+    const payBtn = document.getElementById('payNowBtn');
+    if (payBtn) {
+      payBtn.addEventListener('click', () => initiatePayment(order.id, orderUserId, payBtn));
+    }
+    
+    // Attach switch to COD button listener
+    const switchToCodBtn = document.getElementById('switchToCodBtn');
+    if (switchToCodBtn) {
+      switchToCodBtn.addEventListener('click', () => switchPaymentMethod(order.id, orderUserId, 'cod', switchToCodBtn));
+    }
+    
+    // Attach switch to online button listener
+    const switchToOnlineBtn = document.getElementById('switchToOnlineBtn');
+    if (switchToOnlineBtn) {
+      switchToOnlineBtn.addEventListener('click', () => switchPaymentMethod(order.id, orderUserId, 'online', switchToOnlineBtn));
+    }
+    
+    // Attach invoice download listener
+    const invoiceBtn = document.getElementById('downloadInvoiceBtn');
+    if (invoiceBtn) {
+      invoiceBtn.addEventListener('click', () => downloadInvoice(order.id, invoiceBtn));
+    }
+  }
+  
+  function renderTimeline(currentStatus) {
+    const statusIndex = statusOrder.indexOf(currentStatus);
+    let html = '';
+    
+    statusOrder.forEach((status, index) => {
+      let className = 'timeline-item';
+      if (index < statusIndex || (currentStatus === 'delivered' && index <= statusIndex)) {
+        className += ' completed';
+      } else if (index === statusIndex) {
+        className += ' current';
+      }
+      
+      const labels = {
+        pending: 'Order Placed',
+        paid: 'Payment Confirmed',
+        delivered: 'Delivered'
+      };
+      
+      html += `
+        <div class="${className}">
+          <div class="timeline-label">${labels[status]}</div>
+          ${index <= statusIndex ? '<div class="timeline-date">Completed</div>' : '<div class="timeline-date text-muted">Pending</div>'}
+        </div>
+      `;
+    });
+    
+    document.getElementById('statusTimeline').innerHTML = html;
+  }
+  
+  async function initiatePayment(orderId, orderUserId, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+    
+    try {
+      const result = await apiPost(`/orders/${orderUserId}/${orderId}/pay/`, {});
+      
+      if (result && result.checkout_url) {
+        window.location.href = result.checkout_url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (e) {
+      console.error('Payment initiation failed:', e);
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      showToast(e.body?.detail || e.message || 'Failed to initiate payment', 'error');
+    }
+  }
+  
+  async function switchPaymentMethod(orderId, orderUserId, newMethod, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Switching...';
+    
+    try {
+      await apiPost(`/orders/${orderUserId}/${orderId}/payment-method/`, { payment_method: newMethod });
+      
+      if (newMethod === 'cod') {
+        showToast('Switched to Cash on Delivery. Our team will confirm your order.', 'success');
+      } else {
+        showToast('Switched to Online Payment. You can now pay for your order.', 'success');
+      }
+      
+      // Reload order to reflect changes
+      setTimeout(() => loadOrder(), 1000);
+    } catch (e) {
+      console.error('Payment method switch failed:', e);
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      showToast(e.body?.detail || e.message || 'Failed to change payment method', 'error');
+    }
+  }
+  
+  async function downloadInvoice(orderId, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+    
+    try {
+      // Fetch the PDF as a blob
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`/subscriptions/invoices/order/${orderId}/pdf/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to download invoice');
+      }
+      
+      // Get the filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `invoice_order_${orderId}.pdf`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+        if (match) filename = match[1];
+      }
+      
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      
+      showToast('Invoice downloaded successfully!', 'success');
+    } catch (e) {
+      console.error('Invoice download failed:', e);
+      showToast(e.message || 'Failed to download invoice', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+  
+  function showToast(msg, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `<i class="bi bi-${type === 'error' ? 'exclamation-triangle' : 'check-circle'} me-2"></i>${msg}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+  }
+  
+  // Initial load
+  loadOrder();
+})();
+</script>
+{% endblock %}

@@ -169,3 +169,4 @@ CODE_ANALYSIS_REPORT.md
 fire-alarm-54db1-firebase-adminsdk-fbsvc-3cef306df2.json
 celerybeat-schedule-shm
 celerybeat-schedule-wal
+*.pdf

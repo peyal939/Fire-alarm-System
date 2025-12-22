@@ -477,9 +477,7 @@
                 <th class="text-end">Price/Device</th>
                 <th class="text-end">MRF</th>
                 <th>Description</th>
-                {% if request.user.is_superuser or request.user.role == 'superadmin' %}
                 <th class="text-center">Actions</th>
-                {% endif %}
               </tr>
             </thead>
             <tbody id="packagesTbody"></tbody>
@@ -491,64 +489,82 @@
 
     {% if not request.user.is_superuser and request.user.role != 'superadmin' %}
     <div class="card order-form-card">
-      <div class="card-header">
-        <span><i class="bi bi-cart-plus me-2"></i>Create Order</span>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-cart3 me-2"></i>Shopping Cart</span>
+        <span class="badge bg-primary" id="cartItemCount" style="display: none;">0</span>
       </div>
       <div class="card-body">
-        <form id="orderForm" novalidate>
-          <div class="mb-3">
-            <label class="form-label">Package</label>
-            <select class="form-select" id="orderPackage" required></select>
-            <div class="form-text" id="pkgRangeHelp"></div>
-            <div class="invalid-feedback">Select a package.</div>
+        <div id="cartSummary" class="mb-3">
+          <p class="text-muted small">Your cart is empty. Add packages from the table above.</p>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="/app/cart/" class="btn btn-outline-primary flex-fill" id="viewCartBtn">
+            <i class="bi bi-cart me-1"></i>View Cart
+          </a>
+          <a href="/app/checkout/" class="btn btn-primary flex-fill" id="checkoutBtn" style="display: none;">
+            <i class="bi bi-bag-check me-1"></i>Checkout
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Add to Cart Modal (Non-Admin) -->
+    {% if not request.user.is_superuser and request.user.role != 'superadmin' %}
+    <div class="modal fade" id="addToCartModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-cart-plus me-2"></i>Add to Cart</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Quantity</label>
-            <input type="number" class="form-control" id="orderQty" min="1" required />
-            <div class="invalid-feedback" id="qtyError">Enter valid quantity.</div>
-          </div>
-          <div class="mb-3">
-            <div class="row g-2">
-              <div class="col-6">
-                <label class="form-label">Master devices</label>
-                <input type="number" class="form-control" id="orderMaster" min="0" value="0" />
-                <div class="invalid-feedback" id="masterError"></div>
+          <div class="modal-body">
+            <form id="addToCartForm" novalidate>
+              <input type="hidden" id="cartPackageId" />
+              <div class="mb-3">
+                <label class="form-label fw-bold">Package</label>
+                <input type="text" class="form-control" id="cartPackageName" readonly />
               </div>
-              <div class="col-6">
-                <label class="form-label">Slave devices</label>
-                <input type="number" class="form-control" id="orderSlave" min="0" value="0" />
-                <div class="invalid-feedback" id="slaveError"></div>
+              <div class="mb-3">
+                <label class="form-label fw-bold">Quantity <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="cartQuantity" min="1" value="1" required />
+                <div class="form-text" id="cartRangeHelp"></div>
+                <div class="invalid-feedback" id="cartQtyError">Enter valid quantity.</div>
               </div>
-            </div>
-            <div class="text-danger small" id="deviceTotalError" style="display:none; margin-top: 0.5rem;"></div>
+              <div class="row g-3">
+                <div class="col-6">
+                  <label class="form-label fw-bold">Master Devices</label>
+                  <input type="number" class="form-control" id="cartMasterDevices" min="0" value="1" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label fw-bold">Slave Devices</label>
+                  <input type="number" class="form-control" id="cartSlaveDevices" min="0" value="0" />
+                </div>
+              </div>
+              <div class="text-danger small" id="cartDeviceError" style="display:none; margin-top: 0.5rem;"></div>
+              <div class="mt-3 p-3 bg-light rounded">
+                <div class="d-flex justify-content-between">
+                  <span>Subtotal:</span>
+                  <strong id="cartSubtotal">৳0.00</strong>
+                </div>
+              </div>
+              <div class="alert alert-danger d-none mt-3" id="addToCartError"></div>
+              <div class="alert alert-success d-none mt-3" id="addToCartSuccess">Added to cart!</div>
+            </form>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Shipping Address</label>
-            <textarea class="form-control" rows="2" id="orderAddr" placeholder="Please provide your device address"></textarea>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="addToCartSubmit">
+              <i class="bi bi-cart-plus me-1"></i>Add to Cart
+            </button>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Currency</label>
-            <input class="form-control" id="orderCurrency" value="BDT" maxlength="8" />
-          </div>
-          <hr />
-          <h6 class="small mb-3 fw-semibold text-muted">Customer (optional)</h6>
-          <div class="mb-3">
-            <input class="form-control mb-2" id="customerName" placeholder="Name" />
-            <input class="form-control mb-2" id="customerPhone" placeholder="Phone" />
-            <input class="form-control mb-2" id="customerCity" placeholder="City" />
-            <input class="form-control mb-2" id="customerPostCode" placeholder="Post code" />
-            <input class="form-control mb-2" id="customerEmail" placeholder="Email" />
-            <textarea class="form-control" rows="2" id="customerAddress" placeholder="Customer address"></textarea>
-          </div>
-          <div class="total-display" id="calcTotal">Total: —</div>
-          <button class="btn btn-primary w-100" type="submit" id="orderSubmit" disabled>Create Order</button>
-          <div class="mt-3 small" id="orderMsg"></div>
-        </form>
+        </div>
       </div>
     </div>
     {% endif %}
   </div>
 
+  {% if not is_admin %}
   <div class="orders-section">
     <div class="orders-section-header">
       <h5><i class="bi bi-receipt me-2"></i>Placed Orders</h5>
@@ -562,6 +578,7 @@
     <div id="ordersPlaced" class="d-flex flex-column gap-2"></div>
     <div id="noOrdersNote" class="text-muted small">No orders placed yet.</div>
   </div>
+  {% endif %}
 
   <!-- Package Form Modal (Add/Edit) -->
   <div class="modal fade package-form-modal" id="packageFormModal" tabindex="-1" aria-hidden="true">
@@ -690,26 +707,34 @@
   const pkgEmpty = document.getElementById('pkgEmpty');
   const packagesTable = document.getElementById('packagesTable');
   const packagesTbody = document.getElementById('packagesTbody');
-  const orderForm = document.getElementById('orderForm');
-  const orderPackage = document.getElementById('orderPackage');
-  const orderQty = document.getElementById('orderQty');
-  const orderAddr = document.getElementById('orderAddr');
-  const orderCurrency = document.getElementById('orderCurrency');
-  const orderMaster = document.getElementById('orderMaster');
-  const orderSlave = document.getElementById('orderSlave');
-  const customerName = document.getElementById('customerName');
-  const customerAddress = document.getElementById('customerAddress');
-  const customerPhone = document.getElementById('customerPhone');
-  const customerCity = document.getElementById('customerCity');
-  const customerPostCode = document.getElementById('customerPostCode');
-  const customerEmail = document.getElementById('customerEmail');
-  const orderSubmit = document.getElementById('orderSubmit');
-  const orderMsg = document.getElementById('orderMsg');
-  const calcTotal = document.getElementById('calcTotal');
-  const pkgRangeHelp = document.getElementById('pkgRangeHelp');
-  const qtyError = document.getElementById('qtyError');
   const ordersPlaced = document.getElementById('ordersPlaced');
   const noOrdersNote = document.getElementById('noOrdersNote');
+  
+  // Cart elements (non-admin only)
+  const cartItemCount = document.getElementById('cartItemCount');
+  const cartSummary = document.getElementById('cartSummary');
+  const viewCartBtn = document.getElementById('viewCartBtn');
+  const checkoutBtn = document.getElementById('checkoutBtn');
+  
+  // Add to cart modal elements
+  const addToCartModal = document.getElementById('addToCartModal');
+  const cartPackageId = document.getElementById('cartPackageId');
+  const cartPackageName = document.getElementById('cartPackageName');
+  const cartQuantity = document.getElementById('cartQuantity');
+  const cartRangeHelp = document.getElementById('cartRangeHelp');
+  const cartQtyError = document.getElementById('cartQtyError');
+  const cartMasterDevices = document.getElementById('cartMasterDevices');
+  const cartSlaveDevices = document.getElementById('cartSlaveDevices');
+  const cartDeviceError = document.getElementById('cartDeviceError');
+  const cartSubtotal = document.getElementById('cartSubtotal');
+  const addToCartError = document.getElementById('addToCartError');
+  const addToCartSuccess = document.getElementById('addToCartSuccess');
+  const addToCartSubmit = document.getElementById('addToCartSubmit');
+  
+  let addToCartModalInstance = null;
+  if (addToCartModal && window.bootstrap) {
+    addToCartModalInstance = new bootstrap.Modal(addToCartModal);
+  }
 
   let packages = [];
   let pkgMap = {};
@@ -723,13 +748,15 @@
     failed: 'bg-danger'
   };
 
-  function computePackageTotal(pkg, quantity) {
+  function computePackageTotal(pkg, quantity, masterDevices = null) {
     if (!pkg) return null;
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) return null;
+    const masterQty = masterDevices !== null ? Number(masterDevices) : qty;
     const deviceRate = Number(pkg.price_per_device ?? 0);
     const mrfRate = Number(pkg.mrf ?? 0);
-    const total = qty * (deviceRate + mrfRate);
+    // Device price × all, MRF × masters only
+    const total = (qty * deviceRate) + (masterQty * mrfRate);
     return Number.isFinite(total) ? total : null;
   }
 
@@ -742,7 +769,6 @@
       pkgMap = {};
       packages.forEach(p => pkgMap[p.id] = p);
       renderPackages();
-      populateSelect();
     } catch (e) {
       console.error('Error fetching packages:', e);
       if (pkgLoading) {
@@ -861,6 +887,15 @@
             </div>
           </td>
         `;
+      } else {
+        // Non-admin: Add to Cart button
+        actionsCell = `
+          <td class="text-center">
+            <button class="btn btn-sm btn-primary btn-add-to-cart" data-package-id="${p.id}" title="Add to Cart">
+              <i class="bi bi-cart-plus me-1"></i>Add
+            </button>
+          </td>
+        `;
       }
       return `
         <tr>
@@ -875,7 +910,7 @@
       `;
     }).join('');
     
-    // Attach event listeners for edit/delete buttons
+    // Attach event listeners for edit/delete buttons (admin)
     if (isAdmin) {
       packagesTbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -892,34 +927,198 @@
           if (pkg) openPackageDeleteModal(pkg);
         });
       });
+    } else {
+      // Attach event listeners for Add to Cart buttons (non-admin)
+      packagesTbody.querySelectorAll('.btn-add-to-cart').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pkgId = parseInt(btn.dataset.packageId, 10);
+          const pkg = pkgMap[pkgId];
+          if (pkg) openAddToCartModal(pkg);
+        });
+      });
     }
   }
 
-  // Removed placeholder option completely
-  function populateSelect() {
-    if (!isAdmin && orderPackage) {
-      orderPackage.innerHTML =
-        packages.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-      // Do not auto-select; keep disabled until user picks one
-      orderPackage.selectedIndex = -1;
-      validateForm();
-    }
-  }
-
-  function setDefaultDeviceValues() {
-    if (isAdmin || !orderPackage || !orderMaster || !orderSlave) return;
-    const pkg = pkgMap[orderPackage.value];
-    if (!pkg) return;
+  // ==================== CART FUNCTIONS (Non-Admin) ====================
+  
+  let currentCartPackage = null;
+  
+  function openAddToCartModal(pkg) {
+    if (!addToCartModalInstance || !pkg) return;
+    currentCartPackage = pkg;
     
-    const pkgName = (pkg.name || '').toLowerCase();
-    if (pkgName.includes('basic')) {
-      orderMaster.value = '1';
-      orderSlave.value = '0';
-    } else if (pkgName.includes('master') && pkgName.includes('slave')) {
-      orderMaster.value = '1';
-      orderSlave.value = '1';
+    // Reset form
+    if (cartPackageId) cartPackageId.value = pkg.id;
+    if (cartPackageName) cartPackageName.value = pkg.name;
+    if (cartQuantity) {
+      cartQuantity.value = pkg.min_quantity || 1;
+      cartQuantity.min = pkg.min_quantity || 1;
+      cartQuantity.max = pkg.max_quantity || 100;
     }
-    validateForm();
+    if (cartRangeHelp) cartRangeHelp.textContent = `Allowed: ${pkg.min_quantity} – ${pkg.max_quantity}`;
+    if (cartMasterDevices) cartMasterDevices.value = 1;
+    if (cartSlaveDevices) cartSlaveDevices.value = 0;
+    if (cartDeviceError) cartDeviceError.style.display = 'none';
+    if (addToCartError) addToCartError.classList.add('d-none');
+    if (addToCartSuccess) addToCartSuccess.classList.add('d-none');
+    if (addToCartSubmit) addToCartSubmit.disabled = false;
+    
+    updateCartSubtotal();
+    addToCartModalInstance.show();
+  }
+  
+  function updateCartSubtotal() {
+    if (!currentCartPackage || !cartSubtotal) return;
+    const qty = parseInt(cartQuantity?.value) || 1;
+    const masterQty = parseInt(cartMasterDevices?.value) || 0;
+    const total = computePackageTotal(currentCartPackage, qty, masterQty);
+    cartSubtotal.textContent = formatMoney(total);
+  }
+  
+  function validateCartForm() {
+    if (!currentCartPackage) return false;
+    
+    const qty = parseInt(cartQuantity?.value) || 0;
+    const master = parseInt(cartMasterDevices?.value) || 0;
+    const slave = parseInt(cartSlaveDevices?.value) || 0;
+    const totalDevices = master + slave;
+    
+    // Hide previous errors
+    if (cartDeviceError) cartDeviceError.style.display = 'none';
+    if (cartQuantity) cartQuantity.classList.remove('is-invalid');
+    
+    // Validate quantity range
+    if (qty < currentCartPackage.min_quantity || qty > currentCartPackage.max_quantity) {
+      if (cartQtyError) cartQtyError.textContent = `Quantity must be ${currentCartPackage.min_quantity} – ${currentCartPackage.max_quantity}`;
+      if (cartQuantity) cartQuantity.classList.add('is-invalid');
+      return false;
+    }
+    
+    // Validate devices
+    if (totalDevices > qty) {
+      if (cartDeviceError) {
+        cartDeviceError.textContent = `Total devices (${totalDevices}) cannot exceed quantity (${qty})`;
+        cartDeviceError.style.display = 'block';
+      }
+      return false;
+    }
+    
+    return true;
+  }
+  
+  async function addToCart() {
+    if (!validateCartForm()) return;
+    
+    if (addToCartSubmit) addToCartSubmit.disabled = true;
+    if (addToCartError) addToCartError.classList.add('d-none');
+    if (addToCartSuccess) addToCartSuccess.classList.add('d-none');
+    
+    const payload = {
+      package_id: parseInt(cartPackageId?.value),
+      quantity: parseInt(cartQuantity?.value) || 1,
+      number_of_master_devices: parseInt(cartMasterDevices?.value) || 0,
+      number_of_slave_devices: parseInt(cartSlaveDevices?.value) || 0
+    };
+    
+    try {
+      await apiPost('/cart/items/', payload);
+      
+      if (addToCartSuccess) {
+        addToCartSuccess.textContent = `${currentCartPackage.name} added to cart!`;
+        addToCartSuccess.classList.remove('d-none');
+      }
+      
+      // Update cart summary
+      await loadCartSummary();
+      
+      // Auto-close after success
+      setTimeout(() => {
+        if (addToCartModalInstance) addToCartModalInstance.hide();
+      }, 1500);
+      
+    } catch (e) {
+      console.error('Failed to add to cart:', e);
+      if (addToCartError) {
+        addToCartError.textContent = e.body?.detail || e.message || 'Failed to add to cart';
+        addToCartError.classList.remove('d-none');
+      }
+      if (addToCartSubmit) addToCartSubmit.disabled = false;
+    }
+  }
+  
+  async function loadCartSummary() {
+    if (isAdmin) return;
+    
+    try {
+      const cart = await apiGet('/cart/');
+      const items = cart?.items || [];
+      const itemCount = items.length;
+      
+      // Update cart badge
+      if (cartItemCount) {
+        cartItemCount.textContent = itemCount;
+        cartItemCount.style.display = itemCount > 0 ? '' : 'none';
+      }
+      
+      // Update navbar cart badge
+      const navCartBadge = document.getElementById('cartBadge');
+      if (navCartBadge) {
+        navCartBadge.textContent = itemCount;
+        navCartBadge.style.display = itemCount > 0 ? '' : 'none';
+      }
+      
+      // Update cart summary
+      if (cartSummary) {
+        if (itemCount === 0) {
+          cartSummary.innerHTML = '<p class="text-muted small mb-0">Your cart is empty. Add packages from the table above.</p>';
+        } else {
+          let total = 0;
+          items.forEach(item => {
+            const pkg = item.package;
+            if (pkg) {
+              const qty = Number(item.quantity) || 0;
+              const masterQty = Number(item.number_of_master_devices) || 0;
+              // Device price × all, MRF × masters only
+              const subtotal = (qty * (Number(pkg.price_per_device) || 0)) + (masterQty * (Number(pkg.mrf) || 0));
+              total += subtotal;
+            }
+          });
+          cartSummary.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+              <span><strong>${itemCount}</strong> item${itemCount > 1 ? 's' : ''} in cart</span>
+              <span class="text-success fw-bold">${formatMoney(total)}</span>
+            </div>
+          `;
+        }
+      }
+      
+      // Show/hide checkout button
+      if (checkoutBtn) {
+        checkoutBtn.style.display = itemCount > 0 ? '' : 'none';
+      }
+      
+    } catch (e) {
+      console.error('Failed to load cart summary:', e);
+    }
+  }
+  
+  // Cart modal event listeners
+  if (!isAdmin) {
+    if (cartQuantity) {
+      cartQuantity.addEventListener('input', () => {
+        validateCartForm();
+        updateCartSubtotal();
+      });
+    }
+    if (cartMasterDevices) {
+      cartMasterDevices.addEventListener('input', validateCartForm);
+    }
+    if (cartSlaveDevices) {
+      cartSlaveDevices.addEventListener('input', validateCartForm);
+    }
+    if (addToCartSubmit) {
+      addToCartSubmit.addEventListener('click', addToCart);
+    }
   }
 
   function escapeHtml(s){
@@ -932,77 +1131,6 @@
     if (v === null || v === undefined || v === '') return '—';
     const n = Number(v);
     return isNaN(n) ? v : '৳' + n.toFixed(2);
-  }
-
-  function updateCalc() {
-    if (isAdmin || !orderPackage || !orderQty || !calcTotal) return;
-    const pkg = pkgMap[orderPackage.value];
-    const qty = parseInt(orderQty.value, 10);
-    const total = computePackageTotal(pkg, qty);
-    if (total !== null) {
-      calcTotal.innerHTML = `<strong>Total:</strong> ${formatMoney(total)}`;
-    } else {
-      calcTotal.innerHTML = '<strong>Total:</strong> —';
-    }
-  }
-
-  function validateForm() {
-    if (isAdmin || !orderForm) return;
-    const pkg = pkgMap[orderPackage.value];
-    let valid = true;
-    if (!pkg) valid = false;
-    const qty = parseInt(orderQty.value, 10);
-    const master = parseInt(orderMaster.value, 10) || 0;
-    const slave = parseInt(orderSlave.value, 10) || 0;
-    const totalDevices = master + slave;
-    
-    // Clear previous device errors
-    const deviceTotalError = document.getElementById('deviceTotalError');
-    const masterError = document.getElementById('masterError');
-    const slaveError = document.getElementById('slaveError');
-    
-    if (deviceTotalError) {
-      deviceTotalError.style.display = 'none';
-      deviceTotalError.textContent = '';
-    }
-    if (masterError) {
-      masterError.textContent = '';
-      orderMaster.classList.remove('is-invalid');
-    }
-    if (slaveError) {
-      slaveError.textContent = '';
-      orderSlave.classList.remove('is-invalid');
-    }
-    
-    if (pkg) {
-      if (pkgRangeHelp) {
-        pkgRangeHelp.textContent = `Allowed quantity: ${pkg.min_quantity} – ${pkg.max_quantity}`;
-      }
-      if (!Number.isFinite(qty) || qty < pkg.min_quantity || qty > pkg.max_quantity) {
-        valid = false;
-        if (qtyError) {
-          qtyError.textContent = `Quantity must be between ${pkg.min_quantity} and ${pkg.max_quantity}.`;
-        }
-        if (orderQty) orderQty.classList.add('is-invalid');
-      } else {
-        if (orderQty) orderQty.classList.remove('is-invalid');
-      }
-      
-      // Validate device totals
-      if (Number.isFinite(qty) && totalDevices > qty) {
-        valid = false;
-        if (deviceTotalError) {
-          deviceTotalError.textContent = `Total devices (${totalDevices}) cannot exceed quantity (${qty}).`;
-          deviceTotalError.style.display = 'block';
-        }
-        if (orderMaster) orderMaster.classList.add('is-invalid');
-        if (orderSlave) orderSlave.classList.add('is-invalid');
-      }
-    } else {
-      if (pkgRangeHelp) pkgRangeHelp.textContent = '';
-    }
-    if (orderSubmit) orderSubmit.disabled = !valid;
-    updateCalc();
   }
 
   function appendOrderCard(order) {
@@ -1439,81 +1567,6 @@
     }
   }
 
-  // Order form handlers (only for non-admin users)
-  if (!isAdmin) {
-    if (orderPackage) {
-      orderPackage.addEventListener('change', () => {
-        setDefaultDeviceValues();
-        validateForm();
-      });
-    }
-    if (orderQty) orderQty.addEventListener('input', validateForm);
-    if (orderMaster) orderMaster.addEventListener('input', validateForm);
-    if (orderSlave) orderSlave.addEventListener('input', validateForm);
-    if (orderCurrency) {
-      orderCurrency.addEventListener('input', () => {
-        // Keep uppercase and within maxlength to match backend constraints
-        orderCurrency.value = (orderCurrency.value || '').toUpperCase().slice(0, 8);
-      });
-    }
-
-    if (orderForm) {
-      orderForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        validateForm();
-        if (orderSubmit.disabled) return;
-        orderMsg.textContent = '';
-        orderMsg.className = 'mt-3 small';
-        const pkgId = orderPackage.value;
-        const qty = parseInt(orderQty.value, 10);
-        const master = parseInt(orderMaster.value, 10);
-        const slave = parseInt(orderSlave.value, 10);
-        const addr = orderAddr.value.trim();
-        const currency = orderCurrency.value.trim() || 'BDT';
-        const cName = customerName.value.trim();
-        const cAddr = customerAddress.value.trim();
-        const cPhone = customerPhone.value.trim();
-        const cCity = customerCity.value.trim();
-        const cPost = customerPostCode.value.trim();
-        const cEmail = customerEmail.value.trim();
-        orderSubmit.disabled = true;
-        orderSubmit.textContent = 'Creating…';
-        try {
-          const body = {
-            package_id: parseInt(pkgId, 10),
-            quantity: qty,
-            number_of_master_devices: Number.isFinite(master) ? master : 1,
-            number_of_slave_devices: Number.isFinite(slave) ? slave : 1,
-            currency: currency,
-          };
-          if (addr) body.shipping_address = addr;
-          if (cName) body.customer_name = cName;
-          if (cAddr) body.customer_address = cAddr;
-          if (cPhone) body.customer_phone = cPhone;
-          if (cCity) body.customer_city = cCity;
-          if (cPost) body.customer_post_code = cPost;
-          if (cEmail) body.customer_email = cEmail;
-          const res = await apiPost(`/orders/${userId}/`, body);
-          orderMsg.classList.add('text-success');
-          orderMsg.textContent = `Order ${res.id} created.`;
-          allOrders.unshift(res);
-          renderOrders();
-          orderForm.reset();
-          // repopulate to clear selection state
-          populateSelect();
-          calcTotal.innerHTML = '<strong>Total:</strong> —';
-        } catch (err) {
-          orderMsg.classList.add('text-danger');
-          const backendMsg = err?.body?.detail || (typeof err?.body === 'string' ? err.body : null);
-          orderMsg.textContent = backendMsg && backendMsg.trim() ? backendMsg : (err?.message || 'Failed to create order.');
-        } finally {
-          orderSubmit.textContent = 'Create Order';
-          validateForm();
-        }
-      });
-    }
-  }
-
   // --- Fulfillment Modal Logic ---
   const fulfillModalEl = document.getElementById('fulfillModal');
   let fulfillModal;
@@ -1723,6 +1776,10 @@
     fetchPackages();
     fetchUserOrders();
     setupOrderFilters();
+    // Load cart summary for non-admin users
+    if (!isAdmin) {
+      loadCartSummary();
+    }
   } else {
     console.error('API functions not available. Make sure api.js is loaded.');
     if (pkgLoading) {

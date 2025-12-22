@@ -1,0 +1,1688 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Reseller Panel · apS Fire Alarm{% endblock %}
+
+{% block head_extra %}
+<style>
+  .reseller-tabs .nav-link {
+    color: #495057;
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+  }
+  .reseller-tabs .nav-link:hover {
+    border-bottom-color: #dee2e6;
+  }
+  .reseller-tabs .nav-link.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+    background: transparent;
+  }
+  .stat-card {
+    border-left: 4px solid #0d6efd;
+    transition: transform 0.2s;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+  }
+  .stat-card.inventory { border-left-color: #198754; }
+  .stat-card.customers { border-left-color: #6f42c1; }
+  .stat-card.revenue { border-left-color: #fd7e14; }
+  .stat-card.online { border-left-color: #20c997; }
+  .stat-card.offline { border-left-color: #dc3545; }
+  .stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .table-reseller th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #dee2e6;
+  }
+  .table-reseller td {
+    vertical-align: middle;
+  }
+  .badge-status {
+    font-size: 0.7rem;
+    padding: 0.3em 0.6em;
+  }
+  .action-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+  }
+  .search-box {
+    max-width: 300px;
+  }
+  .customer-avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6f42c1, #a855f7);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .device-avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #198754, #20c997);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.9rem;
+  }
+  /* Status badges */
+  .badge-available { background: #198754; }
+  .badge-reserved { background: #ffc107; color: #000; }
+  .badge-sold { background: #0d6efd; }
+  .badge-returned { background: #6c757d; }
+  .badge-defective { background: #dc3545; }
+  .badge-online { background: #20c997; }
+  .badge-offline { background: #6c757d; }
+  .badge-active { background: #198754; }
+  .badge-inactive { background: #dc3545; }
+  /* Dashboard cards */
+  .dashboard-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .dashboard-card .card-body { padding: 1.5rem; }
+  .dashboard-stat { font-size: 2rem; font-weight: 700; }
+  .dashboard-label { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+  /* Company branding header */
+  .company-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+    border-radius: 12px;
+    color: white;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .company-header .company-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .company-header .company-status {
+    background: rgba(255,255,255,0.2);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+  }
+  /* Quick action buttons */
+  .quick-action {
+    border: 2px dashed #dee2e6;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .quick-action:hover {
+    border-color: #0d6efd;
+    background: #f8f9fa;
+  }
+  .quick-action i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+  }
+  .empty-state i {
+    font-size: 4rem;
+    opacity: 0.3;
+  }
+  /* Loading spinner */
+  .loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="py-3">
+  <!-- Status Alert Container (for pending/suspended notices) -->
+  <div id="statusAlertContainer" class="mb-3"></div>
+
+  <!-- Company Header -->
+  <div class="company-header" id="companyHeader">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <div class="company-name" id="companyName">Loading...</div>
+        <div class="opacity-75" id="companyEmail">-</div>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <span class="company-status" id="companyStatus">
+          <i class="bi bi-check-circle me-1"></i>Active
+        </span>
+        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#profileModal">
+          <i class="bi bi-pencil me-1"></i>Edit Profile
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Devices Sold</div>
+              <div class="stat-number text-primary" id="statDevicesSold">-</div>
+            </div>
+            <i class="bi bi-device-hdd-fill text-primary" style="font-size: 2rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card inventory shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">In Stock</div>
+              <div class="stat-number text-success" id="statInventory">-</div>
+            </div>
+            <i class="bi bi-box-seam-fill text-success" style="font-size: 2rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card customers shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Customers</div>
+              <div class="stat-number" style="color: #6f42c1;" id="statCustomers">-</div>
+            </div>
+            <i class="bi bi-people-fill" style="font-size: 2rem; opacity: 0.3; color: #6f42c1;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card online shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Online</div>
+              <div class="stat-number" style="color: #20c997;" id="statOnline">-</div>
+            </div>
+            <i class="bi bi-wifi" style="font-size: 2rem; opacity: 0.3; color: #20c997;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card offline shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Offline</div>
+              <div class="stat-number text-danger" id="statOffline">-</div>
+            </div>
+            <i class="bi bi-wifi-off text-danger" style="font-size: 2rem; opacity: 0.3;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="card stat-card revenue shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted small text-uppercase">Revenue</div>
+              <div class="stat-number" style="color: #fd7e14; font-size: 1.3rem;" id="statRevenue">৳-</div>
+            </div>
+            <i class="bi bi-currency-exchange" style="font-size: 2rem; opacity: 0.3; color: #fd7e14;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+      <div class="quick-action" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+        <i class="bi bi-person-plus text-primary d-block"></i>
+        <div class="fw-semibold">Add Customer</div>
+        <small class="text-muted">Create new customer account</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <div class="quick-action" data-bs-toggle="modal" data-bs-target="#assignDeviceModal">
+        <i class="bi bi-arrow-right-square text-success d-block"></i>
+        <div class="fw-semibold">Assign Device</div>
+        <small class="text-muted">Assign device to customer</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <div class="quick-action" onclick="switchTab('inventoryTab')">
+        <i class="bi bi-box-seam text-warning d-block"></i>
+        <div class="fw-semibold">View Inventory</div>
+        <small class="text-muted">Manage device stock</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <div class="quick-action" onclick="switchTab('alertsTab')">
+        <i class="bi bi-bell text-danger d-block"></i>
+        <div class="fw-semibold">View Alerts</div>
+        <small class="text-muted"><span id="alertCount">0</span> active alerts</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav reseller-tabs mb-3" id="resellerTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#customersTab" type="button" id="customersTabBtn">
+        <i class="bi bi-people me-1"></i>Customers
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#devicesTab" type="button" id="devicesTabBtn">
+        <i class="bi bi-device-hdd me-1"></i>Devices
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#inventoryTab" type="button" id="inventoryTabBtn">
+        <i class="bi bi-box-seam me-1"></i>Inventory
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ordersTab" type="button" id="ordersTabBtn">
+        <i class="bi bi-cart me-1"></i>Orders
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#alertsTab" type="button" id="alertsTabBtn">
+        <i class="bi bi-bell me-1"></i>Alerts
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#salesTab" type="button" id="salesTabBtn">
+        <i class="bi bi-receipt me-1"></i>Sales
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- Customers Tab -->
+    <div class="tab-pane fade show active" id="customersTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-people text-primary me-2"></i>Your Customers</h5>
+            <div class="d-flex gap-2">
+              <input type="text" class="form-control form-control-sm search-box" placeholder="Search customers..." id="customerSearch">
+              <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+                <i class="bi bi-plus-lg me-1"></i>Add
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-reseller table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Contact</th>
+                  <th>Devices</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="customersTableBody">
+                <tr>
+                  <td colspan="6" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Devices Tab -->
+    <div class="tab-pane fade" id="devicesTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-device-hdd text-success me-2"></i>Sold Devices</h5>
+            <div class="d-flex gap-2">
+              <select class="form-select form-select-sm" style="width: auto;" id="deviceStatusFilter">
+                <option value="">All Status</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+              </select>
+              <input type="text" class="form-control form-control-sm search-box" placeholder="Search devices..." id="deviceSearch">
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-reseller table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Owner</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Last Seen</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="devicesTableBody">
+                <tr>
+                  <td colspan="6" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventory Tab -->
+    <div class="tab-pane fade" id="inventoryTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-box-seam text-warning me-2"></i>Device Inventory</h5>
+            <div class="d-flex gap-2">
+              <select class="form-select form-select-sm" style="width: auto;" id="inventoryStatusFilter">
+                <option value="">All Status</option>
+                <option value="available">Available</option>
+                <option value="reserved">Reserved</option>
+                <option value="sold">Sold</option>
+                <option value="returned">Returned</option>
+                <option value="defective">Defective</option>
+              </select>
+              <input type="text" class="form-control form-control-sm search-box" placeholder="Search..." id="inventorySearch">
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-reseller table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Hardware ID</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Purchase Price</th>
+                  <th>Sale Price</th>
+                  <th>Customer</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryTableBody">
+                <tr>
+                  <td colspan="7" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts Tab -->
+    <div class="tab-pane fade" id="alertsTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-bell text-danger me-2"></i>Device Alerts</h5>
+            <div class="d-flex gap-2">
+              <select class="form-select form-select-sm" style="width: auto;" id="alertStatusFilter">
+                <option value="">All Status</option>
+                <option value="open">Open</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-reseller table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Owner</th>
+                  <th>Alert Type</th>
+                  <th>Status</th>
+                  <th>Triggered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="alertsTableBody">
+                <tr>
+                  <td colspan="6" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Tab -->
+    <div class="tab-pane fade" id="ordersTab">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-cart text-primary me-2"></i>Purchase Orders</h5>
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#placeOrderModal">
+              <i class="bi bi-plus-lg me-1"></i>Place New Order
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-reseller table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Order#</th>
+                  <th>Package</th>
+                  <th>Quantity</th>
+                  <th>Amount</th>
+                  <th>Discount</th>
+                  <th>Status</th>
+                  <th>Fulfilled</th>
+                  <th>In Inventory</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody">
+                <tr>
+                  <td colspan="9" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Credit Info Card -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0"><i class="bi bi-credit-card text-success me-2"></i>Credit Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4 text-center border-end">
+              <div class="text-muted small">Credit Limit</div>
+              <div class="h4 mb-0 text-primary" id="creditLimit">৳0</div>
+            </div>
+            <div class="col-md-4 text-center border-end">
+              <div class="text-muted small">Credit Used</div>
+              <div class="h4 mb-0 text-warning" id="creditUsed">৳0</div>
+            </div>
+            <div class="col-md-4 text-center">
+              <div class="text-muted small">Available Credit</div>
+              <div class="h4 mb-0 text-success" id="creditAvailable">৳0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sales Tab -->
+    <div class="tab-pane fade" id="salesTab">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-receipt text-info me-2"></i>Sales History</h5>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-reseller table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Customer</th>
+                  <th>Quantity</th>
+                  <th>Amount</th>
+                  <th>Commission</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="salesTableBody">
+                <tr>
+                  <td colspan="6" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Customer Modal -->
+<div class="modal fade" id="addCustomerModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>Add New Customer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-pills mb-3" id="addCustomerTabs">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#newCustomerPane">New Customer</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#linkCustomerPane">Link Existing</button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <!-- New Customer Form -->
+          <div class="tab-pane fade show active" id="newCustomerPane">
+            <form id="newCustomerForm">
+              <div class="mb-3">
+                <label class="form-label">Email <span class="text-danger">*</span></label>
+                <input type="email" class="form-control" name="email" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-control" name="full_name">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="phone_number" placeholder="01XXXXXXXXX" required>
+                <div class="form-text">Customer will set password in the mobile app using Forgot Password (OTP).</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Company Name</label>
+                <input type="text" class="form-control" name="company_name">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Contact Name</label>
+                <input type="text" class="form-control" name="contact_name">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Address</label>
+                <textarea class="form-control" name="address" rows="2"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Internal Reference</label>
+                <input type="text" class="form-control" name="customer_reference" placeholder="Your internal ID for this customer">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <textarea class="form-control" name="notes" rows="2"></textarea>
+              </div>
+            </form>
+          </div>
+          <!-- Link Existing Customer Form -->
+          <div class="tab-pane fade" id="linkCustomerPane">
+            <form id="linkCustomerForm">
+              <div class="mb-3">
+                <label class="form-label">Existing User (Email or Phone) <span class="text-danger">*</span></label>
+                <input type="email" class="form-control mb-2" name="email" placeholder="Email (optional)">
+                <input type="text" class="form-control" name="phone_number" placeholder="Phone (optional, 01XXXXXXXXX)">
+                <div class="form-text">Provide either email or phone number for an existing platform user</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Company Name</label>
+                <input type="text" class="form-control" name="company_name">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Internal Reference</label>
+                <input type="text" class="form-control" name="customer_reference">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <textarea class="form-control" name="notes" rows="2"></textarea>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveCustomerBtn">
+          <i class="bi bi-check-lg me-1"></i>Save Customer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Device Modal -->
+<div class="modal fade" id="assignDeviceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-right-square me-2"></i>Assign Device to Customer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="assignDeviceForm">
+          <div class="mb-3">
+            <label class="form-label">Select Device from Inventory <span class="text-danger">*</span></label>
+            <select class="form-select" name="inventory_item_id" id="inventorySelect" required>
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Select Customer <span class="text-danger">*</span></label>
+            <select class="form-select" name="customer_id" id="customerSelect" required>
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Sale Price (৳) <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" name="sale_price" step="0.01" min="0" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Device Name</label>
+            <input type="text" class="form-control" name="device_name" placeholder="Optional friendly name">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="assignDeviceBtn">
+          <i class="bi bi-check-lg me-1"></i>Assign Device
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="modal fade" id="profileModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-building me-2"></i>Edit Company Profile</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+<!-- Place Order Modal -->
+<div class="modal fade" id="placeOrderModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cart-plus me-2"></i>Place New Order</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="placeOrderForm">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Select Package <span class="text-danger">*</span></label>
+              <select class="form-select" name="package_id" id="orderPackageSelect" required>
+                <option value="">Loading packages...</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Package Details</label>
+              <div class="text-muted small" id="packageDetails">Select a package to see details</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Total Devices <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" name="quantity" id="orderQuantity" min="1" required>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Master Devices <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" name="number_of_master_devices" id="orderMasters" min="1" required>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Slave Devices</label>
+              <input type="number" class="form-control" name="number_of_slave_devices" id="orderSlaves" min="0" value="0">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Shipping Address</label>
+              <textarea class="form-control" name="shipping_address" rows="2" id="orderShippingAddress"></textarea>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" name="notes" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="use_credit" id="useCredit">
+            <label class="form-check-label" for="useCredit">
+              Purchase on Credit (available: <span id="availableCreditAmount">৳0</span>)
+            </label>
+          </div>
+          <hr>
+          <div class="row">
+            <div class="col-md-6">
+              <table class="table table-sm mb-0">
+                <tr>
+                  <td>Subtotal:</td>
+                  <td class="text-end" id="orderSubtotal">৳0</td>
+                </tr>
+                <tr class="text-success">
+                  <td>Your Discount (<span id="discountRate">0</span>%):</td>
+                  <td class="text-end" id="orderDiscount">-৳0</td>
+                </tr>
+                <tr class="fw-bold">
+                  <td>Total:</td>
+                  <td class="text-end" id="orderTotal">৳0</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="placeOrderBtn">
+          <i class="bi bi-cart-check me-1"></i>Place Order
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+      <div class="modal-body">
+        <form id="profileForm">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Company Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="company_name" id="profileCompanyName" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Brand Name</label>
+              <input type="text" class="form-control" name="brand_name" id="profileBrandName">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Contact Email <span class="text-danger">*</span></label>
+              <input type="email" class="form-control" name="contact_email" id="profileContactEmail" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Contact Phone <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="contact_phone" id="profileContactPhone" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Address</label>
+            <textarea class="form-control" name="address" id="profileAddress" rows="2"></textarea>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">City</label>
+              <input type="text" class="form-control" name="city" id="profileCity">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Country</label>
+              <input type="text" class="form-control" name="country" id="profileCountry">
+            </div>
+          </div>
+          <hr>
+          <h6 class="text-muted mb-3">Branding (Optional)</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Logo URL</label>
+              <input type="url" class="form-control" name="logo_url" id="profileLogoUrl">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Primary Color</label>
+              <input type="color" class="form-control form-control-color" name="primary_color" id="profilePrimaryColor">
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveProfileBtn">
+          <i class="bi bi-check-lg me-1"></i>Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- View Customer Modal -->
+<div class="modal fade" id="viewCustomerModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person me-2"></i>Customer Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="viewCustomerContent">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="alert">
+    <div class="toast-header">
+      <i class="bi bi-bell me-2"></i>
+      <strong class="me-auto" id="toastTitle">Notification</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body" id="toastBody"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const RESELLER_API = '/api/resellers';
+let resellerProfile = null;
+let customers = [];
+let devices = [];
+let inventory = [];
+let alerts = [];
+let orders = [];
+let packages = [];
+
+// Toast helper
+function showToast(title, message, type = 'info') {
+  const toast = document.getElementById('toast');
+  const toastTitle = document.getElementById('toastTitle');
+  const toastBody = document.getElementById('toastBody');
+  
+  toastTitle.textContent = title;
+  toastBody.textContent = message;
+  
+  toast.className = 'toast';
+  if (type === 'success') toast.classList.add('bg-success', 'text-white');
+  else if (type === 'error') toast.classList.add('bg-danger', 'text-white');
+  
+  const bsToast = new bootstrap.Toast(toast);
+  bsToast.show();
+}
+
+// API helpers
+async function apiGet(url) {
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+    }
+  });
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  return response.json();
+}
+
+async function apiPost(url, data) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+    },
+    body: JSON.stringify(data)
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || JSON.stringify(err) || `API error: ${response.status}`);
+  }
+  return response.json();
+}
+
+async function apiPatch(url, data) {
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+    },
+    body: JSON.stringify(data)
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || JSON.stringify(err) || `API error: ${response.status}`);
+  }
+  return response.json();
+}
+
+// Load dashboard data
+async function loadDashboard() {
+  try {
+    const data = await apiGet(`${RESELLER_API}/dashboard/`);
+    
+    // Check if reseller is not active
+    if (data.status && data.status !== 'active') {
+      showStatusMessage(data.status, data.status_message);
+    }
+    
+    document.getElementById('statDevicesSold').textContent = data.total_devices_sold || 0;
+    document.getElementById('statInventory').textContent = data.devices_in_inventory || 0;
+    document.getElementById('statCustomers').textContent = data.total_customers || 0;
+    document.getElementById('statOnline').textContent = data.devices_online || 0;
+    document.getElementById('statOffline').textContent = data.devices_offline || 0;
+    document.getElementById('statRevenue').textContent = `৳${parseFloat(data.total_revenue || 0).toLocaleString()}`;
+    document.getElementById('alertCount').textContent = data.recent_alerts_count || 0;
+  } catch (error) {
+    console.error('Failed to load dashboard:', error);
+  }
+}
+
+function showStatusMessage(status, message) {
+  const alertContainer = document.getElementById('statusAlertContainer');
+  if (!alertContainer) return;
+  
+  const alertClass = status === 'pending' ? 'alert-warning' : 
+                     status === 'suspended' ? 'alert-danger' : 'alert-danger';
+  const icon = status === 'pending' ? 'bi-hourglass-split' : 
+               status === 'suspended' ? 'bi-pause-circle' : 'bi-x-circle';
+  
+  alertContainer.innerHTML = `
+    <div class="alert ${alertClass} d-flex align-items-center" role="alert">
+      <i class="bi ${icon} me-2 fs-4"></i>
+      <div>
+        <strong class="text-capitalize">${status} Status</strong><br>
+        ${message || 'Your account requires attention.'}
+      </div>
+    </div>
+  `;
+}
+
+// Load reseller profile
+async function loadProfile() {
+  try {
+    resellerProfile = await apiGet(`${RESELLER_API}/profile/`);
+    
+    document.getElementById('companyName').textContent = resellerProfile.display_name || resellerProfile.company_name;
+    document.getElementById('companyEmail').textContent = resellerProfile.contact_email;
+    
+    const statusEl = document.getElementById('companyStatus');
+    statusEl.innerHTML = resellerProfile.status === 'active' 
+      ? '<i class="bi bi-check-circle me-1"></i>Active'
+      : `<i class="bi bi-exclamation-circle me-1"></i>${resellerProfile.status}`;
+    
+    // Populate profile form
+    document.getElementById('profileCompanyName').value = resellerProfile.company_name || '';
+    document.getElementById('profileBrandName').value = resellerProfile.brand_name || '';
+    document.getElementById('profileContactEmail').value = resellerProfile.contact_email || '';
+    document.getElementById('profileContactPhone').value = resellerProfile.contact_phone || '';
+    document.getElementById('profileAddress').value = resellerProfile.address || '';
+    document.getElementById('profileCity').value = resellerProfile.city || '';
+    document.getElementById('profileCountry').value = resellerProfile.country || '';
+    document.getElementById('profileLogoUrl').value = resellerProfile.logo_url || '';
+    document.getElementById('profilePrimaryColor').value = resellerProfile.primary_color || '#0d6efd';
+    
+  } catch (error) {
+    console.error('Failed to load profile:', error);
+    showToast('Error', 'Failed to load reseller profile. You may not have reseller access.', 'error');
+  }
+}
+
+// Load customers
+async function loadCustomers() {
+  try {
+    const data = await apiGet(`${RESELLER_API}/customers/`);
+    customers = Array.isArray(data) ? data : (data.results || []);
+    renderCustomers(customers);
+    updateCustomerSelect();
+  } catch (error) {
+    console.error('Failed to load customers:', error);
+    document.getElementById('customersTableBody').innerHTML = `
+      <tr><td colspan="6" class="text-center py-4 text-danger">Failed to load customers</td></tr>
+    `;
+  }
+}
+
+function renderCustomers(data) {
+  const tbody = document.getElementById('customersTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="6" class="empty-state">
+        <i class="bi bi-people d-block mb-2"></i>
+        <p>No customers yet</p>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+          <i class="bi bi-plus-lg me-1"></i>Add your first customer
+        </button>
+      </td></tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = data.map(c => `
+    <tr>
+      <td>
+        <div class="d-flex align-items-center gap-2">
+          <div class="customer-avatar">${(c.contact_name || c.user_email || '?')[0].toUpperCase()}</div>
+          <div>
+            <div class="fw-semibold">${escapeHtml(c.contact_name || c.user_email)}</div>
+            <small class="text-muted">${escapeHtml(c.company_name || '')}</small>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div>${escapeHtml(c.user_email)}</div>
+        <small class="text-muted">${escapeHtml(c.contact_phone || c.user_phone || '-')}</small>
+      </td>
+      <td><span class="badge bg-secondary">${c.device_count || 0}</span></td>
+      <td>
+        <span class="badge ${c.is_active ? 'badge-active' : 'badge-inactive'}">
+          ${c.is_active ? 'Active' : 'Inactive'}
+        </span>
+      </td>
+      <td><small>${formatDate(c.created_at)}</small></td>
+      <td>
+        <button class="btn btn-outline-primary btn-sm action-btn" onclick="viewCustomer(${c.id})">
+          <i class="bi bi-eye"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Load devices
+async function loadDevices() {
+  try {
+    const data = await apiGet(`${RESELLER_API}/devices/`);
+    devices = Array.isArray(data) ? data : (data.results || []);
+    renderDevices(devices);
+  } catch (error) {
+    console.error('Failed to load devices:', error);
+  }
+}
+
+function renderDevices(data) {
+  const tbody = document.getElementById('devicesTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="6" class="empty-state">
+        <i class="bi bi-device-hdd d-block mb-2"></i>
+        <p>No devices sold yet</p>
+      </td></tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = data.map(d => `
+    <tr>
+      <td>
+        <div class="d-flex align-items-center gap-2">
+          <div class="device-avatar"><i class="bi bi-cpu"></i></div>
+          <div>
+            <div class="fw-semibold">${escapeHtml(d.device_name || d.hardware_identifier)}</div>
+            <small class="text-muted font-monospace">${escapeHtml(d.hardware_identifier)}</small>
+          </div>
+        </div>
+      </td>
+      <td>${escapeHtml(d.user_email || d.user?.email || '-')}</td>
+      <td><span class="badge bg-secondary">${d.device_role}</span></td>
+      <td>
+        <span class="badge ${d.is_online ? 'badge-online' : 'badge-offline'}">
+          ${d.is_online ? 'Online' : 'Offline'}
+        </span>
+      </td>
+      <td><small>${d.last_seen ? formatDate(d.last_seen) : 'Never'}</small></td>
+      <td>
+        <a href="/app/devices/#device-${d.id}" class="btn btn-outline-success btn-sm action-btn">
+          <i class="bi bi-box-arrow-up-right"></i>
+        </a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Load inventory
+async function loadInventory() {
+  try {
+    const data = await apiGet(`${RESELLER_API}/inventory/`);
+    inventory = Array.isArray(data) ? data : (data.results || []);
+    renderInventory(inventory);
+    updateInventorySelect();
+  } catch (error) {
+    console.error('Failed to load inventory:', error);
+  }
+}
+
+function renderInventory(data) {
+  const tbody = document.getElementById('inventoryTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="7" class="empty-state">
+        <i class="bi bi-box-seam d-block mb-2"></i>
+        <p>No inventory items</p>
+        <small class="text-muted">Purchase devices to add them to your inventory</small>
+      </td></tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = data.map(i => `
+    <tr>
+      <td><code>${escapeHtml(i.hardware_identifier)}</code></td>
+      <td><span class="badge bg-secondary">${i.device_role}</span></td>
+      <td><span class="badge badge-${i.status}">${i.status}</span></td>
+      <td>৳${parseFloat(i.purchase_price || 0).toLocaleString()}</td>
+      <td>${i.sale_price ? '৳' + parseFloat(i.sale_price).toLocaleString() : '-'}</td>
+      <td>${escapeHtml(i.customer_name || '-')}</td>
+      <td>
+        ${i.status === 'available' ? `
+          <button class="btn btn-outline-success btn-sm action-btn" onclick="openAssignModal(${i.id})">
+            <i class="bi bi-arrow-right"></i> Assign
+          </button>
+        ` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Load alerts
+async function loadAlerts() {
+  try {
+    const data = await apiGet(`${RESELLER_API}/alerts/`);
+    alerts = Array.isArray(data) ? data : (data.results || []);
+    renderAlerts(alerts);
+  } catch (error) {
+    console.error('Failed to load alerts:', error);
+  }
+}
+
+function renderAlerts(data) {
+  const tbody = document.getElementById('alertsTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="6" class="empty-state">
+        <i class="bi bi-check-circle d-block mb-2 text-success"></i>
+        <p>No alerts</p>
+        <small class="text-muted">All devices are operating normally</small>
+      </td></tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = data.map(a => `
+    <tr class="${a.status === 'open' ? 'table-warning' : ''}">
+      <td>
+        <code>${escapeHtml(a.device?.hardware_identifier || '-')}</code>
+        <div><small class="text-muted">${escapeHtml(a.device?.device_name || '')}</small></div>
+      </td>
+      <td>${escapeHtml(a.device?.user?.email || '-')}</td>
+      <td><span class="badge bg-danger">${escapeHtml(a.alert_type)}</span></td>
+      <td>
+        <span class="badge ${a.status === 'open' ? 'bg-warning text-dark' : a.status === 'resolved' ? 'bg-success' : 'bg-info'}">
+          ${a.status}
+        </span>
+      </td>
+      <td><small>${formatDate(a.triggered_at)}</small></td>
+      <td>
+        <a href="/app/alerts/" class="btn btn-outline-danger btn-sm action-btn">
+          <i class="bi bi-eye"></i>
+        </a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ==================== Orders Management ====================
+async function loadOrders() {
+  try {
+    const data = await apiGet(`${RESELLER_API}/orders/`);
+    orders = Array.isArray(data) ? data : (data.results || []);
+    renderOrders(orders);
+    updateCreditInfo();
+  } catch (error) {
+    console.error('Failed to load orders:', error);
+    document.getElementById('ordersTableBody').innerHTML = `
+      <tr><td colspan="9" class="text-center py-4 text-danger">Failed to load orders</td></tr>
+    `;
+  }
+}
+
+function renderOrders(data) {
+  const tbody = document.getElementById('ordersTableBody');
+  
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="9" class="empty-state">
+        <i class="bi bi-cart d-block mb-2"></i>
+        <p>No orders yet</p>
+        <small class="text-muted">Place your first bulk order to get started</small>
+      </td></tr>
+    `;
+    return;
+  }
+  
+  const statusColors = {
+    'pending': 'warning',
+    'paid': 'info',
+    'processing': 'primary',
+    'shipped': 'primary',
+    'delivered': 'success',
+    'cancelled': 'danger'
+  };
+  
+  tbody.innerHTML = data.map(o => `
+    <tr>
+      <td><strong>#${o.order_id}</strong></td>
+      <td>${escapeHtml(o.package_name || '-')}</td>
+      <td>${o.quantity} <small class="text-muted">(${o.number_of_master_devices}M/${o.number_of_slave_devices}S)</small></td>
+      <td>৳${parseFloat(o.final_amount).toLocaleString()}</td>
+      <td class="text-success">-৳${parseFloat(o.discount_applied).toLocaleString()}</td>
+      <td><span class="badge bg-${statusColors[o.order_status] || 'secondary'}">${o.order_status}</span></td>
+      <td>${o.fulfilled_count}/${o.quantity}</td>
+      <td>${o.inventory_count}</td>
+      <td><small>${formatDate(o.ordered_at)}</small></td>
+    </tr>
+  `).join('');
+}
+
+function updateCreditInfo() {
+  if (resellerProfile) {
+    const limit = parseFloat(resellerProfile.credit_limit || 0);
+    const used = parseFloat(resellerProfile.current_credit_used || 0);
+    const available = limit - used;
+    
+    document.getElementById('creditLimit').textContent = '৳' + limit.toLocaleString();
+    document.getElementById('creditUsed').textContent = '৳' + used.toLocaleString();
+    document.getElementById('creditAvailable').textContent = '৳' + available.toLocaleString();
+    document.getElementById('availableCreditAmount').textContent = '৳' + available.toLocaleString();
+  }
+}
+
+async function loadPackages() {
+  try {
+    const response = await fetch('/api/packages/');
+    if (response.ok) {
+      packages = await response.json();
+      const select = document.getElementById('orderPackageSelect');
+      select.innerHTML = '<option value="">Select a package...</option>' +
+        packages.map(p => `<option value="${p.id}" data-price="${p.price_per_device}" data-mrf="${p.mrf}" data-min="${p.min_quantity}" data-max="${p.max_quantity}">${escapeHtml(p.name)} - ৳${p.price_per_device}/device</option>`).join('');
+    }
+  } catch (error) {
+    console.error('Failed to load packages:', error);
+  }
+}
+
+function calculateOrderTotal() {
+  const packageSelect = document.getElementById('orderPackageSelect');
+  const selectedOption = packageSelect.options[packageSelect.selectedIndex];
+  
+  if (!selectedOption || !selectedOption.value) {
+    document.getElementById('orderSubtotal').textContent = '৳0';
+    document.getElementById('orderDiscount').textContent = '-৳0';
+    document.getElementById('orderTotal').textContent = '৳0';
+    return;
+  }
+  
+  const pricePerDevice = parseFloat(selectedOption.dataset.price || 0);
+  const mrf = parseFloat(selectedOption.dataset.mrf || 0);
+  const quantity = parseInt(document.getElementById('orderQuantity').value || 0);
+  const masters = parseInt(document.getElementById('orderMasters').value || 0);
+  
+  const subtotal = (pricePerDevice * quantity) + (mrf * masters);
+  const discountRate = parseFloat(resellerProfile?.discount_rate || 0);
+  const discount = subtotal * discountRate / 100;
+  const total = subtotal - discount;
+  
+  document.getElementById('orderSubtotal').textContent = '৳' + subtotal.toLocaleString();
+  document.getElementById('discountRate').textContent = discountRate;
+  document.getElementById('orderDiscount').textContent = '-৳' + discount.toLocaleString();
+  document.getElementById('orderTotal').textContent = '৳' + total.toLocaleString();
+}
+
+async function placeOrder() {
+  const form = document.getElementById('placeOrderForm');
+  const formData = new FormData(form);
+  
+  const data = {
+    package_id: parseInt(formData.get('package_id')),
+    quantity: parseInt(formData.get('quantity')),
+    number_of_master_devices: parseInt(formData.get('number_of_master_devices')),
+    number_of_slave_devices: parseInt(formData.get('number_of_slave_devices') || 0),
+    shipping_address: formData.get('shipping_address'),
+    notes: formData.get('notes'),
+    use_credit: document.getElementById('useCredit').checked
+  };
+  
+  // Validate
+  if (!data.package_id || !data.quantity || !data.number_of_master_devices) {
+    showToast('Error', 'Please fill in all required fields', 'error');
+    return;
+  }
+  
+  if (data.number_of_master_devices + data.number_of_slave_devices !== data.quantity) {
+    showToast('Error', 'Master + Slave devices must equal total quantity', 'error');
+    return;
+  }
+  
+  try {
+    const result = await apiPost(`${RESELLER_API}/orders/place/`, data);
+    showToast('Success', result.message || 'Order placed successfully!', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('placeOrderModal')).hide();
+    form.reset();
+    loadOrders();
+    loadProfile(); // Refresh credit info
+  } catch (error) {
+    showToast('Error', error.message, 'error');
+  }
+}
+
+// Update select dropdowns
+function updateCustomerSelect() {
+  const select = document.getElementById('customerSelect');
+  const activeCustomers = customers.filter(c => c.is_active);
+  
+  select.innerHTML = '<option value="">Select a customer...</option>' +
+    activeCustomers.map(c => `
+      <option value="${c.id}">${escapeHtml(c.contact_name || c.user_email)} ${c.company_name ? '(' + escapeHtml(c.company_name) + ')' : ''}</option>
+    `).join('');
+}
+
+function updateInventorySelect() {
+  const select = document.getElementById('inventorySelect');
+  const available = inventory.filter(i => i.status === 'available');
+  
+  select.innerHTML = '<option value="">Select a device...</option>' +
+    available.map(i => `
+      <option value="${i.id}">${escapeHtml(i.hardware_identifier)} (${i.device_role})</option>
+    `).join('');
+}
+
+// Tab switching
+function switchTab(tabId) {
+  const tabBtn = document.getElementById(tabId + 'Btn');
+  if (tabBtn) {
+    const tab = new bootstrap.Tab(tabBtn);
+    tab.show();
+  }
+}
+
+// View customer details
+async function viewCustomer(id) {
+  const customer = customers.find(c => c.id === id);
+  if (!customer) return;
+  
+  const content = document.getElementById('viewCustomerContent');
+  content.innerHTML = `
+    <div class="row">
+      <div class="col-md-6">
+        <h6 class="text-muted">Contact Information</h6>
+        <p><strong>Name:</strong> ${escapeHtml(customer.contact_name || '-')}</p>
+        <p><strong>Email:</strong> ${escapeHtml(customer.user_email)}</p>
+        <p><strong>Phone:</strong> ${escapeHtml(customer.contact_phone || customer.user_phone || '-')}</p>
+        <p><strong>Company:</strong> ${escapeHtml(customer.company_name || '-')}</p>
+      </div>
+      <div class="col-md-6">
+        <h6 class="text-muted">Account Details</h6>
+        <p><strong>Reference:</strong> ${escapeHtml(customer.customer_reference || '-')}</p>
+        <p><strong>Devices:</strong> ${customer.device_count || 0}</p>
+        <p><strong>Status:</strong> <span class="badge ${customer.is_active ? 'bg-success' : 'bg-danger'}">${customer.is_active ? 'Active' : 'Inactive'}</span></p>
+        <p><strong>Created:</strong> ${formatDate(customer.created_at)}</p>
+      </div>
+    </div>
+    ${customer.address ? `<p><strong>Address:</strong> ${escapeHtml(customer.address)}</p>` : ''}
+    ${customer.notes ? `<p><strong>Notes:</strong> ${escapeHtml(customer.notes)}</p>` : ''}
+  `;
+  
+  const modal = new bootstrap.Modal(document.getElementById('viewCustomerModal'));
+  modal.show();
+}
+
+// Open assign modal with pre-selected inventory
+function openAssignModal(inventoryId) {
+  document.getElementById('inventorySelect').value = inventoryId;
+  const modal = new bootstrap.Modal(document.getElementById('assignDeviceModal'));
+  modal.show();
+}
+
+// Save new customer
+document.getElementById('saveCustomerBtn').addEventListener('click', async () => {
+  const isNewCustomer = document.querySelector('#newCustomerPane.active');
+  const form = isNewCustomer ? document.getElementById('newCustomerForm') : document.getElementById('linkCustomerForm');
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData.entries());
+
+  // Option B UX validation
+  if (isNewCustomer) {
+    if (!data.phone_number) {
+      showToast('Error', 'Phone number is required (customer uses it for Forgot Password OTP).', 'error');
+      return;
+    }
+  } else {
+    if (!data.email && !data.phone_number) {
+      showToast('Error', 'Provide email or phone number to link an existing user.', 'error');
+      return;
+    }
+  }
+  
+  // Remove empty values
+  Object.keys(data).forEach(key => {
+    if (!data[key]) delete data[key];
+  });
+  
+  try {
+    const url = isNewCustomer ? `${RESELLER_API}/customers/` : `${RESELLER_API}/customers/link/`;
+    await apiPost(url, data);
+    showToast('Success', 'Customer added successfully', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('addCustomerModal')).hide();
+    form.reset();
+    loadCustomers();
+    loadDashboard();
+  } catch (error) {
+    showToast('Error', error.message, 'error');
+  }
+});
+
+// Assign device
+document.getElementById('assignDeviceBtn').addEventListener('click', async () => {
+  const form = document.getElementById('assignDeviceForm');
+  const formData = new FormData(form);
+  const data = {
+    inventory_item_id: parseInt(formData.get('inventory_item_id')),
+    customer_id: parseInt(formData.get('customer_id')),
+    sale_price: formData.get('sale_price'),
+    device_name: formData.get('device_name') || ''
+  };
+  
+  if (!data.inventory_item_id || !data.customer_id || !data.sale_price) {
+    showToast('Error', 'Please fill all required fields', 'error');
+    return;
+  }
+  
+  try {
+    await apiPost(`${RESELLER_API}/assign-device/`, data);
+    showToast('Success', 'Device assigned successfully', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('assignDeviceModal')).hide();
+    form.reset();
+    loadInventory();
+    loadDevices();
+    loadCustomers();
+    loadDashboard();
+  } catch (error) {
+    showToast('Error', error.message, 'error');
+  }
+});
+
+// Save profile
+document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+  const form = document.getElementById('profileForm');
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData.entries());
+  
+  try {
+    await apiPatch(`${RESELLER_API}/profile/`, data);
+    showToast('Success', 'Profile updated successfully', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('profileModal')).hide();
+    loadProfile();
+  } catch (error) {
+    showToast('Error', error.message, 'error');
+  }
+});
+
+// Search handlers
+document.getElementById('customerSearch').addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase();
+  const filtered = customers.filter(c => 
+    (c.contact_name || '').toLowerCase().includes(query) ||
+    (c.user_email || '').toLowerCase().includes(query) ||
+    (c.company_name || '').toLowerCase().includes(query)
+  );
+  renderCustomers(filtered);
+});
+
+document.getElementById('deviceSearch').addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase();
+  const filtered = devices.filter(d => 
+    (d.device_name || '').toLowerCase().includes(query) ||
+    (d.hardware_identifier || '').toLowerCase().includes(query)
+  );
+  renderDevices(filtered);
+});
+
+document.getElementById('inventorySearch').addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase();
+  const filtered = inventory.filter(i => 
+    (i.hardware_identifier || '').toLowerCase().includes(query)
+  );
+  renderInventory(filtered);
+});
+
+// Filter handlers
+document.getElementById('deviceStatusFilter').addEventListener('change', (e) => {
+  const status = e.target.value;
+  const filtered = status ? devices.filter(d => 
+    status === 'online' ? d.is_online : !d.is_online
+  ) : devices;
+  renderDevices(filtered);
+});
+
+document.getElementById('inventoryStatusFilter').addEventListener('change', (e) => {
+  const status = e.target.value;
+  const filtered = status ? inventory.filter(i => i.status === status) : inventory;
+  renderInventory(filtered);
+});
+
+document.getElementById('alertStatusFilter').addEventListener('change', (e) => {
+  const status = e.target.value;
+  const filtered = status ? alerts.filter(a => a.status === status) : alerts;
+  renderAlerts(filtered);
+});
+
+// Helper functions
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  loadProfile();
+  loadDashboard();
+  loadCustomers();
+  loadDevices();
+  loadInventory();
+  loadAlerts();
+  loadOrders();
+  loadPackages();
+  
+  // Order form event listeners
+  document.getElementById('orderPackageSelect')?.addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    if (selectedOption.value) {
+      document.getElementById('packageDetails').innerHTML = `
+        Min: ${selectedOption.dataset.min} | Max: ${selectedOption.dataset.max}<br>
+        Price: ৳${selectedOption.dataset.price}/device | MRF: ৳${selectedOption.dataset.mrf}/master
+      `;
+    } else {
+      document.getElementById('packageDetails').textContent = 'Select a package to see details';
+    }
+    calculateOrderTotal();
+  });
+  
+  document.getElementById('orderQuantity')?.addEventListener('input', calculateOrderTotal);
+  document.getElementById('orderMasters')?.addEventListener('input', function() {
+    const quantity = parseInt(document.getElementById('orderQuantity').value || 0);
+    const masters = parseInt(this.value || 0);
+    document.getElementById('orderSlaves').value = Math.max(0, quantity - masters);
+    calculateOrderTotal();
+  });
+  document.getElementById('orderSlaves')?.addEventListener('input', function() {
+    const quantity = parseInt(document.getElementById('orderQuantity').value || 0);
+    const slaves = parseInt(this.value || 0);
+    document.getElementById('orderMasters').value = Math.max(0, quantity - slaves);
+    calculateOrderTotal();
+  });
+  
+  document.getElementById('placeOrderBtn')?.addEventListener('click', placeOrder);
+  
+  // Set default shipping address from profile
+  if (resellerProfile?.address) {
+    document.getElementById('orderShippingAddress').value = resellerProfile.address;
+  }
+});
+</script>
+{% endblock %}
